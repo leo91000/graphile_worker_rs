@@ -1,14 +1,20 @@
 use crate::errors::Result;
-use async_trait::async_trait;
-use sqlx::{Row, query, query_file, Executor, Postgres, Error as SqlxError};
+use sqlx::{query, Acquire, Error as SqlxError, Executor, Postgres, Row};
 
-async fn install_schema<'e, E: Executor<'e, Database = Postgres> + Send + Sync + Clone>(
-    executor: &E,
-    escaped_schema: &str,
-) -> Result<()> {
+async fn install_schema<'e, E>(executor: E, escaped_schema: &str) -> Result<()>
+where
+    E: Executor<'e, Database = Postgres> + Acquire<'e, Database = Postgres> + Clone,
+{
+    println!("Installing archimedes schema");
+
     let create_schema_query = format!(
         r#"
             create schema {escaped_schema};
+        "#
+    );
+
+    let create_migration_table_query = format!(
+        r#"
             create table {escaped_schema}.migrations (
                 id int primary key, 
                 ts timestamptz default now() not null
@@ -16,21 +22,24 @@ async fn install_schema<'e, E: Executor<'e, Database = Postgres> + Send + Sync +
         "#
     );
 
-    query(&create_schema_query)
-        .execute((*executor).clone())
+    let mut tx = executor.begin().await?;
+    query(&create_schema_query).execute(&mut tx).await?;
+    query(&create_migration_table_query)
+        .execute(&mut tx)
         .await?;
+    tx.commit().await?;
 
     Ok(())
 }
-async fn escape_identifier<'e, E: Executor<'e, Database = Postgres> + Send + Sync + Clone>(
-    executor: &E,
+async fn escape_identifier<'e, E: Executor<'e, Database = Postgres>>(
+    executor: E,
     identifier: &str,
 ) -> Result<String> {
     let escaped_identifier = query!(
         "select format('%I', $1::text) as escaped_identifier",
         identifier
     )
-    .fetch_one((*executor).clone())
+    .fetch_one(executor)
     .await?
     .escaped_identifier
     .unwrap();
@@ -38,49 +47,76 @@ async fn escape_identifier<'e, E: Executor<'e, Database = Postgres> + Send + Syn
     Ok(escaped_identifier)
 }
 
-async fn migrate<'e, E: Executor<'e, Database = Postgres> + Send + Sync + Clone>(
-    executor: &E,
-    schema: &str,
-) -> Result<()> {
-    let escaped_schema = escape_identifier(executor, schema).await?;
+pub async fn migrate<'e, E>(executor: E, schema: &str) -> Result<()>
+where
+    E: Executor<'e, Database = Postgres> + Acquire<'e, Database = Postgres> + Send + Sync + Clone,
+{
+    let escaped_schema = escape_identifier(executor.clone(), schema).await?;
 
-    let migrations_status_query = format!("select id from {escaped_schema}.migrations order by id desc limit 1");
-    let last_migration_query_result = query(&migrations_status_query).fetch_optional((*executor).clone()).await;
+    let migrations_status_query =
+        format!("select id from {escaped_schema}.migrations order by id desc limit 1");
+    let last_migration_query_result = query(&migrations_status_query)
+        .fetch_optional(executor.clone())
+        .await;
 
-    let mut last_migration: Option<String> = None;
-    match last_migration_query_result {
+    let last_migration = match last_migration_query_result {
         Err(SqlxError::Database(e)) => {
-            if let Some(code) = e.code() {
-                if code.eq("42P01") {
-                    install_schema(executor, escaped_schema.as_str()).await?;
-                } else {
-                    return Err(SqlxError::Database(e).into());
-                }
+            let Some(code) = e.code() else { return Err(SqlxError::Database(e).into()); };
+
+            if code == "42P01" {
+                install_schema(executor.clone(), escaped_schema.as_str()).await?;
+            } else {
+                return Err(SqlxError::Database(e).into());
             }
-        },
+
+            None
+        }
         Err(e) => {
             return Err(e.into());
-        },
-        Ok(Some(row)) => {
-            last_migration = Some(row.get("id"));
-        },
-        _ => {}
+        }
+        Ok(optional_row) => optional_row.map(|row| row.get("id")),
+    };
+
+    for (i, migration_statements) in crate::migrations::MIGRATIONS.iter().enumerate() {
+        let migration_number = (i + 1) as i32;
+
+        if last_migration.is_none() || migration_number > last_migration.unwrap() {
+            println!("Executing migration {migration_number}");
+            let mut tx = executor.clone().begin().await?;
+
+            for migration_statement in migration_statements.iter() {
+                println!("Executing {migration_statement}");
+                let sql = migration_statement.replace(":ARCHIMEDES_SCHEMA", &escaped_schema);
+                query(sql.as_str()).execute(&mut tx).await?;
+            }
+
+            query(format!("insert into {escaped_schema}.migrations (id) values ($1)").as_str())
+                .bind(migration_number)
+                .execute(&mut tx)
+                .await?;
+
+            tx.commit().await?;
+        }
     }
 
     Ok(())
 }
 
-#[async_trait]
-pub trait ArchimedesMigration {
-    async fn migrate(&self, schema: &str) -> Result<()>;
-}
+#[cfg(test)]
+mod tests {
+    use crate::migrate::migrate;
+    use sqlx::postgres::PgPoolOptions;
 
-#[async_trait]
-impl<'e, E> ArchimedesMigration for E
-where
-    E: Executor<'e, Database = Postgres> + Send + Sync + Clone,
-{
-    async fn migrate(&self, schema: &str) -> Result<()> {
-        migrate(self, schema).await
+    #[tokio::test]
+    async fn test_migrate() {
+        let pool = &PgPoolOptions::new()
+            .max_connections(5)
+            .connect("postgres://postgres:root@localhost:5432")
+            .await
+            .expect("Failed to connect to database");
+
+        migrate(pool, "test_migrate_3")
+            .await
+            .expect("Failed to migrate");
     }
 }
