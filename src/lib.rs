@@ -2,6 +2,7 @@ pub mod context;
 pub mod errors;
 pub mod migrate;
 mod migrations;
+mod utils;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right

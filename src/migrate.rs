@@ -1,5 +1,6 @@
 use crate::errors::Result;
 use sqlx::{query, Acquire, Error as SqlxError, Executor, Postgres, Row};
+use tracing::info;
 
 async fn install_schema<'e, E>(executor: E, escaped_schema: &str) -> Result<()>
 where
@@ -31,28 +32,11 @@ where
 
     Ok(())
 }
-async fn escape_identifier<'e, E: Executor<'e, Database = Postgres>>(
-    executor: E,
-    identifier: &str,
-) -> Result<String> {
-    let escaped_identifier = query!(
-        "select format('%I', $1::text) as escaped_identifier",
-        identifier
-    )
-    .fetch_one(executor)
-    .await?
-    .escaped_identifier
-    .unwrap();
 
-    Ok(escaped_identifier)
-}
-
-pub async fn migrate<'e, E>(executor: E, schema: &str) -> Result<()>
+pub async fn migrate<'e, E>(executor: E, escaped_schema: &str) -> Result<()>
 where
     E: Executor<'e, Database = Postgres> + Acquire<'e, Database = Postgres> + Send + Sync + Clone,
 {
-    let escaped_schema = escape_identifier(executor.clone(), schema).await?;
-
     let migrations_status_query =
         format!("select id from {escaped_schema}.migrations order by id desc limit 1");
     let last_migration_query_result = query(&migrations_status_query)
@@ -81,11 +65,10 @@ where
         let migration_number = (i + 1) as i32;
 
         if last_migration.is_none() || migration_number > last_migration.unwrap() {
-            println!("Executing migration {migration_number}");
+            info!(migration_number, "Executing migration");
             let mut tx = executor.clone().begin().await?;
 
             for migration_statement in migration_statements.iter() {
-                println!("Executing {migration_statement}");
                 let sql = migration_statement.replace(":ARCHIMEDES_SCHEMA", &escaped_schema);
                 query(sql.as_str()).execute(&mut tx).await?;
             }
