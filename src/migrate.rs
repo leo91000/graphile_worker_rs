@@ -48,7 +48,7 @@ where
             let Some(code) = e.code() else { return Err(SqlxError::Database(e).into()); };
 
             if code == "42P01" {
-                install_schema(executor.clone(), escaped_schema.as_str()).await?;
+                install_schema(executor.clone(), escaped_schema).await?;
             } else {
                 return Err(SqlxError::Database(e).into());
             }
@@ -69,7 +69,7 @@ where
             let mut tx = executor.clone().begin().await?;
 
             for migration_statement in migration_statements.iter() {
-                let sql = migration_statement.replace(":ARCHIMEDES_SCHEMA", &escaped_schema);
+                let sql = migration_statement.replace(":ARCHIMEDES_SCHEMA", escaped_schema);
                 query(sql.as_str()).execute(&mut tx).await?;
             }
 
