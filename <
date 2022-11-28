@@ -2,9 +2,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 
-use futures::FutureExt;
 use serde::Deserialize;
 
 pub mod context;
@@ -64,29 +62,19 @@ impl WorkerBuilder {
         self
     }
 
-    pub fn jobs<T, E, Fut, F>(&mut self, identifier: &str, job_fn: F) -> &mut Self
+    pub fn jobs<T, E, Fut, F>(&mut self, identifier: &str, job: F) -> &mut Self
     where
-        T: for<'de> Deserialize<'de> + Send,
+        T: for<'de> Deserialize<'de>,
         E: Debug,
-        Fut: Future<Output = Result<(), E>> + Send,
-        F: Fn(WorkerContext, T) -> Fut + Send + Sync + Clone + 'static,
+        Fut: Future<Output = Result<(), E>>,
+        F: Fn(WorkerContext, T) -> Fut,
     {
-        let worker_fn = |ctx, payload| {
-            async {
-                let de_payload = serde_json::from_str(payload).cloned();
-
-                match de_payload {
-                    Err(e) => Err(format!("{:?}", e)),
-                    Ok(p) => {
-                        let job_result = job_fn.clone()(ctx, p).await;
-                        match job_result {
-                            Err(e) => Err(format!("{:?}", e)),
-                            Ok(v) => Ok(v),
-                        }
-                    }
-                }
-            }
-            .boxed()
+        let worker_fn = |ctx, payload| -> Result<(), String> {
+            Box::pin(async move {
+                let p = serde_json::from_str(payload).map_err(|e| format!("{:?}", e))?;
+                job(ctx, p).await.map_err(|e| format!("{:?}", e))?;
+                Ok(())
+            })
         };
 
         let job_map = self.jobs.unwrap_or_else(|| HashMap::new());
