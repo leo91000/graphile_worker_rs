@@ -6,8 +6,6 @@ async fn install_schema<'e, E>(executor: E, escaped_schema: &str) -> Result<()>
 where
     E: Executor<'e, Database = Postgres> + Acquire<'e, Database = Postgres> + Clone,
 {
-    println!("Installing archimedes schema");
-
     let create_schema_query = format!(
         r#"
             create schema {escaped_schema};

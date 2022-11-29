@@ -12,6 +12,7 @@ mod db;
 pub mod errors;
 pub mod migrate;
 mod migrations;
+mod sql;
 mod utils;
 
 #[derive(Clone)]
@@ -19,21 +20,26 @@ pub struct WorkerContext {
     pool: sqlx::PgPool,
 }
 
-type WorkerFn =
-    Box<dyn Fn(WorkerContext, &str) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>>>;
+type WorkerFn = Box<
+    dyn Fn(WorkerContext, Arc<String>) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>>,
+>;
 
 pub struct Worker {
     concurrency: usize,
-    poll_interval: u32,
+    poll_interval: Duration,
     jobs: HashMap<String, WorkerFn>,
 }
 
 impl Worker {
     pub fn builder() -> WorkerBuilder {
-        WorkerBuilder {
-            concurrency: None,
-            poll_interval: None,
-            jobs: None,
+        WorkerBuilder::default()
+    }
+
+    pub async fn start(&self) {
+        let interval = tokio::time::interval(self.poll_interval);
+
+        loop {
+            interval.tick().await;
         }
     }
 }
@@ -41,16 +47,16 @@ impl Worker {
 #[derive(Default)]
 pub struct WorkerBuilder {
     concurrency: Option<usize>,
-    poll_interval: Option<u32>,
-    jobs: Option<HashMap<String, WorkerFn>>,
+    poll_interval: Option<Duration>,
+    jobs: HashMap<String, WorkerFn>,
 }
 
 impl WorkerBuilder {
     pub fn build(self) -> Worker {
         Worker {
             concurrency: self.concurrency.unwrap_or_else(num_cpus::get),
-            poll_interval: self.poll_interval.unwrap_or(1000),
-            jobs: self.jobs.unwrap_or_else(|| HashMap::new()),
+            poll_interval: self.poll_interval.unwrap_or(Duration::from_millis(1000)),
+            jobs: self.jobs,
         }
     }
 
@@ -59,26 +65,28 @@ impl WorkerBuilder {
         self
     }
 
-    pub fn poll_interval(&mut self, value: u32) -> &mut Self {
+    pub fn poll_interval(&mut self, value: Duration) -> &mut Self {
         self.poll_interval = Some(value);
         self
     }
 
-    pub fn jobs<T, E, Fut, F>(&mut self, identifier: &str, job_fn: F) -> &mut Self
+    pub fn define_job<T, E, Fut, F>(&mut self, identifier: &str, job_fn: F) -> &mut Self
     where
         T: for<'de> Deserialize<'de> + Send,
         E: Debug,
         Fut: Future<Output = Result<(), E>> + Send,
-        F: Fn(WorkerContext, T) -> Fut + Send + Sync + Clone + 'static,
+        F: Fn(WorkerContext, T) -> Fut + Send + Sync + 'static,
     {
-        let worker_fn = |ctx, payload| {
-            async {
-                let de_payload = serde_json::from_str(payload).cloned();
+        let job_fn = Arc::new(job_fn);
+        let worker_fn = move |ctx: WorkerContext, payload: Arc<String>| {
+            let job_fn = job_fn.clone();
+            async move {
+                let de_payload = serde_json::from_str(&payload);
 
                 match de_payload {
                     Err(e) => Err(format!("{:?}", e)),
                     Ok(p) => {
-                        let job_result = job_fn.clone()(ctx, p).await;
+                        let job_result = job_fn(ctx, p).await;
                         match job_result {
                             Err(e) => Err(format!("{:?}", e)),
                             Ok(v) => Ok(v),
@@ -89,8 +97,8 @@ impl WorkerBuilder {
             .boxed()
         };
 
-        let job_map = self.jobs.unwrap_or_else(|| HashMap::new());
-        job_map.insert(identifier.to_string(), Box::new(worker_fn));
+        self.jobs
+            .insert(identifier.to_string(), Box::new(worker_fn));
         self
     }
 }
