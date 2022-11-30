@@ -1,4 +1,4 @@
-use sqlx::{query_as, Executor, FromRow, Postgres};
+use sqlx::{query_as, FromRow, PgExecutor};
 
 use crate::errors::Result;
 
@@ -7,8 +7,8 @@ struct EscapeIdentifierRow {
     escaped_identifier: String,
 }
 
-pub async fn escape_identifier<'e, E: Executor<'e, Database = Postgres>>(
-    executor: E,
+pub async fn escape_identifier<'e>(
+    executor: impl PgExecutor<'e>,
     identifier: &str,
 ) -> Result<String> {
     let result: EscapeIdentifierRow =
