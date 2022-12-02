@@ -72,14 +72,6 @@ impl Worker {
     }
 }
 
-#[derive(Error, Debug)]
-enum ProcessJobError {
-    #[error(transparent)]
-    ReleaseJobError(#[from] ReleaseJobError),
-    #[error(transparent)]
-    GetJobError(#[from] ArchimedesError),
-}
-
 async fn process_one_job(worker: &Worker, source: StreamSource) {
     let job = get_job(
         worker.pg_pool(),
