@@ -14,6 +14,7 @@ use sql::{
     get_job::get_job,
     task_identifiers::{get_tasks_details, TaskDetails},
 };
+use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use streams::job_signal_stream;
 use thiserror::Error;
@@ -30,7 +31,8 @@ mod sql;
 mod streams;
 mod utils;
 
-#[derive(Clone)]
+#[derive(Clone, Getters)]
+#[getset(get = "pub")]
 pub struct WorkerContext {
     pg_pool: sqlx::PgPool,
 }
@@ -79,12 +81,19 @@ impl Worker {
                     )
                     .await;
 
+                    dbg!(&job);
+
                     match job {
                         Ok(Some(j)) => {
-                            debug!(source = ?source, job_id = j.id(), task_identifier = j.task_identifier(), "Found task");
-                            let task_fn = self.jobs().get(j.task_identifier());
-                            if let Some(task_fn) = task_fn {
-                                let task_fut = task_fn(self.into(), j.payload().to_string());
+                            let task_id = j.task_id();
+                            let task = self.task_details().get(task_id).and_then(|task_identifier| { 
+                                let task_fn = self.jobs().get(task_identifier);
+                                task_fn.map(|task_fn| (task_identifier, task_fn))
+                            });
+                            if let Some((task_identifier, task_fn)) = task {
+                                debug!(source = ?source, job_id = j.id(), task_identifier, "Found task");
+                                let payload = j.payload().to_string();
+                                let task_fut = task_fn(self.into(), payload.clone());
 
                                 let start = Instant::now();
                                 let spawn_result = tokio::spawn(task_fut).await;
@@ -96,25 +105,26 @@ impl Worker {
                                         // function)
                                         match task_result {
                                             Ok(_) => {
-                                                info!(task_identifier = j.task_identifier(), payload = j.payload(), job_id = j.id(), duration, "Completed task with success");
+                                                info!(task_identifier, payload, job_id = j.id(), duration, "Completed task with success");
                                                 complete_job(self.pg_pool(), &j, self.worker_id(), self.escaped_schema()).await;
                                             },
                                             Err(message) => {
-                                                warn!(error = message, task_identifier = j.task_identifier(), payload = j.payload(), job_id = j.id(), "Failed task");
+                                                warn!(error = message, task_identifier, payload, job_id = j.id(), "Failed task");
                                                 if j.attempts() >= j.max_attempts() {
-                                                    error!(error = message, task_identifier = j.task_identifier(), payload = j.payload(), job_id = j.id(), "Job max attempts reached");
+                                                    error!(error = message, task_identifier, payload, job_id = j.id(), "Job max attempts reached");
                                                 }
 
-                                                fail_job(self.pg_pool(), &j, self.escaped_schema(), self.worker_id(), &message, None).await;
+                                                let fj_res = fail_job(self.pg_pool(), &j, self.escaped_schema(), self.worker_id(), &message, None).await;
+                                                dbg!(fj_res);
                                             }
                                         }
                                     },
                                     Err(e) => {
-                                        error!(error = ?e, task_identifier = j.task_identifier(), payload = j.payload(), "Task panicked");
+                                        error!(error = ?e, task_identifier, payload, "Task panicked");
                                     },
                                 }
                             } else {
-                                error!(source = ?source, task_identifier = j.task_identifier(), "Unsupported task identifier");
+                                error!(source = ?source, task_id, "Unsupported task identifier");
                             }
                         }
                         Ok(None) => {
@@ -139,6 +149,7 @@ pub struct WorkerOptions {
     concurrency: Option<usize>,
     poll_interval: Option<Duration>,
     jobs: HashMap<String, WorkerFn>,
+    pg_pool: Option<PgPool>,
     database_url: Option<String>,
     max_pg_conn: Option<u32>,
     schema: Option<String>,
@@ -157,14 +168,19 @@ pub enum WorkerBuildError {
 
 impl WorkerOptions {
     pub async fn init(self) -> Result<Worker, WorkerBuildError> {
-        let db_url = self
-            .database_url
-            .ok_or(WorkerBuildError::MissingDatabaseUrl)?;
+        let pg_pool = match self.pg_pool {
+            Some(pg_pool) => pg_pool,
+            None => {
+                let db_url = self
+                    .database_url
+                    .ok_or(WorkerBuildError::MissingDatabaseUrl)?;
 
-        let pg_pool = PgPoolOptions::new()
-            .max_connections(self.max_pg_conn.unwrap_or(20))
-            .connect(&db_url)
-            .await?;
+                PgPoolOptions::new()
+                    .max_connections(self.max_pg_conn.unwrap_or(20))
+                    .connect(&db_url)
+                    .await?
+            }
+        };
 
         let schema = self
             .schema
@@ -196,27 +212,37 @@ impl WorkerOptions {
         Ok(worker)
     }
 
-    pub fn concurrency(&mut self, value: usize) -> &mut Self {
+    pub fn schema(mut self, value: &str) -> Self {
+        self.schema = Some(value.into());
+        self
+    }
+
+    pub fn concurrency(mut self, value: usize) -> Self {
         self.concurrency = Some(value);
         self
     }
 
-    pub fn poll_interval(&mut self, value: Duration) -> &mut Self {
+    pub fn poll_interval(mut self, value: Duration) -> Self {
         self.poll_interval = Some(value);
         self
     }
 
-    pub fn database_url(&mut self, value: String) -> &mut Self {
-        self.database_url = Some(value);
+    pub fn pg_pool(mut self, value: PgPool) -> Self {
+        self.pg_pool = Some(value);
         self
     }
 
-    pub fn max_pg_conn(&mut self, value: u32) -> &mut Self {
+    pub fn database_url(mut self, value: &str) -> Self {
+        self.database_url = Some(value.into());
+        self
+    }
+
+    pub fn max_pg_conn(mut self, value: u32) -> Self {
         self.max_pg_conn = Some(value);
         self
     }
 
-    pub fn define_job<T, E, Fut, F>(&mut self, identifier: &str, job_fn: F) -> &mut Self
+    pub fn define_job<T, E, Fut, F>(mut self, identifier: &str, job_fn: F) -> Self
     where
         T: for<'de> Deserialize<'de> + Send,
         E: Debug,
@@ -248,7 +274,7 @@ impl WorkerOptions {
         self
     }
 
-    pub fn add_forbidden_flag(&mut self, flag: &str) -> &mut Self {
+    pub fn add_forbidden_flag(mut self, flag: &str) -> Self {
         self.forbidden_flags.push(flag.into());
         self
     }

@@ -10,6 +10,10 @@ impl TaskDetails {
     pub fn task_ids(&self) -> Vec<i32> {
         self.0.keys().copied().collect()
     }
+
+    pub fn get(&self, id: &i32) -> Option<&String> {
+        self.0.get(id)
+    }
 }
 
 #[derive(FromRow)]

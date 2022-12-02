@@ -7,23 +7,22 @@ use crate::errors::Result;
 
 use super::task_identifiers::TaskDetails;
 
-#[derive(FromRow, Getters)]
+#[derive(FromRow, Getters, Debug)]
 #[getset(get = "pub")]
 pub struct Job {
-    /// FK to job_queues
-    id: String,
+    id: i64,
     /// FK to tasks
     job_queue_id: Option<i32>,
     /// The JSON payload of the job
-    payload: String,
+    payload: serde_json::Value,
     /// Lower number means it should run sooner
-    priority: i32,
+    priority: i16,
     /// When it was due to run
     run_at: DateTime<Utc>,
     /// How many times it has been attempted
-    attempts: i32,
+    attempts: i16,
     /// The limit for the number of times it should be attempted
-    max_attempts: i32,
+    max_attempts: i16,
     /// If attempts > 0, why did it fail last ?
     last_error: Option<String>,
     created_at: DateTime<Utc>,
@@ -36,7 +35,7 @@ pub struct Job {
     locked_by: Option<String>,
     flags: Option<Value>,
     /// Shorcut to tasks.identifer
-    task_identifier: String,
+    task_id: i32,
 }
 
 pub async fn get_job<'e>(
@@ -78,7 +77,7 @@ pub async fn get_job<'e>(
 
     // TODO: get task details and bind task ids
     let mut q = query_as(&sql).bind(worker_id).bind(task_details.task_ids());
-    if flags_to_skip.len() > 0 {
+    if !flags_to_skip.is_empty() {
         q = q.bind(flags_to_skip);
     }
 
@@ -87,7 +86,7 @@ pub async fn get_job<'e>(
 }
 
 fn get_flag_clause(flags_to_skip: &Vec<String>, param_ord: u8) -> String {
-    if flags_to_skip.len() > 0 {
+    if !flags_to_skip.is_empty() {
         return format!("and ((flags ?| ${param_ord}::text[]) is not true)");
     }
     "".into()
@@ -113,7 +112,7 @@ fn get_queue_clause(escaped_schema: &str) -> String {
 
 fn get_update_queue_clause(escaped_schema: &str, param_ord: u8) -> String {
     format!(
-        r#"
+        r#",
             q as (
                 update {escaped_schema}.job_queues
                     set locked_by = ${param_ord},
