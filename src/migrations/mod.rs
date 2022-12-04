@@ -13,7 +13,7 @@ mod m000012;
 mod m000013;
 
 use crate::errors::Result;
-use sqlx::{query, Acquire, Error as SqlxError, Executor, Postgres, Row};
+use sqlx::{query, Acquire, Error as SqlxError, PgExecutor, Postgres, Row};
 use tracing::info;
 
 use m000001::M000001_MIGRATION;
@@ -48,7 +48,7 @@ pub const MIGRATIONS: &[&[&str]] = &[
 
 async fn install_schema<'e, E>(executor: E, escaped_schema: &str) -> Result<()>
 where
-    E: Executor<'e, Database = Postgres> + Acquire<'e, Database = Postgres> + Clone,
+    E: PgExecutor<'e> + Acquire<'e, Database = Postgres> + Clone,
 {
     let create_schema_query = format!(
         r#"
@@ -77,7 +77,7 @@ where
 
 pub async fn migrate<'e, E>(executor: E, escaped_schema: &str) -> Result<()>
 where
-    E: Executor<'e, Database = Postgres> + Acquire<'e, Database = Postgres> + Send + Sync + Clone,
+    E: PgExecutor<'e> + Acquire<'e, Database = Postgres> + Send + Sync + Clone,
 {
     let migrations_status_query =
         format!("select id from {escaped_schema}.migrations order by id desc limit 1");

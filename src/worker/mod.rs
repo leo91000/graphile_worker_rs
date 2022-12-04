@@ -83,8 +83,6 @@ async fn process_one_job(worker: &Worker, source: StreamSource) {
     .ok()
     .flatten();
 
-    dbg!(&job);
-
     match job {
         Some(job) => {
             let job_result = run_job(&job, worker, &source).await;
@@ -203,7 +201,7 @@ async fn release_job(
                 job,
                 worker.escaped_schema(),
                 worker.worker_id(),
-                &format!("{:?}", e),
+                &format!("{e:?}"),
                 None,
             )
             .await

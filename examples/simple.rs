@@ -16,7 +16,7 @@ async fn say_hello(_ctx: WorkerContext, payload: HelloPayload) -> anyhow::Result
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    std::env::set_var("RUST_LOG", "TRACE");
+    std::env::set_var("RUST_LOG", "WARN");
     tracing_subscriber::fmt::init();
 
     let pg_options = PgConnectOptions::from_str("postgres://postgres:root@localhost:5432")?;
