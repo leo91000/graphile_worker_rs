@@ -1,20 +1,9 @@
-pub mod context;
 pub mod errors;
-pub mod migrate;
-mod migrations;
+pub mod migrations;
+mod sql;
+mod streams;
 mod utils;
+mod worker;
 
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use worker::builder::{WorkerBuildError, WorkerOptions};
+pub use worker::{Worker, WorkerContext};

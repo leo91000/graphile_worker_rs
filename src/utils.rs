@@ -1,19 +1,21 @@
-use sqlx::{query, Executor, Postgres};
+use sqlx::{query_as, FromRow, PgExecutor};
 
 use crate::errors::Result;
 
-pub async fn escape_identifier<'e, E: Executor<'e, Database = Postgres>>(
-    executor: E,
+#[derive(FromRow)]
+struct EscapeIdentifierRow {
+    escaped_identifier: String,
+}
+
+pub async fn escape_identifier<'e>(
+    executor: impl PgExecutor<'e>,
     identifier: &str,
 ) -> Result<String> {
-    let escaped_identifier = query!(
-        "select format('%I', $1::text) as escaped_identifier",
-        identifier
-    )
-    .fetch_one(executor)
-    .await?
-    .escaped_identifier
-    .unwrap();
+    let result: EscapeIdentifierRow =
+        query_as("select format('%I', $1::text) as escaped_identifier")
+            .bind(identifier)
+            .fetch_one(executor)
+            .await?;
 
-    Ok(escaped_identifier)
+    Ok(result.escaped_identifier)
 }
