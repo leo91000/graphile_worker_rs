@@ -3,6 +3,11 @@ name = "archimedes"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+members = [
+    "crates/*"
+]
+
 [features]
 default = ["runtime-tokio-native-tls"]
 runtime-tokio-rustls = ["sqlx/runtime-tokio-rustls", "tokio"]
