@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
-    character::complete::{char, digit1},
-    combinator::{map, map_res, opt, recognize, verify},
+    character::complete::{self, char},
+    combinator::{map, opt, verify},
     multi::separated_list1,
     sequence::{preceded, separated_pair, terminated},
     IResult,
@@ -12,11 +12,7 @@ use crate::types::{CrontabPart, CrontabTimer, CrontabValue};
 /// Attempts to parse a number with crontab part boundaries
 fn crontab_number<'a>(part: &CrontabPart) -> impl Fn(&'a str) -> IResult<&'a str, u8> {
     let (min, max) = part.boundaries();
-    move |input| {
-        verify(map_res(recognize(digit1), str::parse::<u8>), |v| {
-            v >= &min && v <= &max
-        })(input)
-    }
+    move |input| verify(complete::u8, |v| v >= &min && v <= &max)(input)
 }
 
 /// Attempts to parse a range with crontab part boundaries
