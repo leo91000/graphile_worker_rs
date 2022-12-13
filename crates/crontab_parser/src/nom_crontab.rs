@@ -3,13 +3,13 @@ use nom::{
     character::complete::{self, line_ending, multispace0, space0, space1},
     combinator::opt,
     multi::separated_list0,
-    sequence::{delimited, preceded, tuple},
+    sequence::{delimited, preceded},
     IResult,
 };
 
 use crate::{
     nom_crontab_opts::nom_crontab_opts, nom_crontab_payload::nom_crontab_payload,
-    nom_crontab_timer::nom_crontab_timer, nom_task_identifier::nom_task_identifier, types::Crontab,
+    nom_crontab_timer::nom_crontab_timer, nom_task_identifier::nom_task_identifier, Crontab,
 };
 
 fn crontab_line(input: &str) -> IResult<&str, Option<Crontab>> {
@@ -39,7 +39,7 @@ fn crontab_comment(input: &str) -> IResult<&str, Option<Crontab>> {
     Ok((input, None))
 }
 
-pub(crate) fn crontab(input: &str) -> IResult<&str, Vec<Crontab>> {
+pub(crate) fn nom_crontab(input: &str) -> IResult<&str, Vec<Crontab>> {
     let (input, crontabs) = delimited(
         multispace0,
         separated_list0(
@@ -131,7 +131,7 @@ mod tests {
                     },
                 ]
             )),
-            crontab(input)
+            nom_crontab(input)
         );
     }
 }

@@ -34,11 +34,3 @@ pub struct CrontabOptions {
     pub queue: Option<String>,
     pub priority: Option<i16>,
 }
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct Crontab {
-    pub timer: CrontabTimer,
-    pub task_identifier: String,
-    pub options: CrontabOptions,
-    pub payload: Option<serde_json::Value>,
-}
