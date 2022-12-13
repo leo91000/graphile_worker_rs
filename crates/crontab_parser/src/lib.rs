@@ -1,4 +1,4 @@
-use nom::error::ErrorKind;
+pub use nom::error::ErrorKind;
 use nom_crontab::nom_crontab;
 use thiserror::Error;
 use types::{CrontabOptions, CrontabTimer};
