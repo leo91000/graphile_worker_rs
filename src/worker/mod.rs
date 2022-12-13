@@ -1,7 +1,7 @@
 pub mod builder;
 
 use std::fmt::Debug;
-use std::future::Future;
+use std::future::{ready, Future};
 use std::pin::Pin;
 use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
@@ -10,10 +10,8 @@ use crate::errors::ArchimedesError;
 use crate::sql::get_job::Job;
 use crate::sql::{get_job::get_job, task_identifiers::TaskDetails};
 use crate::streams::job_signal_stream;
-use futures::{FutureExt, StreamExt};
+use futures::{FutureExt, StreamExt, TryStreamExt};
 use getset::Getters;
-use rand::RngCore;
-use serde::Deserialize;
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
 
@@ -51,23 +49,48 @@ pub struct Worker {
     forbidden_flags: Vec<String>,
 }
 
+#[derive(Error, Debug)]
+pub enum WorkerRuntimeError {
+    #[error("Unexpected error occured while processing job : '{0}'")]
+    ProcessJobError(#[from] ProcessJobError),
+    #[error("Failed to listen to postgres notifications : '{0}'")]
+    PgListenError(#[from] ArchimedesError),
+}
+
 impl Worker {
     pub fn options() -> WorkerOptions {
         WorkerOptions::default()
     }
 
-    pub async fn run(&self) -> crate::errors::Result<()> {
+    pub async fn run(&self) -> Result<(), WorkerRuntimeError> {
         let job_signal = job_signal_stream(self.pg_pool.clone(), self.poll_interval).await?;
 
         job_signal
-            .for_each_concurrent(self.concurrency, |source| process_one_job(self, source))
-            .await;
+            .then(|source| process_one_job(self, source))
+            .try_for_each_concurrent(self.concurrency, |j| {
+                if let Some(j) = &j {
+                    debug!("Job id={} processed", j.id());
+                }
+                ready(Ok(()))
+            })
+            .await?;
 
         Ok(())
     }
 }
 
-async fn process_one_job(worker: &Worker, source: StreamSource) {
+#[derive(Error, Debug)]
+pub enum ProcessJobError {
+    #[error("An error occured while releasing a job : '{0}'")]
+    ReleaseJobError(#[from] ReleaseJobError),
+    #[error("An error occured while fetching a job to run : '{0}'")]
+    GetJobError(#[from] ArchimedesError),
+}
+
+async fn process_one_job(
+    worker: &Worker,
+    source: StreamSource,
+) -> Result<Option<Job>, ProcessJobError> {
     let job = get_job(
         worker.pg_pool(),
         worker.task_details(),
@@ -79,24 +102,21 @@ async fn process_one_job(worker: &Worker, source: StreamSource) {
     .map_err(|e| {
         error!("Could not get job : {:?}", e);
         e
-    })
-    .ok()
-    .flatten();
+    })?;
 
     match job {
         Some(job) => {
             let job_result = run_job(&job, worker, &source).await;
-            release_job(job_result, &job, worker)
-                .await
-                .map_err(|e| {
-                    error!("{:?}", e);
-                    e
-                })
-                .ok();
+            release_job(job_result, &job, worker).await.map_err(|e| {
+                error!("{:?}", e);
+                e
+            })?;
+            Ok(Some(job))
         }
         None => {
-            // Retry one time because maybe synchronization issue
+            // TODO: Retry one time because maybe synchronization issue
             debug!(source = ?source, "No job found");
+            Ok(None)
         }
     }
 }
@@ -152,7 +172,7 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
 
 #[derive(Error, Debug)]
 #[error("Failed to release job '{job_id}'. {source}")]
-struct ReleaseJobError {
+pub struct ReleaseJobError {
     job_id: i64,
     #[source]
     source: ArchimedesError,
