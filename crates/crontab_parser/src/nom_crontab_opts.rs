@@ -1,5 +1,5 @@
 use nom::{
-    bytes::streaming::take_while,
+    bytes::complete::take_while1,
     character::complete,
     combinator::{eof, opt},
     sequence::{preceded, terminated, tuple},
@@ -21,7 +21,7 @@ struct QueryOption<'a> {
 fn crontab_query(input: &str) -> IResult<&str, QueryOption<'_>> {
     let (input, qs) = preceded(
         complete::char('?'),
-        take_while(|c: char| !c.is_whitespace()),
+        take_while1(|c: char| !c.is_whitespace()),
     )(input)?;
 
     Ok((

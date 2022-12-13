@@ -1,27 +1,6 @@
 use std::str::FromStr;
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum CrontabPart {
-    Minute,
-    Hours,
-    Days,
-    Months,
-    DaysOfWeek,
-}
-
-impl CrontabPart {
-    pub fn boundaries(&self) -> (u8, u8) {
-        match self {
-            CrontabPart::Minute => (0, 59),
-            CrontabPart::Hours => (0, 23),
-            CrontabPart::Days => (0, 31),
-            CrontabPart::Months => (1, 12),
-            CrontabPart::DaysOfWeek => (1, 7),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
 pub enum CrontabValue {
     Number(u8),
     Range(u8, u8),
@@ -47,11 +26,19 @@ pub struct CrontabFill {
     pub w: u32,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Default)]
 pub struct CrontabOptions {
     pub id: Option<String>,
     pub fill: Option<CrontabFill>,
     pub max: Option<u16>,
     pub queue: Option<String>,
     pub priority: Option<i16>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Crontab {
+    pub timer: CrontabTimer,
+    pub task_identifier: String,
+    pub options: CrontabOptions,
+    pub payload: Option<serde_json::Value>,
 }

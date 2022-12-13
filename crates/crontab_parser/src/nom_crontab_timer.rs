@@ -7,7 +7,28 @@ use nom::{
     IResult,
 };
 
-use crate::types::{CrontabPart, CrontabTimer, CrontabValue};
+use crate::types::{CrontabTimer, CrontabValue};
+
+#[derive(Debug, PartialEq, Eq)]
+enum CrontabPart {
+    Minute,
+    Hours,
+    Days,
+    Months,
+    DaysOfWeek,
+}
+
+impl CrontabPart {
+    fn boundaries(&self) -> (u8, u8) {
+        match self {
+            CrontabPart::Minute => (0, 59),
+            CrontabPart::Hours => (0, 23),
+            CrontabPart::Days => (0, 31),
+            CrontabPart::Months => (1, 12),
+            CrontabPart::DaysOfWeek => (1, 7),
+        }
+    }
+}
 
 /// Attempts to parse a number with crontab part boundaries
 fn crontab_number<'a>(part: &CrontabPart) -> impl Fn(&'a str) -> IResult<&'a str, u8> {
