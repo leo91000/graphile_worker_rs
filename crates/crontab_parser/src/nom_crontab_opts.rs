@@ -7,7 +7,7 @@ use nom::{
 };
 use serde::Deserialize;
 
-use crate::types::{CrontabFill, CrontabOptions};
+use crontab_types::{CrontabFill, CrontabOptions};
 
 #[derive(Deserialize)]
 struct QueryOption<'a> {

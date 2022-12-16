@@ -7,7 +7,7 @@ use nom::{
     IResult,
 };
 
-use crate::types::{CrontabTimer, CrontabValue};
+use crontab_types::{CrontabTimer, CrontabValue};
 
 #[derive(Debug, PartialEq, Eq)]
 enum CrontabPart {
@@ -23,9 +23,9 @@ impl CrontabPart {
         match self {
             CrontabPart::Minute => (0, 59),
             CrontabPart::Hours => (0, 23),
-            CrontabPart::Days => (0, 31),
+            CrontabPart::Days => (1, 31),
             CrontabPart::Months => (1, 12),
-            CrontabPart::DaysOfWeek => (1, 7),
+            CrontabPart::DaysOfWeek => (0, 6),
         }
     }
 }

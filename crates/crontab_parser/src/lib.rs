@@ -1,22 +1,13 @@
+pub use crontab_types::Crontab;
 pub use nom::error::ErrorKind;
 use nom_crontab::nom_crontab;
 use thiserror::Error;
-use types::{CrontabOptions, CrontabTimer};
 
 mod nom_crontab;
 mod nom_crontab_opts;
 mod nom_crontab_payload;
 mod nom_crontab_timer;
 mod nom_task_identifier;
-mod types;
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct Crontab {
-    pub timer: CrontabTimer,
-    pub task_identifier: String,
-    pub options: CrontabOptions,
-    pub payload: Option<serde_json::Value>,
-}
 
 #[derive(Error, Debug)]
 #[error("An error occured while parsing crontab : \n{msg}")]
