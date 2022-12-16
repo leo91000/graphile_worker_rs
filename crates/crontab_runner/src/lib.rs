@@ -2,9 +2,9 @@ use chrono::prelude::*;
 use crontab_types::Crontab;
 use sqlx::PgExecutor;
 
-async fn schedule_crontab_jobs_at(
+async fn schedule_crontab_jobs_at<'e>(
     crontab: &Crontab,
-    executor: impl for<'e> PgExecutor<'e>,
+    executor: impl PgExecutor<'e>,
     at: DateTime<Utc>,
 ) {
 }

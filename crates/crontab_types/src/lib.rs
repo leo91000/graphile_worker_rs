@@ -33,11 +33,11 @@ pub struct CrontabTimer {
 #[derive(Debug, PartialEq, Eq, Getters)]
 #[getset(get = "pub")]
 pub struct CrontabFill {
-    pub s: u32,
-    pub m: u32,
-    pub h: u32,
-    pub d: u32,
     pub w: u32,
+    pub d: u32,
+    pub h: u32,
+    pub m: u32,
+    pub s: u32,
 }
 
 #[derive(Debug, PartialEq, Eq, Default, Getters)]
@@ -48,6 +48,43 @@ pub struct CrontabOptions {
     pub max: Option<u16>,
     pub queue: Option<String>,
     pub priority: Option<i16>,
+}
+
+const SECOND: u32 = 1;
+const MINUTE: u32 = 60 * SECOND;
+const HOUR: u32 = 60 * MINUTE;
+const DAY: u32 = 24 * HOUR;
+const WEEK: u32 = 7 * DAY;
+
+impl CrontabFill {
+    /// Construct a crontab fill from a week, a day, an hour, a minute and a second
+    pub fn new(w: u32, d: u32, h: u32, m: u32, s: u32) -> Self {
+        Self { w, d, h, m, s }
+    }
+
+    /// Convert a crontab fill to a number of seconds
+    ///
+    /// ```rust
+    /// use crontab_types::CrontabFill;
+    ///
+    /// let fill = CrontabFill::new(1, 30, 28, 350, 2);
+    /// assert_eq!(3318602, fill.to_secs());
+    /// ```
+    pub fn to_secs(&self) -> u32 {
+        self.w * WEEK + self.d * DAY + self.h * HOUR + self.m * MINUTE + self.s * SECOND
+    }
+}
+
+impl PartialOrd for CrontabFill {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.to_secs().partial_cmp(&other.to_secs())
+    }
+}
+
+impl Ord for CrontabFill {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.to_secs().cmp(&other.to_secs())
+    }
 }
 
 impl Default for CrontabTimer {
@@ -110,5 +147,20 @@ mod tests {
         assert!(!crontab_timer.should_run_at(&"1998-10-04T10:30:59".parse()?));
 
         Ok(())
+    }
+
+    #[test]
+    pub fn crontab_fill_ordering() {
+        let biggest_fill = CrontabFill::new(1, 30, 0, 0, 0);
+        let bigger_fill = CrontabFill::new(0, 32, 0, 0, 0);
+        let lower_fill = CrontabFill::new(0, 0, 432, 0, 0);
+        let lowest_fill = CrontabFill::new(2, 0, 0, 0, 0);
+
+        let mut fills = vec![&lower_fill, &bigger_fill, &biggest_fill, &lowest_fill];
+        fills.sort();
+        assert_eq!(
+            vec![&lowest_fill, &lower_fill, &bigger_fill, &biggest_fill],
+            fills
+        );
     }
 }
