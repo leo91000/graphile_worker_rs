@@ -100,6 +100,19 @@ impl Default for CrontabTimer {
 }
 
 impl CrontabTimer {
+    /// Check if the timer should run at specifed date
+    ///
+    /// ```rust
+    /// use crontab_types::{CrontabValue, CrontabTimer};
+    ///
+    /// let crontab_timer = CrontabTimer {
+    ///     minutes: vec![CrontabValue::Number(30)],
+    ///     hours: vec![CrontabValue::Range(8, 10)],
+    ///     days: vec![CrontabValue::Step(4)],
+    ///     ..Default::default()
+    /// };
+    /// assert!(crontab_timer.should_run_at(&"2012-12-17T08:30:12".parse().unwrap()));
+    /// ```
     pub fn should_run_at(&self, at: &NaiveDateTime) -> bool {
         self.minutes().iter().any(|v| v.match_value(at.minute(), 0))
             && self.hours().iter().any(|v| v.match_value(at.hour(), 0))
