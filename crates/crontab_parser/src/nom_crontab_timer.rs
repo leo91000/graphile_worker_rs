@@ -19,7 +19,7 @@ enum CrontabPart {
 }
 
 impl CrontabPart {
-    fn boundaries(&self) -> (u8, u8) {
+    fn boundaries(&self) -> (u32, u32) {
         match self {
             CrontabPart::Minute => (0, 59),
             CrontabPart::Hours => (0, 23),
@@ -31,15 +31,15 @@ impl CrontabPart {
 }
 
 /// Attempts to parse a number with crontab part boundaries
-fn crontab_number<'a>(part: &CrontabPart) -> impl Fn(&'a str) -> IResult<&'a str, u8> {
+fn crontab_number<'a>(part: &CrontabPart) -> impl Fn(&'a str) -> IResult<&'a str, u32> {
     let (min, max) = part.boundaries();
-    move |input| verify(complete::u8, |v| v >= &min && v <= &max)(input)
+    move |input| verify(complete::u32, |v| v >= &min && v <= &max)(input)
 }
 
 /// Attempts to parse a range with crontab part boundaries
 fn crontab_range<'a, 'p>(
     part: &'p CrontabPart,
-) -> impl Fn(&'a str) -> IResult<&'a str, (u8, u8)> + 'p {
+) -> impl Fn(&'a str) -> IResult<&'a str, (u32, u32)> + 'p {
     |input| {
         verify(
             separated_pair(crontab_number(part), char('-'), crontab_number(part)),
@@ -51,7 +51,7 @@ fn crontab_range<'a, 'p>(
 /// Attempts to parse a step with crontab part boundaries
 fn crontab_wildcard<'a, 'p>(
     part: &'p CrontabPart,
-) -> impl Fn(&'a str) -> IResult<&'a str, Option<u8>> + 'p {
+) -> impl Fn(&'a str) -> IResult<&'a str, Option<u32>> + 'p {
     |input| preceded(char('*'), opt(preceded(char('/'), crontab_number(part))))(input)
 }
 

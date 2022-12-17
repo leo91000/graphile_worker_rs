@@ -12,9 +12,9 @@ pub struct Crontab {
 
 #[derive(Debug, PartialEq, Eq, Default)]
 pub enum CrontabValue {
-    Number(u8),
-    Range(u8, u8),
-    Step(u8),
+    Number(u32),
+    Range(u32, u32),
+    Step(u32),
     #[default]
     Any,
 }
@@ -128,9 +128,9 @@ impl CrontabTimer {
 impl CrontabValue {
     fn match_value(&self, value: u32, step_offset: u32) -> bool {
         match self {
-            CrontabValue::Number(n) => value == *n as u32,
-            CrontabValue::Range(low, high) => value >= *low as u32 && value <= *high as u32,
-            CrontabValue::Step(n) => value % *n as u32 == step_offset,
+            CrontabValue::Number(n) => &value == n,
+            CrontabValue::Range(low, high) => &value >= low && &value <= high,
+            CrontabValue::Step(n) => value % n == step_offset,
             CrontabValue::Any => true,
         }
     }
