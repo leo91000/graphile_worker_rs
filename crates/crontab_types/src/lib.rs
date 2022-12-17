@@ -30,7 +30,7 @@ pub struct CrontabTimer {
     pub dows: Vec<CrontabValue>,
 }
 
-#[derive(Debug, PartialEq, Eq, Getters)]
+#[derive(Debug, PartialEq, Eq, Getters, Clone)]
 #[getset(get = "pub")]
 pub struct CrontabFill {
     pub w: u32,
@@ -40,7 +40,7 @@ pub struct CrontabFill {
     pub s: u32,
 }
 
-#[derive(Debug, PartialEq, Eq, Default, Getters)]
+#[derive(Debug, PartialEq, Eq, Default, Getters, Clone)]
 #[getset(get = "pub")]
 pub struct CrontabOptions {
     pub id: Option<String>,
