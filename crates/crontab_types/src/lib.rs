@@ -1,7 +1,7 @@
 use chrono::prelude::*;
 use getset::Getters;
 
-#[derive(Debug, PartialEq, Eq, Getters)]
+#[derive(Debug, PartialEq, Eq, Clone, Getters)]
 #[getset(get = "pub")]
 pub struct Crontab {
     pub timer: CrontabTimer,
@@ -10,7 +10,7 @@ pub struct Crontab {
     pub payload: Option<serde_json::Value>,
 }
 
-#[derive(Debug, PartialEq, Eq, Default)]
+#[derive(Debug, PartialEq, Eq, Default, Clone)]
 pub enum CrontabValue {
     Number(u32),
     Range(u32, u32),
@@ -19,7 +19,7 @@ pub enum CrontabValue {
     Any,
 }
 
-#[derive(Debug, PartialEq, Eq, Getters)]
+#[derive(Debug, PartialEq, Eq, Clone, Getters)]
 #[getset(get = "pub")]
 pub struct CrontabTimer {
     pub minutes: Vec<CrontabValue>,
@@ -122,6 +122,13 @@ impl CrontabTimer {
                 .dows()
                 .iter()
                 .any(|v| v.match_value(at.weekday().number_from_monday(), 1))
+    }
+}
+
+impl Crontab {
+    /// Shorcut method to timer
+    pub fn should_run_at(&self, at: &NaiveDateTime) -> bool {
+        self.timer().should_run_at(at)
     }
 }
 

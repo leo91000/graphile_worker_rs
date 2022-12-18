@@ -10,8 +10,9 @@ runtime-tokio-native-tls = ["sqlx/runtime-tokio-native-tls"]
 
 [dependencies]
 crontab_types = { path = "../crontab_types" }
-chrono = "0.4.23"
-sqlx = "0.6.2"
+chrono = { version = "0.4.23", features = ["serde"] }
+sqlx = { version = "0.6.2", features = ["chrono"] }
 thiserror = "1.0.37"
 serde = { version = "1.0.151", features = ["derive"] }
 serde_json = "1.0.89"
+getset = "0.1.2"
