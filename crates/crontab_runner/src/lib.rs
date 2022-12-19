@@ -54,7 +54,7 @@ pub async fn cron_main<'e>(
                 warn!(
                     "Cron fired too late; catching up {}m{}s behind",
                     ts_delta.num_minutes(),
-                    ts_delta.num_seconds() - ts_delta.num_minutes()
+                    ts_delta.num_seconds() % 60
                 );
             }
             _ => {}
