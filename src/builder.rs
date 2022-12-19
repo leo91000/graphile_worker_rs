@@ -127,11 +127,11 @@ impl WorkerOptions {
                 let de_payload = serde_json::from_str(&payload);
 
                 match de_payload {
-                    Err(e) => Err(format!("{:?}", e)),
+                    Err(e) => Err(format!("{e:?}")),
                     Ok(p) => {
                         let job_result = job_fn(ctx, p).await;
                         match job_result {
-                            Err(e) => Err(format!("{:?}", e)),
+                            Err(e) => Err(format!("{e:?}")),
                             Ok(v) => Ok(v),
                         }
                     }

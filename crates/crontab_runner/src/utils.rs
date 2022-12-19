@@ -1,7 +1,7 @@
 use chrono::{prelude::*, Duration};
 use once_cell::sync::Lazy;
 
-pub(crate) static DURATION_ZERO: Lazy<Duration> = Lazy::new(|| Duration::zero());
+pub(crate) static DURATION_ZERO: Lazy<Duration> = Lazy::new(Duration::zero);
 pub(crate) static ONE_MINUTE: Lazy<Duration> = Lazy::new(|| Duration::minutes(1));
 
 pub(crate) fn round_date_minute<Tz: TimeZone>(

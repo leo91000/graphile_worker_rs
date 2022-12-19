@@ -71,7 +71,7 @@ where
         unknown_identifiers,
     } = get_backfill_and_unknown_items(crontabs, &known_crontabs);
 
-    if unknown_identifiers.len() > 0 {
+    if !unknown_identifiers.is_empty() {
         insert_unknown_crontabs(
             executor.clone(),
             escaped_schema,
@@ -109,7 +109,7 @@ where
                 })
                 .collect();
 
-            if to_backfill.len() > 0 {
+            if !to_backfill.is_empty() {
                 debug!(nb_jobs = to_backfill.len(), at = ?ts, "cron:backfill");
                 schedule_cron_jobs(
                     executor.clone(),

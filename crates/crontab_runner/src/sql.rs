@@ -132,7 +132,7 @@ where
     query(&statement)
         .bind(serde_json::to_string(crontab_jobs)?)
         .bind(last_execution)
-        .bind(use_local_time.then(|| Local::now()))
+        .bind(use_local_time.then(Local::now))
         .execute(executor)
         .await?;
 
@@ -147,7 +147,7 @@ impl CrontabJob {
                 payload.insert(
                     "_cron".into(),
                     json!({
-                        "ts": format!("{:?}", ts),
+                        "ts": format!("{ts:?}"),
                         "backfilled": backfilled
                     }),
                 );

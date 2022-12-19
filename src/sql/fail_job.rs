@@ -70,7 +70,7 @@ pub async fn fail_job(
 
 pub async fn fail_jobs(
     executor: impl for<'e> PgExecutor<'e>,
-    jobs: &Vec<Job>,
+    jobs: &[Job],
     escaped_schema: &str,
     worker_id: &str,
     message: &str,
