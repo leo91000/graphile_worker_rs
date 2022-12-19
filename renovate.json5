@@ -1,0 +1,26 @@
+{
+  schedule: [],
+  dependencyDashboard: true,
+  rangeStrategy: "bump",
+  prConcurrentLimit: 3,
+  prHourlyLimit: 10,
+  assignees: ["leo91000"],
+  timezone: "Europe/Paris",
+  labels: ["renovate", "deps"],
+  lockFileMaintenance: {
+    enabled: true,
+    automerge: true
+  },
+  packageRules: [
+    {
+      matchUpdateTypes: ["major"],
+      stabilityDays: 7
+    },
+    {
+      matchUpdateTypes: ["minor", "patch"],
+      groupName: "all non-major dependencies",
+      groupSlug: "all-minor-patch",
+      automerge: true,
+    },
+  ]
+}
