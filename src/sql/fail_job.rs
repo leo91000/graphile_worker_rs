@@ -68,6 +68,7 @@ pub async fn fail_job(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn fail_jobs(
     executor: impl for<'e> PgExecutor<'e>,
     jobs: &[Job],
