@@ -7,8 +7,8 @@ description = "Crontab parsing package for archimedes, a high performance Rust/P
 homepage = "https://docs.rs/archimedes_crontab_parser"
 documentation = "https://docs.rs/archimedes_crontab_parser"
 repository = "https://github.com/leo91000/archimedes/crates/crontab_parser"
-keywords = ["worker", "scheduler", "job-scheduler", "async", "multithread"]
-categories = ["job-scheduler", "worker", "multithread", "async", "tokio"]
+keywords = []
+categories = []
 readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

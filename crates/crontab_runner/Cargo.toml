@@ -6,8 +6,8 @@ description = "Crontab runner package for archimedes, a high performance Rust/Po
 homepage = "https://docs.rs/archimedes_crontab_runner"
 documentation = "https://docs.rs/archimedes_crontab_runner"
 repository = "https://github.com/leo91000/archimedes/crates/crontab_runner"
-keywords = ["worker", "scheduler", "job-scheduler", "async", "multithread"]
-categories = ["job-scheduler", "worker", "multithread", "async", "tokio"]
+keywords = []
+categories = []
 readme = "README.md"
 
 [features]

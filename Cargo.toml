@@ -8,8 +8,8 @@ homepage = "https://docs.rs/archimedes"
 documentation = "https://docs.rs/archimedes"
 repository = "https://github.com/leo91000/archimedes"
 readme = "README.md"
-keywords = ["worker", "scheduler", "job-scheduler", "async", "multithread"]
-categories = ["job-scheduler", "worker", "multithread", "async", "tokio"]
+keywords = []
+categories = []
 
 [workspace]
 members = [
