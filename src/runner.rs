@@ -1,5 +1,3 @@
-pub mod builder;
-
 use std::fmt::Debug;
 use std::future::{ready, Future};
 use std::pin::Pin;
@@ -10,13 +8,13 @@ use crate::errors::ArchimedesError;
 use crate::sql::get_job::Job;
 use crate::sql::{get_job::get_job, task_identifiers::TaskDetails};
 use crate::streams::job_signal_stream;
-use futures::{FutureExt, StreamExt, TryStreamExt};
+use futures::{StreamExt, TryStreamExt};
 use getset::Getters;
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
 
+use crate::builder::WorkerOptions;
 use crate::sql::complete_job::complete_job;
-use crate::worker::builder::WorkerOptions;
 use crate::{sql::fail_job::fail_job, streams::StreamSource};
 
 #[derive(Clone, Getters)]
@@ -33,20 +31,20 @@ impl From<&Worker> for WorkerContext {
     }
 }
 
-type WorkerFn =
+pub type WorkerFn =
     Box<dyn Fn(WorkerContext, String) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>>>;
 
 #[derive(Getters)]
 #[getset(get = "pub")]
 pub struct Worker {
-    worker_id: String,
-    concurrency: usize,
-    poll_interval: Duration,
-    jobs: HashMap<String, WorkerFn>,
-    pg_pool: sqlx::PgPool,
-    escaped_schema: String,
-    task_details: TaskDetails,
-    forbidden_flags: Vec<String>,
+    pub(crate) worker_id: String,
+    pub(crate) concurrency: usize,
+    pub(crate) poll_interval: Duration,
+    pub(crate) jobs: HashMap<String, WorkerFn>,
+    pub(crate) pg_pool: sqlx::PgPool,
+    pub(crate) escaped_schema: String,
+    pub(crate) task_details: TaskDetails,
+    pub(crate) forbidden_flags: Vec<String>,
 }
 
 #[derive(Error, Debug)]

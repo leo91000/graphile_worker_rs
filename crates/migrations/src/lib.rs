@@ -12,7 +12,6 @@ mod m000011;
 mod m000012;
 mod m000013;
 
-use crate::errors::Result;
 use sqlx::{query, Acquire, Error as SqlxError, PgExecutor, Postgres, Row};
 use tracing::info;
 
@@ -46,7 +45,7 @@ pub const MIGRATIONS: &[&[&str]] = &[
     M000013_MIGRATION,
 ];
 
-async fn install_schema<'e, E>(executor: E, escaped_schema: &str) -> Result<()>
+async fn install_schema<'e, E>(executor: E, escaped_schema: &str) -> Result<(), sqlx::Error>
 where
     E: PgExecutor<'e> + Acquire<'e, Database = Postgres> + Clone,
 {
@@ -75,7 +74,7 @@ where
     Ok(())
 }
 
-pub async fn migrate<'e, E>(executor: E, escaped_schema: &str) -> Result<()>
+pub async fn migrate<'e, E>(executor: E, escaped_schema: &str) -> Result<(), sqlx::Error>
 where
     E: PgExecutor<'e> + Acquire<'e, Database = Postgres> + Send + Sync + Clone,
 {
@@ -129,7 +128,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::migrate::migrate;
+    use super::*;
     use sqlx::postgres::PgPoolOptions;
 
     #[tokio::test]

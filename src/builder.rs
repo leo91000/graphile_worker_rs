@@ -1,19 +1,19 @@
+use crate::runner::WorkerFn;
+use crate::sql::task_identifiers::get_tasks_details;
+use crate::utils::escape_identifier;
+use crate::{Worker, WorkerContext};
+use archimedes_migrations::migrate;
+use futures::FutureExt;
+use rand::RngCore;
+use serde::Deserialize;
+use sqlx::postgres::PgPoolOptions;
+use sqlx::PgPool;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
-use futures::FutureExt;
-use rand::RngCore;
-use serde::Deserialize;
-use sqlx::PgPool;
-use sqlx::postgres::PgPoolOptions;
 use thiserror::Error;
-use crate::migrations::migrate;
-use crate::sql::task_identifiers::get_tasks_details;
-use crate::utils::escape_identifier;
-use crate::{Worker, WorkerContext};
-use crate::worker::WorkerFn;
 
 #[derive(Default)]
 pub struct WorkerOptions {

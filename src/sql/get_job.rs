@@ -9,6 +9,7 @@ use super::task_identifiers::TaskDetails;
 
 #[derive(FromRow, Getters, Debug)]
 #[getset(get = "pub")]
+#[allow(dead_code)]
 pub struct Job {
     id: i64,
     /// FK to tasks
