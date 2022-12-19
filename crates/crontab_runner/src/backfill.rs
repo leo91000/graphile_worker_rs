@@ -1,11 +1,14 @@
 use chrono::prelude::*;
 use crontab_types::Crontab;
 use sqlx::PgExecutor;
-use thiserror::Error;
+use tracing::debug;
 
-use crate::sql::{
-    get_known_crontabs, insert_unknown_crontabs, schedule_cron_jobs, CrontabJob, KnownCrontab,
-    ScheduleCronJobError,
+use crate::{
+    sql::{
+        get_known_crontabs, insert_unknown_crontabs, schedule_cron_jobs, CrontabJob, KnownCrontab,
+        ScheduleCronJobError,
+    },
+    utils::{round_date_minute, ONE_MINUTE},
 };
 
 pub(crate) struct BackfillItemAndDate<'a, 'b> {
@@ -51,17 +54,6 @@ pub(crate) fn get_backfill_and_unknown_items<'a, 'b>(
     }
 }
 
-pub(crate) fn round_date_minute<Tz: TimeZone>(
-    mut datetime: DateTime<Tz>,
-    round_up: bool,
-) -> DateTime<Tz> {
-    datetime = datetime.with_second(0).unwrap();
-    if round_up {
-        datetime += chrono::Duration::minutes(1);
-    }
-    datetime
-}
-
 pub(crate) async fn register_and_backfill_items<'e, Tz: TimeZone>(
     executor: impl PgExecutor<'e> + Clone,
     escaped_schema: &str,
@@ -100,7 +92,6 @@ where
             true,
         );
 
-        let one_minute = chrono::Duration::minutes(1);
         while &ts < start_time {
             let time_ago = (start_time.to_owned() - ts.to_owned()).num_seconds();
 
@@ -119,6 +110,7 @@ where
                 .collect();
 
             if to_backfill.len() > 0 {
+                debug!(nb_jobs = to_backfill.len(), at = ?ts, "cron:backfill");
                 schedule_cron_jobs(
                     executor.clone(),
                     &to_backfill,
@@ -129,7 +121,7 @@ where
                 .await?;
             }
 
-            ts += one_minute;
+            ts += *ONE_MINUTE;
         }
     }
 

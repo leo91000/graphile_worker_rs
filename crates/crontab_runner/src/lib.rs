@@ -1,51 +1,75 @@
-use std::fmt::Display;
-
+use backfill::register_and_backfill_items;
 use chrono::prelude::*;
 use crontab_types::Crontab;
-use serde::Serialize;
-use sqlx::{query, PgExecutor};
-use thiserror::Error;
+use sqlx::PgExecutor;
+use tracing::{debug, warn};
+
+pub use crate::sql::ScheduleCronJobError;
+use crate::{
+    sql::{schedule_cron_jobs, CrontabJob},
+    utils::{round_date_minute, sleep_until, DURATION_ZERO, ONE_MINUTE},
+};
 
 mod backfill;
 mod sql;
+mod utils;
 
-impl From<&Crontab> for CrontabJob {
-    fn from(crontab: &Crontab) -> Self {
-        CrontabJob {
-            task: crontab.task_identifier.clone(),
-            payload: crontab.payload.clone(),
-            queue_name: crontab.options.queue.clone(),
-            run_at: Local::now(),
-            max_attempts: crontab.options.max,
-            priority: crontab.options.priority,
-        }
-    }
-}
-
-async fn schedule_crontab_jobs_at<'e, Tz: TimeZone, C: AsRef<Crontab>>(
-    crontabs: &[C],
-    executor: impl PgExecutor<'e>,
-    at: DateTime<Tz>,
+pub async fn cron_main<'e>(
+    executor: impl PgExecutor<'e> + Clone,
     escaped_schema: &str,
+    crontabs: &[Crontab],
     use_local_time: bool,
-) -> Result<(), ScheduleCronJobError>
-where
-    Tz::Offset: Display,
-{
-    let jobs: Vec<CrontabJob> = crontabs
-        .iter()
-        .filter(|crontab| crontab.as_ref().timer().should_run_at(&at.naive_local()))
-        .map(|c| c.as_ref().into())
-        .collect();
+) -> Result<(), ScheduleCronJobError> {
+    let start = Local::now();
+    debug!(start = ?start, "cron:starting");
 
-    schedule_cron_jobs(
-        executor,
-        &jobs,
-        &Local::now(),
+    register_and_backfill_items(
+        executor.clone(),
         escaped_schema,
+        crontabs,
+        &start,
         use_local_time,
     )
     .await?;
+    debug!(start = ?start, "cron:started");
 
-    Ok(())
+    let mut ts = round_date_minute(start, true);
+
+    loop {
+        sleep_until(ts).await;
+        let current_ts = round_date_minute(Local::now(), false);
+        let ts_delta = current_ts - ts;
+
+        if ts_delta < *DURATION_ZERO {
+            warn!(
+                "Cron fired {}s too early (clock skew?); rescheduling",
+                ts_delta.num_seconds()
+            );
+            continue;
+        } else if ts_delta > *DURATION_ZERO {
+            warn!(
+                "Cron fired too late; catching up {}m{}s behind",
+                ts_delta.num_minutes(),
+                ts_delta.num_seconds() - ts_delta.num_minutes()
+            );
+        }
+
+        let mut jobs: Vec<CrontabJob> = vec![];
+
+        // Gather relevant jobs
+        for cron in crontabs {
+            if cron.should_run_at(&ts.naive_local()) {
+                jobs.push(CrontabJob::for_cron(&cron, &ts, false));
+            }
+        }
+
+        if !jobs.is_empty() {
+            debug!(nb_jobs = jobs.len(), at = ?ts, "cron:schedule");
+            schedule_cron_jobs(executor.clone(), &jobs, &ts, escaped_schema, use_local_time)
+                .await?;
+            debug!(nb_jobs = jobs.len(), at = ?ts, "cron:scheduled");
+        }
+
+        ts += *ONE_MINUTE;
+    }
 }
