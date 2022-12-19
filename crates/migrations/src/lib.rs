@@ -114,33 +114,12 @@ where
                 query(sql.as_str()).execute(&mut tx).await?;
             }
 
-            query(format!("insert into {escaped_schema}.migrations (id) values ($1)").as_str())
-                .bind(migration_number)
-                .execute(&mut tx)
-                .await?;
+            let sql = format!("insert into {escaped_schema}.migrations (id) values ($1)");
+            query(&sql).bind(migration_number).execute(&mut tx).await?;
 
             tx.commit().await?;
         }
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use sqlx::postgres::PgPoolOptions;
-
-    #[tokio::test]
-    async fn test_migrate() {
-        let pool = &PgPoolOptions::new()
-            .max_connections(5)
-            .connect("postgres://postgres:root@localhost:5432")
-            .await
-            .expect("Failed to connect to database");
-
-        migrate(pool, "test_migrate_3")
-            .await
-            .expect("Failed to migrate");
-    }
 }
