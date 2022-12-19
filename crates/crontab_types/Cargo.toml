@@ -7,7 +7,7 @@ description = "Crontab types package for archimedes, a high performance Rust/Pos
 homepage = "docs.rs/archimedes_crontab_types"
 documentation = "docs.rs/archimedes_crontab_types"
 repository = "https://github.com/leo91000/archimedes/crates/crontab_types"
-keywords = ["worker", "scheduler", "job scheduler", "async", "multithread"]
+keywords = ["worker", "scheduler", "job-scheduler", "async", "multithread"]
 categories = ["job-scheduler", "worker", "multithread", "async", "tokio"]
 readme = "README.md"
 

@@ -7,7 +7,7 @@ description = "Migrations package for archimedes, a high performance Rust/Postgr
 homepage = "docs.rs/archimedes_migrations"
 documentation = "docs.rs/archimedes_migrations"
 repository = "https://github.com/leo91000/archimedes/crates/migrations"
-keywords = ["worker", "scheduler", "job scheduler", "async", "multithread"]
+keywords = ["worker", "scheduler", "job-scheduler", "async", "multithread"]
 categories = ["job-scheduler", "worker", "multithread", "async", "tokio"]
 readme = "README.md"
 
