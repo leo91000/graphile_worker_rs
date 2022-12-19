@@ -2,6 +2,7 @@
 name = "archimedes_crontab_runner"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 description = "Crontab runner package for archimedes, a high performance Rust/PostgreSQL job queue"
 homepage = "https://docs.rs/archimedes_crontab_runner"
 documentation = "https://docs.rs/archimedes_crontab_runner"
