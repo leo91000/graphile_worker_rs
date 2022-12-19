@@ -1,7 +1,14 @@
 [package]
-name = "crontab_runner"
-version = "0.0.0"
+name = "archimedes_crontab_runner"
+version = "0.1.0"
 edition = "2021"
+description = "Crontab runner package for archimedes, a high performance Rust/PostgreSQL job queue"
+homepage = "docs.rs/archimedes_crontab_runner"
+documentation = "docs.rs/archimedes_crontab_runner"
+repository = "https://github.com/leo91000/archimedes/crates/crontab_runner"
+keywords = ["worker", "scheduler", "job scheduler", "async", "multithread"]
+categories = ["job-scheduler", "worker", "multithread", "async", "tokio"]
+readme = "README.md"
 
 [features]
 default = ["runtime-tokio-native-tls"]
@@ -9,7 +16,7 @@ runtime-tokio-rustls = ["sqlx/runtime-tokio-rustls", "tokio"]
 runtime-tokio-native-tls = ["sqlx/runtime-tokio-native-tls", "tokio"]
 
 [dependencies]
-crontab_types = { path = "../crontab_types" }
+archimedes_crontab_types = { path = "../crontab_types" }
 chrono = { version = "0.4.23", features = ["serde"] }
 sqlx = { version = "0.6.2", features = ["chrono"] }
 thiserror = "1.0.38"

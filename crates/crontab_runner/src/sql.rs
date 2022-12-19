@@ -1,5 +1,5 @@
+use archimedes_crontab_types::Crontab;
 use chrono::prelude::*;
-use crontab_types::Crontab;
 use getset::Getters;
 use serde::Serialize;
 use serde_json::json;

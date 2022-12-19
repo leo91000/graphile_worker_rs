@@ -1,4 +1,4 @@
-pub use crontab_types::Crontab;
+pub use archimedes_crontab_types::Crontab;
 pub use nom::error::ErrorKind;
 use nom_crontab::nom_crontab;
 use thiserror::Error;

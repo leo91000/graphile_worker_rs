@@ -7,7 +7,7 @@ use nom::{
     IResult,
 };
 
-use crontab_types::{CrontabTimer, CrontabValue};
+use archimedes_crontab_types::{CrontabTimer, CrontabValue};
 
 #[derive(Debug, PartialEq, Eq)]
 enum CrontabPart {

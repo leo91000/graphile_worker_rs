@@ -56,7 +56,7 @@ pub(crate) fn nom_crontab(input: &str) -> IResult<&str, Vec<Crontab>> {
 mod tests {
     use serde_json::json;
 
-    use crontab_types::{CrontabFill, CrontabOptions, CrontabTimer, CrontabValue};
+    use archimedes_crontab_types::{CrontabFill, CrontabOptions, CrontabTimer, CrontabValue};
 
     use super::*;
 

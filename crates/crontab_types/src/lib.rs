@@ -65,7 +65,7 @@ impl CrontabFill {
     /// Convert a crontab fill to a number of seconds
     ///
     /// ```rust
-    /// use crontab_types::CrontabFill;
+    /// use archimedes_crontab_types::CrontabFill;
     ///
     /// let fill = CrontabFill::new(1, 30, 28, 350, 2);
     /// assert_eq!(3318602, fill.to_secs());
@@ -103,7 +103,7 @@ impl CrontabTimer {
     /// Check if the timer should run at specifed date
     ///
     /// ```rust
-    /// use crontab_types::{CrontabValue, CrontabTimer};
+    /// use archimedes_crontab_types::{CrontabValue, CrontabTimer};
     ///
     /// let crontab_timer = CrontabTimer {
     ///     minutes: vec![CrontabValue::Number(30)],
