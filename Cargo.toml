@@ -21,9 +21,6 @@ crontab_runner = { path = "./crates/crontab_runner" }
 crontab_types = { path = "./crates/crontab_types" }
 crontab_parser = { path = "./crates/crontab_parser" }
 archimedes_migrations = { path = "./crates/migrations" }
-anyhow = "1.0.66"
-async-trait = "0.1.58"
-cargo-insta = "1.21.1"
 chrono = { version = "0.4.23", features = ["serde"] }
 futures = "0.3.25"
 getset = "0.1.2"
@@ -33,11 +30,9 @@ serde_json = "1.0.89"
 sqlx = { version = "0.6.2", features = ["postgres", "json", "chrono"] }
 thiserror = "1.0.37"
 tracing = "0.1.37"
-typed-builder = "0.11.0"
 tokio = { version = "1.21.2", features = ["macros"], optional = true }
 rand = "0.8.5"
 hex = "0.4.3"
 
 [dev-dependencies]
 tokio = { version = "1.21.2", features = ["macros"] }
-tracing-subscriber = "0.3.16"
