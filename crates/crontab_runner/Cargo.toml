@@ -16,7 +16,7 @@ runtime-tokio-rustls = ["sqlx/runtime-tokio-rustls", "tokio"]
 runtime-tokio-native-tls = ["sqlx/runtime-tokio-native-tls", "tokio"]
 
 [dependencies]
-archimedes_crontab_types = { path = "../crontab_types" }
+archimedes_crontab_types = { path = "../crontab_types", version = "0.1.0" }
 chrono = { version = "0.4.23", features = ["serde"] }
 sqlx = { version = "0.6.2", features = ["chrono"] }
 thiserror = "1.0.38"
