@@ -37,7 +37,7 @@ pub(crate) fn get_backfill_and_unknown_items<'a, 'b>(
             let not_before = known
                 .last_execution()
                 .as_ref()
-                .unwrap_or(known.known_since());
+                .unwrap_or_else(|| known.known_since());
 
             backfill_items_and_date.push(BackfillItemAndDate {
                 item: crontab,

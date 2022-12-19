@@ -97,7 +97,7 @@ where
             None
         }
         Err(e) => {
-            return Err(e.into());
+            return Err(e);
         }
         Ok(optional_row) => optional_row.map(|row| row.get("id")),
     };

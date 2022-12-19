@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use backfill::register_and_backfill_items;
 use chrono::prelude::*;
 use crontab_types::Crontab;
@@ -40,18 +42,22 @@ pub async fn cron_main<'e>(
         let current_ts = round_date_minute(Local::now(), false);
         let ts_delta = current_ts - ts;
 
-        if ts_delta < *DURATION_ZERO {
-            warn!(
-                "Cron fired {}s too early (clock skew?); rescheduling",
-                ts_delta.num_seconds()
-            );
-            continue;
-        } else if ts_delta > *DURATION_ZERO {
-            warn!(
-                "Cron fired too late; catching up {}m{}s behind",
-                ts_delta.num_minutes(),
-                ts_delta.num_seconds() - ts_delta.num_minutes()
-            );
+        match ts_delta.cmp(&*DURATION_ZERO) {
+            Ordering::Greater => {
+                warn!(
+                    "Cron fired {}s too early (clock skew?); rescheduling",
+                    ts_delta.num_seconds()
+                );
+                continue;
+            }
+            Ordering::Less => {
+                warn!(
+                    "Cron fired too late; catching up {}m{}s behind",
+                    ts_delta.num_minutes(),
+                    ts_delta.num_seconds() - ts_delta.num_minutes()
+                );
+            }
+            _ => {}
         }
 
         let mut jobs: Vec<CrontabJob> = vec![];
@@ -59,7 +65,7 @@ pub async fn cron_main<'e>(
         // Gather relevant jobs
         for cron in crontabs {
             if cron.should_run_at(&ts.naive_local()) {
-                jobs.push(CrontabJob::for_cron(&cron, &ts, false));
+                jobs.push(CrontabJob::for_cron(cron, &ts, false));
             }
         }
 
