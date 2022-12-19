@@ -1,6 +1,6 @@
 # Archimedes
 
-Rewrite of [Graphile Worker](https://github.com/graphile/worker). If you like this library go sponsor [Benjie](https://github.com/benjie) project, all research has been done by him, this library is only a rewrite in Rust 🦀.
+Rewrite of [Graphile Worker](https://github.com/graphile/worker) in Rust. If you like this library go sponsor [Benjie](https://github.com/benjie) project, all research has been done by him, this library is only a rewrite in Rust 🦀.
 The port should mostly be compatible with `graphile-worker` (meaning you can run it side by side with Node.JS).
 
 Job queue for PostgreSQL running on Rust - allows you to run jobs (e.g.
