@@ -39,8 +39,8 @@ fn main() {
         .await?
         .run()
         .await?;
-    ```
 }
+```
 
 ### Schedule a job via SQL
 
