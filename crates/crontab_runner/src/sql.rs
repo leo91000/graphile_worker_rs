@@ -60,13 +60,20 @@ where
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct CrontabJob {
+pub struct CrontabJobInner {
     task: String,
     payload: Option<serde_json::Value>,
     queue_name: Option<String>,
     run_at: DateTime<Local>,
     max_attempts: Option<u16>,
     priority: Option<i16>,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CrontabJob {
+    identifier: String,
+    job: CrontabJobInner,
 }
 
 #[derive(Error, Debug)]
@@ -155,12 +162,19 @@ impl CrontabJob {
         }
 
         Self {
-            task: crontab.task_identifier.to_owned(),
-            payload: crontab.payload.to_owned(),
-            queue_name: crontab.options.queue.to_owned(),
-            run_at: ts.with_timezone(&Local),
-            max_attempts: crontab.options.max.to_owned(),
-            priority: crontab.options.priority.to_owned(),
+            identifier: crontab
+                .options()
+                .id()
+                .to_owned()
+                .unwrap_or_else(|| crontab.task_identifier.to_owned()),
+            job: CrontabJobInner {
+                task: crontab.task_identifier.to_owned(),
+                payload: crontab.payload.to_owned(),
+                queue_name: crontab.options.queue.to_owned(),
+                run_at: ts.with_timezone(&Local),
+                max_attempts: crontab.options.max.to_owned(),
+                priority: crontab.options.priority.to_owned(),
+            },
         }
     }
 }

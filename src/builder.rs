@@ -2,6 +2,8 @@ use crate::runner::WorkerFn;
 use crate::sql::task_identifiers::get_tasks_details;
 use crate::utils::escape_identifier;
 use crate::{Worker, WorkerContext};
+use archimedes_crontab_parser::{parse_crontab, CrontabParseError};
+use archimedes_crontab_types::Crontab;
 use archimedes_migrations::migrate;
 use futures::FutureExt;
 use rand::RngCore;
@@ -25,6 +27,8 @@ pub struct WorkerOptions {
     max_pg_conn: Option<u32>,
     schema: Option<String>,
     forbidden_flags: Vec<String>,
+    crontabs: Option<Vec<Crontab>>,
+    use_local_time: bool,
 }
 
 #[derive(Error, Debug)]
@@ -78,6 +82,8 @@ impl WorkerOptions {
             escaped_schema,
             task_details,
             forbidden_flags: self.forbidden_flags,
+            crontabs: self.crontabs.unwrap_or_default(),
+            use_local_time: self.use_local_time,
         };
 
         Ok(worker)
@@ -147,6 +153,22 @@ impl WorkerOptions {
 
     pub fn add_forbidden_flag(mut self, flag: &str) -> Self {
         self.forbidden_flags.push(flag.into());
+        self
+    }
+
+    pub fn with_crontab(mut self, input: &str) -> Result<Self, CrontabParseError> {
+        let mut crontabs = parse_crontab(input)?;
+        match self.crontabs.as_mut() {
+            Some(c) => c.append(&mut crontabs),
+            None => {
+                self.crontabs = Some(crontabs);
+            }
+        }
+        Ok(self)
+    }
+
+    pub fn use_local_time(mut self, value: bool) -> Self {
+        self.use_local_time = value;
         self
     }
 }

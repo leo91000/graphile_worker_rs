@@ -9,7 +9,7 @@ use tracing::{debug, warn};
 pub use crate::sql::ScheduleCronJobError;
 use crate::{
     sql::{schedule_cron_jobs, CrontabJob},
-    utils::{round_date_minute, sleep_until, DURATION_ZERO, ONE_MINUTE},
+    utils::{round_date_minute, sleep_until, ONE_MINUTE},
 };
 
 mod backfill;
@@ -42,7 +42,7 @@ pub async fn cron_main<'e>(
         let current_ts = round_date_minute(Local::now(), false);
         let ts_delta = current_ts - ts;
 
-        match ts_delta.cmp(&*DURATION_ZERO) {
+        match ts_delta.num_minutes().cmp(&0) {
             Ordering::Greater => {
                 warn!(
                     "Cron fired {}s too early (clock skew?); rescheduling",

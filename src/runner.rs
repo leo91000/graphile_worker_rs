@@ -8,7 +8,9 @@ use crate::errors::ArchimedesError;
 use crate::sql::get_job::Job;
 use crate::sql::{get_job::get_job, task_identifiers::TaskDetails};
 use crate::streams::job_signal_stream;
-use futures::{StreamExt, TryStreamExt};
+use archimedes_crontab_runner::{cron_main, ScheduleCronJobError};
+use archimedes_crontab_types::Crontab;
+use futures::{try_join, StreamExt, TryStreamExt};
 use getset::Getters;
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
@@ -45,14 +47,18 @@ pub struct Worker {
     pub(crate) escaped_schema: String,
     pub(crate) task_details: TaskDetails,
     pub(crate) forbidden_flags: Vec<String>,
+    pub(crate) crontabs: Vec<Crontab>,
+    pub(crate) use_local_time: bool,
 }
 
 #[derive(Error, Debug)]
 pub enum WorkerRuntimeError {
     #[error("Unexpected error occured while processing job : '{0}'")]
-    ProcessJobError(#[from] ProcessJobError),
+    ProcessJob(#[from] ProcessJobError),
     #[error("Failed to listen to postgres notifications : '{0}'")]
-    PgListenError(#[from] ArchimedesError),
+    PgListen(#[from] ArchimedesError),
+    #[error("Error occured while trying to schedule cron job : {0}")]
+    Crontab(#[from] ScheduleCronJobError),
 }
 
 impl Worker {
@@ -61,6 +67,15 @@ impl Worker {
     }
 
     pub async fn run(&self) -> Result<(), WorkerRuntimeError> {
+        let job_runner = self.job_runner();
+        let crontab_scheduler = self.crontab_scheduler();
+
+        try_join!(crontab_scheduler, job_runner)?;
+
+        Ok(())
+    }
+
+    async fn job_runner(&self) -> Result<(), WorkerRuntimeError> {
         let job_signal = job_signal_stream(self.pg_pool.clone(), self.poll_interval).await?;
 
         job_signal
@@ -72,6 +87,22 @@ impl Worker {
                 ready(Ok(()))
             })
             .await?;
+
+        Ok(())
+    }
+
+    async fn crontab_scheduler<'e>(&self) -> Result<(), WorkerRuntimeError> {
+        if self.crontabs().is_empty() {
+            return Ok(());
+        }
+
+        cron_main(
+            self.pg_pool(),
+            self.escaped_schema(),
+            self.crontabs(),
+            *self.use_local_time(),
+        )
+        .await?;
 
         Ok(())
     }

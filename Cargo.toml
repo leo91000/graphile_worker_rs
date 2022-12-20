@@ -44,3 +44,4 @@ hex = "0.4.3"
 
 [dev-dependencies]
 tokio = { version = "1.23.0", features = ["macros"] }
+tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }

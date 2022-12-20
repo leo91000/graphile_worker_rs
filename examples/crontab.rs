@@ -45,6 +45,9 @@ async fn main() {
         .schema("example_simple_worker")
         .define_job("say_hello", say_hello)
         .pg_pool(pg_pool)
+        // Run say_hello every two minutes
+        .with_crontab(r#"*/2 * * * * say_hello ?fill=10m {message:"Crontab"}"#)
+        .unwrap()
         .init()
         .await
         .unwrap()
