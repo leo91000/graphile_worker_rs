@@ -35,7 +35,8 @@ async fn say_hello(_ctx: WorkerCtx, payload: HelloPayload) -> Result<(), ..> {
     Ok(())
 }
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<(), ..> {
     archimedes::WorkerOptions::default()
         .concurrency(2)
         .schema("example_simple_worker")
@@ -45,6 +46,8 @@ fn main() {
         .await?
         .run()
         .await?;
+
+    Ok(())
 }
 ```
 
