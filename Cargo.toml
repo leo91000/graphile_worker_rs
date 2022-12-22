@@ -29,6 +29,7 @@ archimedes_crontab_runner = { path = "./crates/crontab_runner", version = "0.1.0
 archimedes_crontab_types = { path = "./crates/crontab_types", version = "0.1.0" }
 archimedes_crontab_parser = { path = "./crates/crontab_parser", version = "0.1.0" }
 archimedes_migrations = { path = "./crates/migrations", version = "0.1.0" }
+archimedes_shutdown_signal = { path = "./crates/shutdown_signal", version = "0.1.0" }
 chrono = { version = "0.4.23", features = ["serde"] }
 futures = "0.3.25"
 getset = "0.1.2"
@@ -38,9 +39,10 @@ serde_json = "1.0.91"
 sqlx = { version = "0.6.2", features = ["postgres", "json", "chrono"] }
 thiserror = "1.0.38"
 tracing = "0.1.37"
-tokio = { version = "1.23.0", features = ["macros"], optional = true }
+tokio = { version = "1.23.0", features = ["macros", "signal"], optional = true }
 rand = "0.8.5"
 hex = "0.4.3"
+cfg-if = "1.0.0"
 
 [dev-dependencies]
 tokio = { version = "1.23.0", features = ["macros"] }

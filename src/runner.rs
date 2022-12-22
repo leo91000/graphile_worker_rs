@@ -10,6 +10,7 @@ use crate::sql::{get_job::get_job, task_identifiers::TaskDetails};
 use crate::streams::job_signal_stream;
 use archimedes_crontab_runner::{cron_main, ScheduleCronJobError};
 use archimedes_crontab_types::Crontab;
+use archimedes_shutdown_signal::ShutdownSignal;
 use futures::{try_join, StreamExt, TryStreamExt};
 use getset::Getters;
 use thiserror::Error;
@@ -49,6 +50,7 @@ pub struct Worker {
     pub(crate) forbidden_flags: Vec<String>,
     pub(crate) crontabs: Vec<Crontab>,
     pub(crate) use_local_time: bool,
+    pub(crate) shutdown_signal: ShutdownSignal,
 }
 
 #[derive(Error, Debug)]
@@ -76,7 +78,12 @@ impl Worker {
     }
 
     async fn job_runner(&self) -> Result<(), WorkerRuntimeError> {
-        let job_signal = job_signal_stream(self.pg_pool.clone(), self.poll_interval).await?;
+        let job_signal = job_signal_stream(
+            self.pg_pool.clone(),
+            self.poll_interval,
+            self.shutdown_signal.clone(),
+        )
+        .await?;
 
         job_signal
             .then(|source| process_one_job(self, source))
@@ -101,6 +108,7 @@ impl Worker {
             self.escaped_schema(),
             self.crontabs(),
             *self.use_local_time(),
+            self.shutdown_signal.clone(),
         )
         .await?;
 

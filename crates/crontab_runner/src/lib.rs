@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 
 use archimedes_crontab_types::Crontab;
+use archimedes_shutdown_signal::ShutdownSignal;
 use backfill::register_and_backfill_items;
 use chrono::prelude::*;
 use sqlx::PgExecutor;
@@ -21,6 +22,7 @@ pub async fn cron_main<'e>(
     escaped_schema: &str,
     crontabs: &[Crontab],
     use_local_time: bool,
+    mut shutdown_signal: ShutdownSignal,
 ) -> Result<(), ScheduleCronJobError> {
     let start = Local::now();
     debug!(start = ?start, "cron:starting");
@@ -38,9 +40,15 @@ pub async fn cron_main<'e>(
     let mut ts = round_date_minute(start, true);
 
     loop {
-        sleep_until(ts).await;
+        tokio::select! {
+            _ = sleep_until(ts) => (),
+            _ = (&mut shutdown_signal) => break Ok(()),
+        };
+
         let current_ts = round_date_minute(Local::now(), false);
         let ts_delta = current_ts - ts;
+
+        dbg!(ts_delta, current_ts, ts);
 
         match ts_delta.num_minutes().cmp(&0) {
             Ordering::Greater => {

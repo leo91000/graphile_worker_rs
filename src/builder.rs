@@ -5,6 +5,7 @@ use crate::{Worker, WorkerContext};
 use archimedes_crontab_parser::{parse_crontab, CrontabParseError};
 use archimedes_crontab_types::Crontab;
 use archimedes_migrations::migrate;
+use archimedes_shutdown_signal::shutdown_signal;
 use futures::FutureExt;
 use rand::RngCore;
 use serde::Deserialize;
@@ -73,6 +74,7 @@ impl WorkerOptions {
 
         let mut random_bytes = [0u8; 9];
         rand::thread_rng().fill_bytes(&mut random_bytes);
+
         let worker = Worker {
             worker_id: format!("archimedes_worker_{}", hex::encode(random_bytes)),
             concurrency: self.concurrency.unwrap_or_else(num_cpus::get),
@@ -84,6 +86,7 @@ impl WorkerOptions {
             forbidden_flags: self.forbidden_flags,
             crontabs: self.crontabs.unwrap_or_default(),
             use_local_time: self.use_local_time,
+            shutdown_signal: shutdown_signal(),
         };
 
         Ok(worker)

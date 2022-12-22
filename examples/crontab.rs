@@ -13,6 +13,8 @@ struct HelloPayload {
 }
 
 async fn say_hello(_ctx: WorkerContext, payload: HelloPayload) -> Result<(), ()> {
+    println!("Waiting 20 seconds");
+    tokio::time::sleep(std::time::Duration::from_secs(20)).await;
     println!("Hello {} !", payload.message);
     Ok(())
 }
@@ -45,7 +47,7 @@ async fn main() {
         .schema("example_simple_worker")
         .define_job("say_hello", say_hello)
         .pg_pool(pg_pool)
-        // Run say_hello every two minutes
+        // Run say_hello every two minutes with a backfill of 10 minutes
         .with_crontab(r#"*/2 * * * * say_hello ?fill=10m {message:"Crontab"}"#)
         .unwrap()
         .init()
