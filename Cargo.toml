@@ -39,11 +39,11 @@ serde_json = "1.0.93"
 sqlx = { version = "0.6.2", features = ["postgres", "json", "chrono"] }
 thiserror = "1.0.38"
 tracing = "0.1.37"
-tokio = { version = "1.25.0", features = ["macros", "signal"], optional = true }
+tokio = { version = "1.26.0", features = ["macros", "signal"], optional = true }
 rand = "0.8.5"
 hex = "0.4.3"
 cfg-if = "1.0.0"
 
 [dev-dependencies]
-tokio = { version = "1.25.0", features = ["macros"] }
+tokio = { version = "1.26.0", features = ["macros"] }
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
