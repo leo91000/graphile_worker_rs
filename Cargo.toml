@@ -31,7 +31,7 @@ archimedes_crontab_parser = { path = "./crates/crontab_parser", version = "0.1.0
 archimedes_migrations = { path = "./crates/migrations", version = "0.1.0" }
 archimedes_shutdown_signal = { path = "./crates/shutdown_signal", version = "0.1.0" }
 chrono = { version = "0.4.23", features = ["serde"] }
-futures = "0.3.26"
+futures = "0.3.27"
 getset = "0.1.2"
 num_cpus = "1.15.0"
 serde = { version = "1.0.154", features = ["derive"] }
