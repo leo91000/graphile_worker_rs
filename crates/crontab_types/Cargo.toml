@@ -14,7 +14,7 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-chrono = "0.4.23"
+chrono = "0.4.24"
 getset = "0.1.2"
 serde_json = "1.0.94"
 
