@@ -22,7 +22,7 @@ archimedes_shutdown_signal = { path = "../shutdown_signal", version = "0.1.0" }
 chrono = { version = "0.4.24", features = ["serde"] }
 sqlx = { version = "0.6.2", features = ["chrono", "postgres", "json"] }
 thiserror = "1.0.39"
-serde = { version = "1.0.155", features = ["derive"] }
+serde = { version = "1.0.156", features = ["derive"] }
 serde_json = "1.0.94"
 getset = "0.1.2"
 tracing = "0.1.37"
