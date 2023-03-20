@@ -1,6 +1,8 @@
 use std::{
     collections::HashMap,
-    env, fs,
+    env,
+    fs::{self, OpenOptions},
+    io::prelude::*,
     path::PathBuf,
     process::{Command, Stdio},
     str::FromStr,
@@ -8,6 +10,7 @@ use std::{
 
 use clap::ValueEnum;
 use derive_more::Display;
+use itertools::Itertools;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Deserialize;
@@ -23,6 +26,22 @@ pub enum ReleaseType {
     Auto,
 }
 
+/// Input 1 : Update type (fix, minor, major, auto)
+/// ====================================
+/// 1. Dependency graph of workspaces
+/// ====================================
+/// 2. From deeper workspace to higher one :
+/// - Get all commit in workspace from latest tag {lib_name}@{version}
+/// - If no commit found, continue;
+/// - If auto mode, figure out if fix, minor or major with conventional commits
+/// - Bump version in Cargo.toml
+/// - Generate CHANGELOG.md from changes
+/// - Add to list of commit tag {lib_name}@{version}
+/// - Add package to list of packages to publish (FIFO)
+/// ====================================
+/// 3. Commit all changes and tag with all bumped tags
+/// ====================================
+/// 4. cd into all packages to release (FIFO) & cargo publish
 pub fn release_command(release_type: ReleaseType) {
     println!("Release {release_type}");
     let packages = parse_packages();
@@ -31,30 +50,63 @@ pub fn release_command(release_type: ReleaseType) {
     for package in packages {
         let package_name = &package.name;
         let tags = get_tags(Some(&format!("{package_name}@*"))).expect("Failed to find git tags");
-        let commits = parse_commits(package.path, tags.get(0)).expect("Failed to parse commits");
+        let commits =
+            parse_commits(package.path.clone(), tags.get(0)).expect("Failed to parse commits");
+
+        commits.iter().for_each(|commit| {
+            println!("{} - {}", commit.short_hash, commit.message);
+        });
 
         let release_type = FixedReleaseType::from_commits(&release_type, &commits);
-        // Generate CHANGELOG
+
+        // Bump package version
+        let mut toml_file = toml_edit::Document::from_str(
+            &fs::read_to_string(package.path.join("Cargo.toml")).unwrap(),
+        )
+        .expect("Failed to parse Cargo.toml");
+
+        let parts = package
+            .version
+            .split('.')
+            .map(|p| p.parse::<u64>())
+            .collect::<Result<Vec<_>, _>>()
+            .expect("Failed to parse version");
+        assert_eq!(
+            3,
+            parts.len(),
+            "Failed to parse version, expect 3 parts to version but got {}",
+            parts.len()
+        );
+        let major = parts[0];
+        let minor = parts[1];
+        let patch = parts[2];
+
+        let new_version = match release_type {
+            FixedReleaseType::Patch => format!("{}.{}.{}", major, minor, patch + 1),
+            FixedReleaseType::Minor => format!("{}.{}.0", major, minor + 1),
+            FixedReleaseType::Major => format!("{}.0.0", major + 1),
+        };
+
+        toml_file["package"]["version"] = toml_edit::value(new_version);
+        fs::write(package.path.join("Cargo.toml"), toml_file.to_string())
+            .expect("Failed to write new version to package.json file");
+
+        let changelog = commits.generate_changelog();
+        let mut file = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .create(true)
+            .open(package.path.join("CHANGELOG.md"))
+            .expect("Failed to open CHANGELOG file");
+
+        writeln!(file, "{}", changelog).expect("Failed to write to CHANGELOG file");
+
+        todo!("Commit changes and tag with {{package_name}}@{{version}}");
+        todo!("cd into package and cargo publish");
+
         // If no changelog put changelog in a new file
         // Else append changelog to the top
     }
-
-    // Input 1 : Update type (fix, minor, major, auto)
-    // ====================================
-    // 1. Dependency graph of workspaces
-    // ====================================
-    // 2. From deeper workspace to higher one :
-    // - Get all commit in workspace from latest tag {lib_name}@{version}
-    // - If no commit found, continue;
-    // - If auto mode, figure out if fix, minor or major with conventional commits
-    // - Bump version in Cargo.toml
-    // - Generate CHANGELOG.md from changes
-    // - Add to list of commit tag {lib_name}@{version}
-    // - Add package to list of packages to publish (FIFO)
-    // ====================================
-    // 3. Commit all changes and tag with all bumped tags
-    // ====================================
-    // 4. cd into all packages to release (FIFO) & cargo publish
 }
 
 strike! {
@@ -116,16 +168,14 @@ fn parse_packages_recur(path: PathBuf, nest_level: u8) -> anyhow::Result<Vec<Pac
     }];
 
     for (_k, dependency) in cargo_toml.dependencies {
-        match dependency {
-            Dependencies::DependencyDetail(DependencyDetail {
-                path: Some(dependency_path),
-                version: _,
-            }) => {
-                let dependency_path = path.join(dependency_path);
-                let mut dependency_package = parse_packages_recur(dependency_path, nest_level + 1)?;
-                packages.append(&mut dependency_package);
-            }
-            _ => {}
+        if let Dependencies::DependencyDetail(DependencyDetail {
+            path: Some(dependency_path),
+            version: _,
+        }) = dependency
+        {
+            let dependency_path = path.join(dependency_path);
+            let mut dependency_package = parse_packages_recur(dependency_path, nest_level + 1)?;
+            packages.append(&mut dependency_package);
         }
     }
 
@@ -133,12 +183,12 @@ fn parse_packages_recur(path: PathBuf, nest_level: u8) -> anyhow::Result<Vec<Pac
 }
 
 strike! {
-    #[strikethrough[derive(Debug)]]
+    #[strikethrough[derive(Debug, Ord, Eq, PartialEq, PartialOrd, Clone)]]
     struct Commit {
         message: String,
         description: String,
         short_hash: String,
-        change_type: #[derive(PartialEq, Eq)] enum CommitType {
+        change_type: enum CommitType {
             Fix,
             Feat,
             Chore,
@@ -161,6 +211,17 @@ strike! {
     }
 }
 
+impl Commit {
+    pub fn get_markdown(&self) -> String {
+        format!(
+            "* {}{} ([{}](https://github.com/leo91000/archimedes/commit/{2}))\n",
+            if self.breaking_change { "🔥 " } else { "" },
+            self.message,
+            self.short_hash,
+        )
+    }
+}
+
 impl FromStr for CommitType {
     type Err = anyhow::Error;
 
@@ -173,6 +234,17 @@ impl FromStr for CommitType {
         };
 
         Ok(r)
+    }
+}
+
+impl CommitType {
+    fn get_markdown(&self) -> String {
+        match self {
+            Self::Fix => "### 🐛 Fixes".to_string(),
+            Self::Feat => "### ✨Features".to_string(),
+            Self::Chore => "### 🧹 chores".to_string(),
+            Self::Other(s) => format!("### 🔧 {s}"),
+        }
     }
 }
 
@@ -196,14 +268,14 @@ fn get_tags(pattern: Option<&str>) -> anyhow::Result<Vec<String>> {
 
 // https://www.conventionalcommits.org/en/v1.0.0/
 // https://regex101.com/r/FSfNvA/1
-const CONVENTIONAL_COMMIT_RE: Lazy<Regex> = Lazy::new(|| {
+static CONVENTIONAL_COMMIT_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new("(?P<type>[a-z]+)(\\((?P<scope>.+)\\))?(?P<breaking>!)?: (?P<description>.+)")
         .unwrap()
 });
-const CO_AUTHORED_BY_RE: Lazy<Regex> =
+static CO_AUTHORED_BY_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new("Co-authored-by:\\s*(?P<name>.+)(<(?P<email>.+)>)").unwrap());
-const PR_RE: Lazy<Regex> = Lazy::new(|| Regex::new("\\([a-z ]*(#[0-9]+)\\s*\\)").unwrap());
-const ISSUE_RE: Lazy<Regex> = Lazy::new(|| Regex::new("(#[0-9]+)").unwrap());
+static PR_RE: Lazy<Regex> = Lazy::new(|| Regex::new("\\([a-z ]*(#[0-9]+)\\s*\\)").unwrap());
+static ISSUE_RE: Lazy<Regex> = Lazy::new(|| Regex::new("(#[0-9]+)").unwrap());
 
 fn parse_commits(dir: PathBuf, from: Option<&String>) -> anyhow::Result<Vec<Commit>> {
     let mut cmd = Command::new("git");
@@ -213,7 +285,7 @@ fn parse_commits(dir: PathBuf, from: Option<&String>) -> anyhow::Result<Vec<Comm
     if let Some(from) = from {
         cmd.arg(format!("{from}...{to}"));
     } else {
-        cmd.arg(format!("{to}"));
+        cmd.arg(to);
     }
 
     let output = cmd
@@ -321,5 +393,29 @@ impl FixedReleaseType {
                 }
             }
         }
+    }
+}
+
+pub trait ChangelogGenerator {
+    fn generate_changelog(&self) -> String;
+}
+
+impl ChangelogGenerator for Vec<Commit> {
+    fn generate_changelog(&self) -> String {
+        let mut changelog = String::new();
+        for (key, commits) in &self.iter().group_by(|c| c.change_type.clone()) {
+            let mut group_changelog = format!("\n{}\n\n", key.get_markdown());
+            let mut nb_commits = 0;
+            for commit in commits {
+                nb_commits += 1;
+                group_changelog += format!("{}\n", commit.get_markdown()).as_str();
+            }
+
+            if nb_commits > 0 {
+                changelog += group_changelog.as_str();
+            }
+        }
+
+        changelog
     }
 }

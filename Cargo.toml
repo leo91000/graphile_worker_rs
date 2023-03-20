@@ -26,11 +26,11 @@ runtime-tokio-native-tls = ["sqlx/runtime-tokio-native-tls", "tokio", "archimede
 # runtime-async-std-native-tls = ["sqlx/runtime-async-std-native-tls"]
 
 [dependencies]
-archimedes_crontab_runner = { path = "./crates/crontab_runner", version = "0.1.0" }
-archimedes_crontab_types = { path = "./crates/crontab_types", version = "0.1.0" }
-archimedes_crontab_parser = { path = "./crates/crontab_parser", version = "0.1.0" }
-archimedes_migrations = { path = "./crates/migrations", version = "0.1.0" }
-archimedes_shutdown_signal = { path = "./crates/shutdown_signal", version = "0.1.0" }
+archimedes_crontab_runner = { path = "./crates/crontab_runner" }
+archimedes_crontab_types = { path = "./crates/crontab_types" }
+archimedes_crontab_parser = { path = "./crates/crontab_parser" }
+archimedes_migrations = { path = "./crates/migrations" }
+archimedes_shutdown_signal = { path = "./crates/shutdown_signal" }
 chrono = { version = "0.4.24", features = ["serde"] }
 futures = "0.3.27"
 getset = "0.1.2"
