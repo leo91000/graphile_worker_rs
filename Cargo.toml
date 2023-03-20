@@ -34,7 +34,7 @@ chrono = { version = "0.4.24", features = ["serde"] }
 futures = "0.3.27"
 getset = "0.1.2"
 num_cpus = "1.15.0"
-serde = { version = "1.0.157", features = ["derive"] }
+serde = { version = "1.0.158", features = ["derive"] }
 serde_json = "1.0.94"
 sqlx = { version = "0.6.2", features = ["postgres", "json", "chrono"] }
 thiserror = "1.0.40"
