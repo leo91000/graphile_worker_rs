@@ -1,6 +1,6 @@
 [package]
 name = "archimedes_crontab_types"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 description = "Crontab types package for archimedes, a high performance Rust/PostgreSQL job queue"
