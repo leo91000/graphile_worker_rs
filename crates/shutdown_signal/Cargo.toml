@@ -2,11 +2,16 @@
 name = "archimedes_shutdown_signal"
 version = "0.1.1"
 edition = "2021"
+license = "MIT"
+description = "Migrations package for archimedes, a high performance Rust/PostgreSQL job queue"
+homepage = "https://docs.rs/archimedes_shutdown_signal"
+documentation = "https://docs.rs/archimedes_shutdown_signal"
+repository = "https://github.com/leo91000/archimedes/crates/shutdown_signal"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 cfg-if = "1.0.0"
 futures = "0.3.27"
-tokio = { version = "1.26.0", features = ["signal"] }
+tokio = { version = "1.26.0", features = ["signal", "macros"] }
 tracing = "0.1.37"
