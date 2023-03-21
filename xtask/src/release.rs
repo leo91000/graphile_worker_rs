@@ -87,7 +87,7 @@ pub fn release_command(release_type: ReleaseType) {
             FixedReleaseType::Major => format!("{}.0.0", major + 1),
         };
 
-        toml_file["package"]["version"] = toml_edit::value(new_version);
+        toml_file["package"]["version"] = toml_edit::value(new_version.clone());
         fs::write(package.path.join("Cargo.toml"), toml_file.to_string())
             .expect("Failed to write new version to package.json file");
 
@@ -101,12 +101,46 @@ pub fn release_command(release_type: ReleaseType) {
 
         writeln!(file, "{}", changelog).expect("Failed to write to CHANGELOG file");
 
-        todo!("Commit changes and tag with {{package_name}}@{{version}}");
-        todo!("cd into package and cargo publish");
+        // Commit changes and tag with {package_name}@{version}
+        let mut cmd = Command::new("git");
+        cmd.current_dir(package.path.clone())
+            .arg("add")
+            .arg(package.path.join("Cargo.toml"))
+            .arg(package.path.join("CHANGELOG.md"))
+            .spawn()
+            .expect("Failed to add changes");
 
-        // If no changelog put changelog in a new file
-        // Else append changelog to the top
+        let mut cmd = Command::new("git");
+        cmd.current_dir(package.path.clone())
+            .arg("commit")
+            .arg(package.path.join("Cargo.toml"))
+            .arg(package.path.join("CHANGELOG.md"))
+            .arg("-m")
+            .arg(format!("chore(release): {}@{}", package.name, new_version))
+            .spawn()
+            .expect("Failed to commit changes");
+
+        let mut cmd = Command::new("git");
+        cmd.current_dir(package.path.clone())
+            .arg("tag")
+            .arg(format!("{}@{}", package.name, new_version))
+            .spawn()
+            .expect("Failed to add tag");
+
+        // Publish package
+        let mut cmd = Command::new("cargo");
+        cmd.current_dir(package.path.clone())
+            .arg("publish")
+            .spawn()
+            .expect("Failed to publish package");
     }
+
+    // Push all changes with tags
+    let mut cmd = Command::new("git");
+    cmd.arg("push")
+        .arg("--follow-tags")
+        .spawn()
+        .expect("Failed to push changes");
 }
 
 strike! {
@@ -120,7 +154,7 @@ strike! {
             String,
             #[serde(untagged)]
             enum {
-                DependencyDetail(struct { path: Option<String>, #[allow(dead_code)] version: String }),
+                DependencyDetail(struct { path: Option<String> }),
                 Version(String),
             }
         >
@@ -170,7 +204,6 @@ fn parse_packages_recur(path: PathBuf, nest_level: u8) -> anyhow::Result<Vec<Pac
     for (_k, dependency) in cargo_toml.dependencies {
         if let Dependencies::DependencyDetail(DependencyDetail {
             path: Some(dependency_path),
-            version: _,
         }) = dependency
         {
             let dependency_path = path.join(dependency_path);
