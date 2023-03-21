@@ -4,7 +4,7 @@ use std::{
     fs::{self, OpenOptions},
     io::prelude::*,
     path::PathBuf,
-    process::{Command, Stdio},
+    process::{exit, Command, Stdio},
     str::FromStr,
 };
 
@@ -43,96 +43,124 @@ pub enum ReleaseType {
 /// ====================================
 /// 4. cd into all packages to release (FIFO) & cargo publish
 pub fn release_command(release_type: ReleaseType) {
+    if is_git_directory_dirty() {
+        println!("\n\nGit directory is dirty, please commit all changes before releasing\n");
+        exit(1);
+    }
+
     println!("Release {release_type}");
     let packages = parse_packages();
     dbg!(&packages);
 
-    for package in packages {
+    for package in packages.iter().rev() {
         let package_name = &package.name;
         let tags = get_tags(Some(&format!("{package_name}@*"))).expect("Failed to find git tags");
-        let commits =
+        let mut commits =
             parse_commits(package.path.clone(), tags.get(0)).expect("Failed to parse commits");
 
-        commits.iter().for_each(|commit| {
-            println!("{} - {}", commit.short_hash, commit.message);
-        });
+        if commits.is_empty() {
+            println!(
+                "No commits found to be released for package {}",
+                package_name
+            );
+            continue;
+        }
 
         let release_type = FixedReleaseType::from_commits(&release_type, &commits);
 
-        // Bump package version
-        let mut toml_file = toml_edit::Document::from_str(
-            &fs::read_to_string(package.path.join("Cargo.toml")).unwrap(),
-        )
-        .expect("Failed to parse Cargo.toml");
+        // Bump Cargo.toml package version
+        let new_version = {
+            let mut toml_file = toml_edit::Document::from_str(
+                &fs::read_to_string(package.path.join("Cargo.toml")).unwrap(),
+            )
+            .expect("Failed to parse Cargo.toml");
 
-        let parts = package
-            .version
-            .split('.')
-            .map(|p| p.parse::<u64>())
-            .collect::<Result<Vec<_>, _>>()
-            .expect("Failed to parse version");
-        assert_eq!(
-            3,
-            parts.len(),
-            "Failed to parse version, expect 3 parts to version but got {}",
-            parts.len()
-        );
-        let major = parts[0];
-        let minor = parts[1];
-        let patch = parts[2];
+            let parts = package
+                .version
+                .split('.')
+                .map(|p| p.parse::<u64>())
+                .collect::<Result<Vec<_>, _>>()
+                .expect("Failed to parse version");
+            assert_eq!(
+                3,
+                parts.len(),
+                "Failed to parse version, expect 3 parts to version but got {}",
+                parts.len()
+            );
+            let major = parts[0];
+            let minor = parts[1];
+            let patch = parts[2];
 
-        let new_version = match release_type {
-            FixedReleaseType::Patch => format!("{}.{}.{}", major, minor, patch + 1),
-            FixedReleaseType::Minor => format!("{}.{}.0", major, minor + 1),
-            FixedReleaseType::Major => format!("{}.0.0", major + 1),
+            let new_version = match release_type {
+                FixedReleaseType::Patch => format!("{}.{}.{}", major, minor, patch + 1),
+                FixedReleaseType::Minor => format!("{}.{}.0", major, minor + 1),
+                FixedReleaseType::Major => format!("{}.0.0", major + 1),
+            };
+
+            toml_file["package"]["version"] = toml_edit::value(new_version.clone());
+            fs::write(package.path.join("Cargo.toml"), toml_file.to_string())
+                .expect("Failed to write new version to package.json file");
+
+            new_version
         };
 
-        toml_file["package"]["version"] = toml_edit::value(new_version.clone());
-        fs::write(package.path.join("Cargo.toml"), toml_file.to_string())
-            .expect("Failed to write new version to package.json file");
+        // Create or update CHANGELOG.md
+        {
+            let changelog = generate_changelog(&mut commits, &package.version);
+            let mut file = OpenOptions::new()
+                .write(true)
+                .append(true)
+                .create(true)
+                .open(package.path.join("CHANGELOG.md"))
+                .expect("Failed to open CHANGELOG file");
 
-        let changelog = commits.generate_changelog();
-        let mut file = OpenOptions::new()
-            .write(true)
-            .append(true)
-            .create(true)
-            .open(package.path.join("CHANGELOG.md"))
-            .expect("Failed to open CHANGELOG file");
-
-        writeln!(file, "{}", changelog).expect("Failed to write to CHANGELOG file");
+            writeln!(file, "{}", changelog).expect("Failed to write to CHANGELOG file");
+        }
 
         // Commit changes and tag with {package_name}@{version}
-        let mut cmd = Command::new("git");
-        cmd.current_dir(package.path.clone())
-            .arg("add")
-            .arg(package.path.join("Cargo.toml"))
-            .arg(package.path.join("CHANGELOG.md"))
-            .spawn()
-            .expect("Failed to add changes");
+        {
+            let mut cmd = Command::new("git");
+            cmd.current_dir(package.path.clone())
+                .arg("add")
+                .arg(package.path.join("Cargo.toml"))
+                .arg(package.path.join("CHANGELOG.md"))
+                .spawn()
+                .unwrap()
+                .wait()
+                .expect("Failed to add changes");
 
-        let mut cmd = Command::new("git");
-        cmd.current_dir(package.path.clone())
-            .arg("commit")
-            .arg(package.path.join("Cargo.toml"))
-            .arg(package.path.join("CHANGELOG.md"))
-            .arg("-m")
-            .arg(format!("chore(release): {}@{}", package.name, new_version))
-            .spawn()
-            .expect("Failed to commit changes");
+            let mut cmd = Command::new("git");
+            cmd.current_dir(package.path.clone())
+                .arg("commit")
+                .arg(package.path.join("Cargo.toml"))
+                .arg(package.path.join("CHANGELOG.md"))
+                .arg("-m")
+                .arg(format!("chore(release): {}@{}", package.name, new_version))
+                .spawn()
+                .unwrap()
+                .wait()
+                .expect("Failed to commit changes");
 
-        let mut cmd = Command::new("git");
-        cmd.current_dir(package.path.clone())
-            .arg("tag")
-            .arg(format!("{}@{}", package.name, new_version))
-            .spawn()
-            .expect("Failed to add tag");
+            let mut cmd = Command::new("git");
+            cmd.current_dir(package.path.clone())
+                .arg("tag")
+                .arg(format!("{}@{}", package.name, new_version))
+                .spawn()
+                .unwrap()
+                .wait()
+                .expect("Failed to tag changes");
+        }
 
         // Publish package
-        let mut cmd = Command::new("cargo");
-        cmd.current_dir(package.path.clone())
-            .arg("publish")
-            .spawn()
-            .expect("Failed to publish package");
+        {
+            let mut cmd = Command::new("cargo");
+            cmd.current_dir(package.path.clone())
+                .arg("publish")
+                .spawn()
+                .unwrap()
+                .wait()
+                .expect("Failed to publish package");
+        }
     }
 
     // Push all changes with tags
@@ -140,6 +168,8 @@ pub fn release_command(release_type: ReleaseType) {
     cmd.arg("push")
         .arg("--follow-tags")
         .spawn()
+        .unwrap()
+        .wait()
         .expect("Failed to push changes");
 }
 
@@ -222,9 +252,13 @@ strike! {
         description: String,
         short_hash: String,
         change_type: enum CommitType {
-            Fix,
             Feat,
+            Fix,
             Chore,
+            Test,
+            Docs,
+            Ci,
+            Wip,
             Other(String),
         },
         breaking_change: bool,
@@ -247,7 +281,7 @@ strike! {
 impl Commit {
     pub fn get_markdown(&self) -> String {
         format!(
-            "* {}{} ([{}](https://github.com/leo91000/archimedes/commit/{2}))\n",
+            "* {}{} ([{}](https://github.com/leo91000/archimedes/commit/{2}))",
             if self.breaking_change { "🔥 " } else { "" },
             self.message,
             self.short_hash,
@@ -263,6 +297,10 @@ impl FromStr for CommitType {
             "fix" => Self::Fix,
             "feat" => Self::Feat,
             "chore" => Self::Chore,
+            "test" => Self::Test,
+            "wip" => Self::Wip,
+            "docs" => Self::Docs,
+            "ci" => Self::Ci,
             _ => Self::Other(s.to_string()),
         };
 
@@ -276,6 +314,10 @@ impl CommitType {
             Self::Fix => "### 🐛 Fixes".to_string(),
             Self::Feat => "### ✨Features".to_string(),
             Self::Chore => "### 🧹 chores".to_string(),
+            Self::Wip => "### 🚧 WIP".to_string(),
+            Self::Test => "### 🧪 Tests".to_string(),
+            Self::Docs => "### 📝 Docs".to_string(),
+            Self::Ci => "### 🤖 CI".to_string(),
             Self::Other(s) => format!("### 🔧 {s}"),
         }
     }
@@ -404,6 +446,7 @@ fn parse_commits(dir: PathBuf, from: Option<&String>) -> anyhow::Result<Vec<Comm
     Ok(commits)
 }
 
+#[derive(Debug)]
 enum FixedReleaseType {
     Patch,
     Minor,
@@ -429,26 +472,39 @@ impl FixedReleaseType {
     }
 }
 
-pub trait ChangelogGenerator {
-    fn generate_changelog(&self) -> String;
-}
+fn generate_changelog(commits: &mut [Commit], version: &String) -> String {
+    let mut changelog = format!("## {}\n\n", version);
+    println!("----------------");
+    commits.sort_by_key(|c| c.change_type.clone());
 
-impl ChangelogGenerator for Vec<Commit> {
-    fn generate_changelog(&self) -> String {
-        let mut changelog = String::new();
-        for (key, commits) in &self.iter().group_by(|c| c.change_type.clone()) {
-            let mut group_changelog = format!("\n{}\n\n", key.get_markdown());
-            let mut nb_commits = 0;
-            for commit in commits {
-                nb_commits += 1;
-                group_changelog += format!("{}\n", commit.get_markdown()).as_str();
-            }
-
-            if nb_commits > 0 {
-                changelog += group_changelog.as_str();
-            }
+    for (key, commits) in &commits.iter().group_by(|c| c.change_type.clone()) {
+        println!("{:?}:", key);
+        let mut group_changelog = format!("\n{}\n\n", key.get_markdown());
+        let mut nb_commits = 0;
+        for commit in commits {
+            nb_commits += 1;
+            group_changelog += format!("{}\n", commit.get_markdown()).as_str();
         }
 
-        changelog
+        if nb_commits > 0 {
+            changelog += group_changelog.as_str();
+        }
     }
+
+    changelog
+}
+
+fn is_git_directory_dirty() -> bool {
+    let mut cmd = Command::new("git");
+
+    let output = cmd
+        .arg("status")
+        .arg("--porcelain")
+        .stdout(Stdio::piped())
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    !stdout.trim().is_empty()
 }
