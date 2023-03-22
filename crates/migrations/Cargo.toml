@@ -1,6 +1,6 @@
 [package]
 name = "archimedes_migrations"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 license = "MIT"
 description = "Migrations package for archimedes, a high performance Rust/PostgreSQL job queue"
@@ -19,6 +19,10 @@ runtime-tokio-native-tls = ["sqlx/runtime-tokio-native-tls"]
 [dependencies]
 sqlx = { version = "0.6.2", features = ["postgres"] }
 tracing = "0.1.37"
+archimedes_shutdown_signal = { version = "0.2.2" }
+archimedes_crontab_runner = { version = "0.4.0" }
+archimedes_crontab_parser = { version = "0.4.0" }
+archimedes_crontab_types = { version = "0.4.0" }
 
 [dev-dependencies]
 tokio = "1.26.0"
