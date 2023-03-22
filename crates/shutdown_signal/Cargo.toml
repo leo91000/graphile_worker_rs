@@ -1,6 +1,6 @@
 [package]
 name = "archimedes_shutdown_signal"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 license = "MIT"
 description = "Migrations package for archimedes, a high performance Rust/PostgreSQL job queue"
@@ -15,3 +15,4 @@ cfg-if = "1.0.0"
 futures = "0.3.27"
 tokio = { version = "1.26.0", features = ["signal", "macros"] }
 tracing = "0.1.37"
+archimedes_crontab_types = { version = "0.4.0" }
