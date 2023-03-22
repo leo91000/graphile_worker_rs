@@ -20,7 +20,7 @@ runtime-tokio-native-tls = ["sqlx/runtime-tokio-native-tls", "tokio"]
 archimedes_crontab_types = { path = "../crontab_types" , version = "0.4.0" }
 archimedes_shutdown_signal = { path = "../shutdown_signal" , version = "0.2.2" }
 chrono = { version = "0.4.24", features = ["serde"] }
-sqlx = { version = "0.6.2", features = ["chrono", "postgres", "json"] }
+sqlx = { version = "0.6.3", features = ["chrono", "postgres", "json"] }
 thiserror = "1.0.40"
 serde = { version = "1.0.158", features = ["derive"] }
 serde_json = "1.0.94"
