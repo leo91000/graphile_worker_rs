@@ -52,6 +52,8 @@ pub fn release_command(release_type: ReleaseType) {
     let packages = parse_packages();
     dbg!(&packages);
 
+    let mut version_map = HashMap::<String, String>::new();
+
     for package in packages.iter().rev() {
         let package_name = &package.name;
         let tags = get_tags(Some(&format!("{package_name}@*"))).expect("Failed to find git tags");
@@ -98,23 +100,41 @@ pub fn release_command(release_type: ReleaseType) {
             };
 
             toml_file["package"]["version"] = toml_edit::value(new_version.clone());
+
+            for (package_name, version) in &version_map {
+                if let Some(dependency) = toml_file["dependencies"].get_mut(package_name) {
+                    dependency["version"] = toml_edit::value(version.clone());
+                }
+            }
+
             fs::write(package.path.join("Cargo.toml"), toml_file.to_string())
                 .expect("Failed to write new version to package.json file");
+
+            version_map.insert(package_name.clone(), new_version.clone());
 
             new_version
         };
 
         // Create or update CHANGELOG.md
         {
+            let header = "# Changelog\n\n";
+            let mut current_changelog =
+                fs::read_to_string(package.path.join("CHANGELOG.md")).unwrap_or_default();
+
+            if current_changelog.starts_with(header) {
+                current_changelog.replace_range(0..header.len(), "");
+            }
+
             let changelog = generate_changelog(&mut commits, &package.version);
             let mut file = OpenOptions::new()
                 .write(true)
-                .append(true)
+                .append(false)
                 .create(true)
                 .open(package.path.join("CHANGELOG.md"))
                 .expect("Failed to open CHANGELOG file");
 
-            writeln!(file, "{}", changelog).expect("Failed to write to CHANGELOG file");
+            writeln!(file, "{header}{changelog}\n{current_changelog}")
+                .expect("Failed to write to CHANGELOG file");
         }
 
         // Commit changes and tag with {package_name}@{version}
@@ -164,13 +184,22 @@ pub fn release_command(release_type: ReleaseType) {
     }
 
     // Push all changes with tags
-    let mut cmd = Command::new("git");
-    cmd.arg("push")
-        .arg("--follow-tags")
-        .spawn()
-        .unwrap()
-        .wait()
-        .expect("Failed to push changes");
+    {
+        let mut cmd = Command::new("git");
+        cmd.arg("push")
+            .spawn()
+            .unwrap()
+            .wait()
+            .expect("Failed to push changes");
+
+        let mut cmd = Command::new("git");
+        cmd.arg("push")
+            .arg("--follow-tags")
+            .spawn()
+            .unwrap()
+            .wait()
+            .expect("Failed to push changes");
+    }
 }
 
 strike! {
