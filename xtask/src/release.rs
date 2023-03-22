@@ -50,7 +50,6 @@ pub fn release_command(release_type: ReleaseType) {
 
     println!("Release {release_type}");
     let packages = parse_packages();
-    dbg!(&packages);
 
     let mut version_map = HashMap::<String, String>::new();
 
@@ -65,6 +64,7 @@ pub fn release_command(release_type: ReleaseType) {
                 "No commits found to be released for package {}",
                 package_name
             );
+            version_map.insert(package_name.clone(), package.version.clone());
             continue;
         }
 
