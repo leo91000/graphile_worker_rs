@@ -12,7 +12,7 @@ use clap::ValueEnum;
 use derive_more::Display;
 use itertools::Itertools;
 use once_cell::sync::Lazy;
-use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
+use percent_encoding::{utf8_percent_encode, CONTROLS};
 use regex::Regex;
 use serde::Deserialize;
 use structstruck::strike;
