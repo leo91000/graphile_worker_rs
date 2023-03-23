@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.2](https://github.com/leo91000/archimedes/releases/tag/archimedes@0.3.2)
+
+
+### 🛠 Dev
+
+* dev(release): Fix changelog not using latest tag for new changelog ([eae80d6](https://github.com/leo91000/archimedes/commit/eae80d6))
+* dev(release): Remove unused import ([04cd052](https://github.com/leo91000/archimedes/commit/04cd052))
+
+
 ## [0.3.1](https://github.com/leo91000/archimedes/releases/tag/archimedes@0.3.1)
 
 
@@ -166,6 +175,7 @@
 * wip: first attempts at crontab_runner ([4c59b2e](https://github.com/leo91000/archimedes/commit/4c59b2e))
 * wip: attempt at nom parsing crontab ([c48e972](https://github.com/leo91000/archimedes/commit/c48e972))
 * wip: dynamic fn map ([8464613](https://github.com/leo91000/archimedes/commit/8464613))
+
 
 
 
