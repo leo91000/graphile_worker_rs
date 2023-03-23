@@ -12,6 +12,7 @@ use clap::ValueEnum;
 use derive_more::Display;
 use itertools::Itertools;
 use once_cell::sync::Lazy;
+use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use regex::Regex;
 use serde::Deserialize;
 use structstruck::strike;
@@ -127,7 +128,7 @@ pub fn release_command(release_type: ReleaseType) {
                 current_changelog.replace_range(0..header.len(), "");
             }
 
-            let changelog = generate_changelog(&mut commits, &package.version);
+            let changelog = generate_changelog(&mut commits, &package.version, &package.name);
             let mut file = OpenOptions::new()
                 .write(true)
                 .append(false)
@@ -506,8 +507,11 @@ impl FixedReleaseType {
     }
 }
 
-fn generate_changelog(commits: &mut [Commit], version: &String) -> String {
-    let mut changelog = format!("## {}\n\n", version);
+fn generate_changelog(commits: &mut [Commit], version: &str, package_name: &str) -> String {
+    let mut changelog = format!(
+        "## [{version}](https://github.com/leo91000/archimedes/releases/tag/{})\n\n",
+        utf8_percent_encode(&format!("{package_name}@{version}"), CONTROLS)
+    );
     println!("----------------");
     commits.sort_by_key(|c| c.change_type.clone());
 
@@ -525,7 +529,7 @@ fn generate_changelog(commits: &mut [Commit], version: &String) -> String {
         }
     }
 
-    changelog
+    changelog + "\n"
 }
 
 fn is_git_directory_dirty() -> bool {
