@@ -44,7 +44,7 @@ pub enum ReleaseType {
 /// 4. cd into all packages to release (FIFO) & cargo publish
 pub fn release_command(release_type: ReleaseType) {
     if is_git_directory_dirty() {
-        println!("\n\nGit directory is dirty, please commit all changes before releasing\n");
+        eprintln!("\n\nGit directory is dirty, please commit all changes before releasing\n");
         exit(1);
     }
 
