@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0
+
+
+### 🧹 chores
+
+* chore(deps): update all non-major dependencies ([85e3b4b](https://github.com/leo91000/archimedes/commit/85e3b4b))
+
+### 🛠 Dev
+
+* dev: Fix release script adding dependencies ([5c7cb61](https://github.com/leo91000/archimedes/commit/5c7cb61))
+
 ## 0.3.0
 
 
@@ -59,5 +70,6 @@
 
 * wip: Adds signal handling ([a8d11b2](https://github.com/leo91000/archimedes/commit/a8d11b2))
 * wip: first attempts at crontab_runner ([4c59b2e](https://github.com/leo91000/archimedes/commit/4c59b2e))
+
 
 
