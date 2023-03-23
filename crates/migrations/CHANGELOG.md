@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2
+
+
+### 🧹 chores
+
+* chore(deps): update all non-major dependencies ([85e3b4b](https://github.com/leo91000/archimedes/commit/85e3b4b))
+
+### 🛠 Dev
+
+* dev: Fix release script adding dependencies ([5c7cb61](https://github.com/leo91000/archimedes/commit/5c7cb61))
+
 ## 0.2.1
 
 
@@ -28,5 +39,6 @@
 ### 🤖 CI
 
 * ci: Update release script ([3614a76](https://github.com/leo91000/archimedes/commit/3614a76))
+
 
 
