@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+
+### 🛠 Dev
+
+* dev: Fix release script adding dependencies ([5c7cb61](https://github.com/leo91000/archimedes/commit/5c7cb61))
+
 ## 0.3.0
 
 
@@ -52,5 +59,6 @@
 ### 🚧 WIP
 
 * wip: attempt at nom parsing crontab ([c48e972](https://github.com/leo91000/archimedes/commit/c48e972))
+
 
 
