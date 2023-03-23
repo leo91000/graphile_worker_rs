@@ -103,7 +103,9 @@ pub fn release_command(release_type: ReleaseType) {
 
             for (package_name, version) in &version_map {
                 if let Some(dependency) = toml_file["dependencies"].get_mut(package_name) {
-                    dependency["version"] = toml_edit::value(version.clone());
+                    if !dependency.is_none() {
+                        dependency["version"] = toml_edit::value(version.clone());
+                    }
                 }
             }
 
@@ -287,6 +289,7 @@ strike! {
             Test,
             Docs,
             Ci,
+            Dev,
             Wip,
             Other(String),
         },
@@ -330,6 +333,7 @@ impl FromStr for CommitType {
             "wip" => Self::Wip,
             "docs" => Self::Docs,
             "ci" => Self::Ci,
+            "dev" => Self::Dev,
             _ => Self::Other(s.to_string()),
         };
 
@@ -347,6 +351,7 @@ impl CommitType {
             Self::Test => "### 🧪 Tests".to_string(),
             Self::Docs => "### 📝 Docs".to_string(),
             Self::Ci => "### 🤖 CI".to_string(),
+            Self::Dev => "### 🛠 Dev".to_string(),
             Self::Other(s) => format!("### 🔧 {s}"),
         }
     }
