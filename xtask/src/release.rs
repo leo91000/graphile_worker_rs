@@ -58,7 +58,7 @@ pub fn release_command(release_type: ReleaseType) {
         let package_name = &package.name;
         let tags = get_tags(Some(&format!("{package_name}@*"))).expect("Failed to find git tags");
         let mut commits =
-            parse_commits(package.path.clone(), tags.get(0)).expect("Failed to parse commits");
+            parse_commits(package.path.clone(), tags.last()).expect("Failed to parse commits");
 
         if commits.is_empty() {
             println!(
