@@ -196,7 +196,7 @@ pub fn release_command(release_type: ReleaseType) {
 
         let mut cmd = Command::new("git");
         cmd.arg("push")
-            .arg("--follow-tags")
+            .arg("--tags")
             .spawn()
             .unwrap()
             .wait()
