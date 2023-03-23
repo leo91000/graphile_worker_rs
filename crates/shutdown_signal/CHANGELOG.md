@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.3](https://github.com/leo91000/archimedes/releases/tag/archimedes_shutdown_signal@0.2.3)
+
+
+### 🧹 chores
+
+* chore(release): archimedes_shutdown_signal@0.2.3 ([08fc8d7](https://github.com/leo91000/archimedes/commit/08fc8d7))
+
+### 🛠 Dev
+
+* dev: Fix release script adding dependencies ([5c7cb61](https://github.com/leo91000/archimedes/commit/5c7cb61))
+
+
 ## 0.2.2
 
 
@@ -30,6 +42,7 @@
 ### 🚧 WIP
 
 * wip: Adds signal handling ([a8d11b2](https://github.com/leo91000/archimedes/commit/a8d11b2))
+
 
 
 
