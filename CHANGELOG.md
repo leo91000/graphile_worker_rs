@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.3.1](https://github.com/leo91000/archimedes/releases/tag/archimedes@0.3.1)
+
+
+### 🧹 chores
+
+* chore(release): archimedes_migrations@0.2.4 ([ad5a70d](https://github.com/leo91000/archimedes/commit/ad5a70d))
+* chore(release): archimedes_crontab_runner@0.4.2 ([06bca65](https://github.com/leo91000/archimedes/commit/06bca65))
+* chore(release): archimedes_crontab_parser@0.4.2 ([eff739d](https://github.com/leo91000/archimedes/commit/eff739d))
+* chore(release): archimedes_shutdown_signal@0.2.4 ([0ca921b](https://github.com/leo91000/archimedes/commit/0ca921b))
+* chore(release): archimedes@0.3.1 ([4316b3d](https://github.com/leo91000/archimedes/commit/4316b3d))
+* chore(release): archimedes_migrations@0.2.3 ([4ea2dc3](https://github.com/leo91000/archimedes/commit/4ea2dc3))
+* chore(release): archimedes_crontab_runner@0.4.1 ([3a5f858](https://github.com/leo91000/archimedes/commit/3a5f858))
+* chore(release): archimedes_crontab_parser@0.4.1 ([c5cec18](https://github.com/leo91000/archimedes/commit/c5cec18))
+* chore(release): archimedes_shutdown_signal@0.2.3 ([08fc8d7](https://github.com/leo91000/archimedes/commit/08fc8d7))
+* chore(deps): update rust crate toml_edit to 0.19.8 ([828339d](https://github.com/leo91000/archimedes/commit/828339d))
+* chore(deps): update all non-major dependencies ([85e3b4b](https://github.com/leo91000/archimedes/commit/85e3b4b))
+* chore: Release script now update dependencies version for non updated packages ([25c97a0](https://github.com/leo91000/archimedes/commit/25c97a0))
+
+### 🛠 Dev
+
+* dev(release): Add URL to tag release in github ([6266cc2](https://github.com/leo91000/archimedes/commit/6266cc2))
+* dev: Print error to STERR instead of STDOUT ([8fe3ecd](https://github.com/leo91000/archimedes/commit/8fe3ecd))
+* dev: Use `git push --tags` command instead of `git push --follow-tags` ([625fd10](https://github.com/leo91000/archimedes/commit/625fd10))
+* dev: Fix release script adding dependencies ([5c7cb61](https://github.com/leo91000/archimedes/commit/5c7cb61))
+
+
 ## 0.3.0
 
 
@@ -140,6 +166,7 @@
 * wip: first attempts at crontab_runner ([4c59b2e](https://github.com/leo91000/archimedes/commit/4c59b2e))
 * wip: attempt at nom parsing crontab ([c48e972](https://github.com/leo91000/archimedes/commit/c48e972))
 * wip: dynamic fn map ([8464613](https://github.com/leo91000/archimedes/commit/8464613))
+
 
 
 
