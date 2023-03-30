@@ -12,6 +12,6 @@ repository = "https://github.com/leo91000/archimedes/crates/shutdown_signal"
 
 [dependencies]
 cfg-if = "1.0.0"
-futures = "0.3.27"
+futures = "0.3.28"
 tokio = { version = "1.27.0", features = ["signal", "macros"] }
 tracing = "0.1.37"
