@@ -18,7 +18,7 @@ runtime-tokio-native-tls = ["sqlx/runtime-tokio-native-tls"]
 
 [dependencies]
 sqlx = { version = "0.6.3", features = ["postgres"] }
-tracing = "0.1.37"
+tracing = "0.1.38"
 
 [dev-dependencies]
-tokio = "1.27.0"
+tokio = "1.28.0"
