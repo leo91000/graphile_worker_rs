@@ -3,7 +3,8 @@
 use chrono::prelude::*;
 use getset::Getters;
 
-#[derive(Debug, PartialEq, Eq, Clone, Getters)]
+/// A crontab defines a task to be executed at a specific time(s)
+#[derive(Debug, PartialEq, Eq, Clone, Getters, Default)]
 #[getset(get = "pub")]
 pub struct Crontab {
     pub timer: CrontabTimer,
@@ -12,6 +13,9 @@ pub struct Crontab {
     pub payload: Option<serde_json::Value>,
 }
 
+/// A crontab value can be a number, a range, a step or any value
+/// It is used to represent a crontab value for a specific field (hour, day, month, etc.)
+/// When specifying a specific number, range or step, it should be valid for the field (e.g. 0-59 for minutes, 0-23 for hours, etc.)
 #[derive(Debug, PartialEq, Eq, Default, Clone)]
 pub enum CrontabValue {
     Number(u32),
@@ -21,6 +25,7 @@ pub enum CrontabValue {
     Any,
 }
 
+/// A crontab timer is a set of crontab values for each field (minutes, hours, days, months, days of week)
 #[derive(Debug, PartialEq, Eq, Clone, Getters)]
 #[getset(get = "pub")]
 pub struct CrontabTimer {
@@ -32,6 +37,8 @@ pub struct CrontabTimer {
     pub dows: Vec<CrontabValue>,
 }
 
+/// A crontab fill represents how long a crontab should be backfilled
+/// For instance the server is down for 1 hour, the task should be backfilled for 1 hour
 #[derive(Debug, PartialEq, Eq, Getters, Clone)]
 #[getset(get = "pub")]
 pub struct CrontabFill {
@@ -42,13 +49,25 @@ pub struct CrontabFill {
     pub s: u32,
 }
 
+/// Crontab options
 #[derive(Debug, PartialEq, Eq, Default, Getters, Clone)]
 #[getset(get = "pub")]
 pub struct CrontabOptions {
+    /// The ID is a unique alphanumeric case-sensitive identifier starting with a letter
+    /// Specify an identifier for this crontab entry;
+    /// By default this will use the task identifier,
+    /// but if you want more than one schedule for the same task (e.g. with different payload, or different times)
+    /// then you will need to supply a unique identifier explicitly.
     pub id: Option<String>,
+    /// Backfill any entries from the last time period,
+    /// for example if the worker was not running
+    /// when they were due to be executed (by default, no backfilling).
     pub fill: Option<CrontabFill>,
+    /// Override the max_attempts of the job (the max number of retries before giving up).
     pub max: Option<u16>,
+    /// Add the job to a named queue so it executes serially with other jobs in the same queue.
     pub queue: Option<String>,
+    /// Override the priority of the job (affects the order in which it is executed).
     pub priority: Option<i16>,
 }
 
@@ -69,6 +88,10 @@ impl CrontabFill {
     /// ```rust
     /// use archimedes_crontab_types::CrontabFill;
     ///
+    /// let fill = CrontabFill::new(0, 0, 0, 0, 0);
+    /// assert_eq!(0, fill.to_secs());
+    /// let fill = CrontabFill::new(0, 0, 0, 0, 1);
+    /// assert_eq!(1, fill.to_secs());
     /// let fill = CrontabFill::new(1, 30, 28, 350, 2);
     /// assert_eq!(3318602, fill.to_secs());
     /// ```
@@ -133,18 +156,40 @@ impl CrontabTimer {
 }
 
 impl Crontab {
-    /// Shorcut method to timer
+    /// Shorcut method to timer : check if the crontab should run at specified date
+    ///
+    /// ```rust
+    /// use archimedes_crontab_types::{CrontabValue, CrontabTimer, Crontab};
+    /// use chrono::prelude::*;
+    /// use std::str::FromStr;
+    ///
+    /// let crontab = Crontab {
+    ///    timer: CrontabTimer {
+    ///      minutes: vec![CrontabValue::Number(30)],
+    ///      hours: vec![CrontabValue::Range(8, 10)],
+    ///      days: vec![CrontabValue::Step(4)],
+    ///      ..Default::default()
+    ///    },
+    ///    task_identifier: "test".to_string(),
+    ///    ..Default::default()
+    /// };
+    /// assert!(crontab.should_run_at(&"2012-12-17T08:30:12".parse().unwrap()));
+    /// assert!(crontab.should_run_at(&"2015-02-05T09:30:00".parse().unwrap()));
+    /// assert!(crontab.should_run_at(&"1998-10-13T10:30:59".parse().unwrap()));
+    /// ```
     pub fn should_run_at(&self, at: &NaiveDateTime) -> bool {
         self.timer().should_run_at(at)
     }
 }
 
 impl CrontabValue {
-    fn match_value(&self, value: u32, step_offset: u32) -> bool {
+    /// Check if the value match the crontab value
+    /// The step_offset is used to check if the value match a step
+    pub(crate) fn match_value(&self, value: u32, step_offset: u32) -> bool {
         match self {
             CrontabValue::Number(n) => &value == n,
             CrontabValue::Range(low, high) => &value >= low && &value <= high,
-            CrontabValue::Step(n) => value % n == step_offset,
+            CrontabValue::Step(n) => (value % n) == step_offset,
             CrontabValue::Any => true,
         }
     }
@@ -189,5 +234,50 @@ mod tests {
             vec![&lowest_fill, &lower_fill, &bigger_fill, &biggest_fill],
             fills
         );
+    }
+
+    #[test]
+    pub fn crontab_fill_to_secs() {
+        let fill = CrontabFill::new(0, 0, 0, 0, 0);
+        assert_eq!(0, fill.to_secs());
+        let fill = CrontabFill::new(0, 0, 0, 0, 1);
+        assert_eq!(1, fill.to_secs());
+        let fill = CrontabFill::new(1, 30, 28, 350, 2);
+        assert_eq!(3318602, fill.to_secs());
+    }
+
+    #[test]
+    pub fn crontab_value_match_value() {
+        assert!(CrontabValue::Number(30).match_value(30, 0));
+        assert!(CrontabValue::Range(8, 10).match_value(8, 0));
+        assert!(!CrontabValue::Range(8, 10).match_value(7, 0));
+        assert!(CrontabValue::Step(4).match_value(5, 1));
+        assert!(CrontabValue::Step(9).match_value(9, 0));
+        assert!(!CrontabValue::Step(9).match_value(9, 1));
+        assert!(CrontabValue::Any.match_value(16, 0));
+    }
+
+    #[test]
+    pub fn crontab_should_run_at() -> Result<()> {
+        let crontab = Crontab {
+            timer: CrontabTimer {
+                minutes: vec![CrontabValue::Number(30)],
+                hours: vec![CrontabValue::Range(8, 10)],
+                days: vec![CrontabValue::Step(4)],
+                ..Default::default()
+            },
+            task_identifier: "test".to_string(),
+            ..Default::default()
+        };
+        assert!(crontab.should_run_at(&"2012-12-17T08:30:12".parse()?));
+        assert!(crontab.should_run_at(&"2015-02-05T09:30:00".parse()?));
+        assert!(crontab.should_run_at(&"1998-10-13T10:30:59".parse()?));
+
+        assert!(!crontab.should_run_at(&"2012-12-17T11:30:59".parse()?));
+        assert!(!crontab.should_run_at(&"2015-02-05T09:31:00".parse()?));
+        assert!(!crontab.should_run_at(&"2012-12-13T08:29:12".parse()?));
+        assert!(!crontab.should_run_at(&"1998-10-04T10:30:59".parse()?));
+
+        Ok(())
     }
 }

@@ -2,7 +2,7 @@ test:
   cargo test --all
 
 doc-test:
-  cargo test --doc
+  cargo test --all --doc
 
 fmt:
   cargo fmt --all
