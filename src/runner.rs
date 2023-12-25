@@ -1,5 +1,5 @@
 use std::fmt::Debug;
-use std::future::{ready, Future};
+use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
@@ -86,12 +86,15 @@ impl Worker {
         .await?;
 
         job_signal
-            .then(|source| process_one_job(self, source))
-            .try_for_each_concurrent(self.concurrency, |j| {
-                if let Some(j) = &j {
-                    debug!("Job id={} processed", j.id());
+            .map(Ok::<_, ProcessJobError>)
+            .try_for_each_concurrent(self.concurrency, |source| async move {
+                let res = process_one_job(self, source).await?;
+
+                if let Some(job) = res {
+                    debug!(job_id = job.id(), "Job processed");
                 }
-                ready(Ok(()))
+
+                Ok(())
             })
             .await?;
 
@@ -145,7 +148,7 @@ async fn process_one_job(
         Some(job) => {
             let job_result = run_job(&job, worker, &source).await;
             release_job(job_result, &job, worker).await.map_err(|e| {
-                error!("{:?}", e);
+                error!("Release job error : {:?}", e);
                 e
             })?;
             Ok(Some(job))

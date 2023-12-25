@@ -1,3 +1,5 @@
+#![allow(clippy::non_canonical_partial_ord_impl)]
+
 use chrono::prelude::*;
 use getset::Getters;
 

@@ -48,8 +48,6 @@ pub async fn cron_main<'e>(
         let current_ts = round_date_minute(Local::now(), false);
         let ts_delta = current_ts - ts;
 
-        dbg!(ts_delta, current_ts, ts);
-
         match ts_delta.num_minutes().cmp(&0) {
             Ordering::Greater => {
                 warn!(

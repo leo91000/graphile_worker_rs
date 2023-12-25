@@ -26,8 +26,8 @@ pub async fn job_signal_stream(
 
     let stream = stream::unfold((interval, pg_listener, shutdown_signal), |mut f| async {
         tokio::select! {
-            _ = (&mut f.0).tick() => Some((StreamSource::Polling, f)),
-            _ = (&mut f.1).recv() => Some((StreamSource::PgListener, f)),
+            _ = (f.0).tick() => Some((StreamSource::Polling, f)),
+            _ = (f.1).recv() => Some((StreamSource::PgListener, f)),
             _ = &mut f.2 => None,
         }
     });

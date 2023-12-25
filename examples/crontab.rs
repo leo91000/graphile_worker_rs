@@ -43,12 +43,18 @@ async fn main() {
         .unwrap();
 
     WorkerOptions::default()
-        .concurrency(2)
+        .concurrency(10)
         .schema("example_simple_worker")
         .define_job("say_hello", say_hello)
+        .define_job("say_hello_2", say_hello)
         .pg_pool(pg_pool)
         // Run say_hello every two minutes with a backfill of 10 minutes
-        .with_crontab(r#"*/2 * * * * say_hello ?fill=10m {message:"Crontab"}"#)
+        .with_crontab(
+            r#"
+            */2 * * * * say_hello ?fill=10m {message:"Crontab"}
+            */1 * * * * say_hello_2 ?fill=10m {message:"Crontab"}
+        "#,
+        )
         .unwrap()
         .init()
         .await
