@@ -12,39 +12,63 @@ keywords = []
 categories = []
 
 [workspace]
-members = [
-    "crates/*",
-    "xtask"
-]
+members = ["crates/*", "xtask"]
+
+[workspace.dependencies]
+tokio = { version = "1.35.1" }
+serde = { version = "1.0.193", features = ["derive"] }
+json5 = "0.4.1"
+nom = "7.1.3"
+serde_json = "1.0.108"
+serde_qs = "0.12.0"
+thiserror = "1.0.51"
+chrono = { version = "0.4.31", features = ["serde"] }
+sqlx = { version = "0.7.3", features = ["chrono", "postgres", "json"] }
+getset = "0.1.2"
+tracing = "0.1.40"
+once_cell = "1.19.0"
+anyhow = "1.0.76"
+cfg-if = "1.0.0"
+futures = "0.3.30"
 
 [features]
 default = ["runtime-tokio-native-tls"]
-runtime-tokio-rustls = ["sqlx/runtime-tokio-rustls", "tokio", "archimedes_crontab_runner/runtime-tokio-rustls", "archimedes_migrations/runtime-tokio-rustls"]
-runtime-tokio-native-tls = ["sqlx/runtime-tokio-native-tls", "tokio", "archimedes_crontab_runner/runtime-tokio-native-tls", "archimedes_migrations/runtime-tokio-native-tls"]
+runtime-tokio-rustls = [
+    "sqlx/runtime-tokio-rustls",
+    "tokio",
+    "archimedes_crontab_runner/runtime-tokio-rustls",
+    "archimedes_migrations/runtime-tokio-rustls",
+]
+runtime-tokio-native-tls = [
+    "sqlx/runtime-tokio-native-tls",
+    "tokio",
+    "archimedes_crontab_runner/runtime-tokio-native-tls",
+    "archimedes_migrations/runtime-tokio-native-tls",
+]
 # For now we don't support async std
 # runtime-async-std-rustls = ["sqlx/runtime-async-std-rustls"]
 # runtime-async-std-native-tls = ["sqlx/runtime-async-std-native-tls"]
 
 [dependencies]
-archimedes_crontab_runner = { path = "./crates/crontab_runner" , version = "0.4.2" }
-archimedes_crontab_types = { path = "./crates/crontab_types" , version = "0.4.0" }
-archimedes_crontab_parser = { path = "./crates/crontab_parser" , version = "0.4.2" }
-archimedes_migrations = { path = "./crates/migrations" , version = "0.2.4" }
-archimedes_shutdown_signal = { path = "./crates/shutdown_signal" , version = "0.2.4" }
-chrono = { version = "0.4.24", features = ["serde"] }
-futures = "0.3.28"
+archimedes_crontab_runner = { path = "./crates/crontab_runner", version = "0.4.2" }
+archimedes_crontab_types = { path = "./crates/crontab_types", version = "0.4.0" }
+archimedes_crontab_parser = { path = "./crates/crontab_parser", version = "0.4.2" }
+archimedes_migrations = { path = "./crates/migrations", version = "0.2.4" }
+archimedes_shutdown_signal = { path = "./crates/shutdown_signal", version = "0.2.4" }
+chrono = { version = "0.4.31", features = ["serde"] }
+futures = "0.3.30"
 getset = "0.1.2"
-num_cpus = "1.15.0"
-serde = { version = "1.0.160", features = ["derive"] }
-serde_json = "1.0.96"
-sqlx = { version = "0.6.3", features = ["postgres", "json", "chrono"] }
-thiserror = "1.0.40"
-tracing = "0.1.38"
-tokio = { version = "1.28.0", features = ["macros", "signal"], optional = true }
+num_cpus = "1.16.0"
+serde = { version = "1.0.193", features = ["derive"] }
+serde_json = "1.0.108"
+sqlx = { version = "0.7.3", features = ["postgres", "json", "chrono"] }
+thiserror = "1.0.51"
+tracing = "0.1.40"
+tokio = { version = "1.35.1", features = ["macros", "signal"], optional = true }
 rand = "0.8.5"
 hex = "0.4.3"
 cfg-if = "1.0.0"
 
 [dev-dependencies]
-tokio = { version = "1.28.0", features = ["macros"] }
-tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+tokio = { version = "1.35.1", features = ["macros", "rt-multi-thread"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
