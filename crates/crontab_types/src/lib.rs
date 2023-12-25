@@ -114,6 +114,11 @@ impl CrontabTimer {
     ///     ..Default::default()
     /// };
     /// assert!(crontab_timer.should_run_at(&"2012-12-17T08:30:12".parse().unwrap()));
+    /// assert!(crontab_timer.should_run_at(&"2015-02-05T09:30:00".parse().unwrap()));
+    /// assert!(crontab_timer.should_run_at(&"1998-10-13T10:30:59".parse().unwrap()));
+    ///
+    /// assert!(!crontab_timer.should_run_at(&"2012-12-17T11:30:59".parse().unwrap()));
+    /// assert!(!crontab_timer.should_run_at(&"2015-02-05T09:31:00".parse().unwrap()));
     /// ```
     pub fn should_run_at(&self, at: &NaiveDateTime) -> bool {
         self.minutes().iter().any(|v| v.match_value(at.minute(), 0))

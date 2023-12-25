@@ -1,3 +1,9 @@
+test:
+  cargo test --all
+
+doc-test:
+  cargo test --doc
+
 fmt:
   cargo fmt --all
 
