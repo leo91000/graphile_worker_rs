@@ -86,7 +86,9 @@ where
 
     let last_migration = match last_migration_query_result {
         Err(SqlxError::Database(e)) => {
-            let Some(code) = e.code() else { return Err(SqlxError::Database(e)); };
+            let Some(code) = e.code() else {
+                return Err(SqlxError::Database(e));
+            };
 
             if code == "42P01" {
                 install_schema(executor.clone(), escaped_schema).await?;
