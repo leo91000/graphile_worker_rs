@@ -65,9 +65,9 @@ where
     );
 
     let mut tx = executor.begin().await?;
-    query(&create_schema_query).execute(&mut tx).await?;
+    query(&create_schema_query).execute(tx.as_mut()).await?;
     query(&create_migration_table_query)
-        .execute(&mut tx)
+        .execute(tx.as_mut())
         .await?;
     tx.commit().await?;
 
@@ -113,11 +113,14 @@ where
 
             for migration_statement in migration_statements.iter() {
                 let sql = migration_statement.replace(":ARCHIMEDES_SCHEMA", escaped_schema);
-                query(sql.as_str()).execute(&mut tx).await?;
+                query(sql.as_str()).execute(tx.as_mut()).await?;
             }
 
             let sql = format!("insert into {escaped_schema}.migrations (id) values ($1)");
-            query(&sql).bind(migration_number).execute(&mut tx).await?;
+            query(&sql)
+                .bind(migration_number)
+                .execute(tx.as_mut())
+                .await?;
 
             tx.commit().await?;
         }
