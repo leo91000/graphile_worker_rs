@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
 
@@ -206,8 +205,8 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
             res.map_err(RunJobError::TaskPanic).and_then(|res| res.map_err(RunJobError::TaskError))
         }
         _ = shutdown_timeout => {
-            warn!(task_identifier, payload, job_id = job.id(), "Job interrupted by shutdown signal after 5 seconds timeout");
             abort_handle.abort();
+            warn!(task_identifier, payload, job_id = job.id(), "Job interrupted by shutdown signal after 5 seconds timeout");
             Err(RunJobError::TaskAborted)
         }
     }?;
