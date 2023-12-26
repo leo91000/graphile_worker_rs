@@ -7,8 +7,11 @@ use nom::{
 };
 use serde::Deserialize;
 
-use archimedes_crontab_types::{CrontabFill, CrontabOptions};
+use archimedes_crontab_types::{CrontabFill, CrontabOptions, JobKeyMode};
 
+/// Intermediate miror of CrontabOptions
+/// This is used to parse the query string
+/// Specifically, this is needed to parse fill without using owned string
 #[derive(Deserialize)]
 struct QueryOption<'a> {
     id: Option<String>,
@@ -16,6 +19,8 @@ struct QueryOption<'a> {
     max: Option<u16>,
     queue: Option<String>,
     priority: Option<i16>,
+    job_key: Option<String>,
+    job_key_mode: Option<JobKeyMode>,
 }
 
 fn crontab_query(input: &str) -> IResult<&str, QueryOption<'_>> {
@@ -58,10 +63,11 @@ fn crontab_fill(input: &str) -> IResult<&str, CrontabFill> {
 pub(crate) fn nom_crontab_opts(input: &str) -> IResult<&str, CrontabOptions> {
     let (input, query) = crontab_query(input)?;
 
-    let fill = match query.fill {
-        Some(v) => Some(crontab_fill(v)?.1),
-        None => None,
-    };
+    let fill = query
+        .fill
+        .map(|v| crontab_fill(v))
+        .transpose()?
+        .map(|(_, v)| v);
 
     Ok((
         input,
@@ -71,6 +77,8 @@ pub(crate) fn nom_crontab_opts(input: &str) -> IResult<&str, CrontabOptions> {
             max: query.max,
             queue: query.queue,
             priority: query.priority,
+            job_key: query.job_key,
+            job_key_mode: query.job_key_mode,
         },
     ))
 }
@@ -86,7 +94,6 @@ mod tests {
             Ok((
                 " foo",
                 CrontabOptions {
-                    id: None,
                     fill: Some(CrontabFill {
                         s: 0,
                         m: 1,
@@ -94,9 +101,8 @@ mod tests {
                         d: 3,
                         w: 4
                     }),
-                    max: None,
-                    queue: None,
                     priority: Some(-4),
+                    ..Default::default()
                 }
             )),
             nom_crontab_opts(input)
@@ -108,10 +114,8 @@ mod tests {
                 " bar",
                 CrontabOptions {
                     id: Some(String::from("1234dfsd")),
-                    fill: None,
                     max: Some(4),
-                    queue: None,
-                    priority: None,
+                    ..Default::default()
                 }
             )),
             nom_crontab_opts(input)
@@ -132,5 +136,50 @@ mod tests {
 
         let input = "?fill=4w_3d2h1m&priority=-4 foo";
         assert!(nom_crontab_opts(input).is_err());
+    }
+
+    #[test]
+    fn parse_job_key() {
+        let input = "?job_key=foo";
+        assert_eq!(
+            Ok((
+                "",
+                CrontabOptions {
+                    job_key: Some(String::from("foo")),
+                    ..Default::default()
+                }
+            )),
+            nom_crontab_opts(input)
+        );
+    }
+
+    #[test]
+    fn parse_job_key_mode_replace() {
+        let input = "?job_key_mode=replace";
+        assert_eq!(
+            Ok((
+                "",
+                CrontabOptions {
+                    job_key_mode: Some(JobKeyMode::Replace),
+                    ..Default::default()
+                }
+            )),
+            nom_crontab_opts(input)
+        );
+    }
+
+    #[test]
+    fn parse_job_key_mode_preserve_run_at() {
+        let input = "?job_key_mode=preserve_run_at";
+        assert_eq!(
+            Ok((
+                "",
+                CrontabOptions {
+                    job_key_mode: Some(JobKeyMode::PreserveRunAt),
+                    ..Default::default()
+                }
+            )),
+            nom_crontab_opts(input)
+        );
     }
 }

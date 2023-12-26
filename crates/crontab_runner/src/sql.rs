@@ -1,4 +1,4 @@
-use archimedes_crontab_types::Crontab;
+use archimedes_crontab_types::{Crontab, JobKeyMode};
 use chrono::prelude::*;
 use getset::Getters;
 use serde::Serialize;
@@ -67,6 +67,23 @@ pub struct CrontabJobInner {
     run_at: DateTime<Local>,
     max_attempts: Option<u16>,
     priority: Option<i16>,
+    job_key: Option<String>,
+    job_key_mode: Option<JobKeyMode>,
+}
+
+impl CrontabJobInner {
+    pub fn from_crontab_and_run_at<Tz: TimeZone>(crontab: &Crontab, run_at: &DateTime<Tz>) -> Self {
+        Self {
+            task: crontab.task_identifier.to_owned(),
+            payload: crontab.payload.to_owned(),
+            queue_name: crontab.options.queue.to_owned(),
+            run_at: run_at.with_timezone(&Local),
+            max_attempts: crontab.options.max.to_owned(),
+            priority: crontab.options.priority.to_owned(),
+            job_key: crontab.options.job_key.to_owned(),
+            job_key_mode: crontab.options.job_key_mode.to_owned(),
+        }
+    }
 }
 
 #[derive(Serialize, Debug)]
@@ -105,16 +122,18 @@ where
                     ((json->'job')->>'queueName')::text as queue_name,
                     ((json->'job')->>'runAt')::timestamptz as run_at,
                     ((json->'job')->>'maxAttempts')::smallint as max_attempts,
-                    ((json->'job')->>'priority')::smallint as priority
+                    ((json->'job')->>'priority')::smallint as priority,
+                    ((json->'job')->>'jobKey')::text as job_key,
+                    ((json->'job')->>'jobKeyMode')::text as job_key_mode
                 from json_array_elements($1::json) with ordinality AS entries (json, index)
             ),
             locks as (
-                insert into {escaped_schema}.known_crontabs (identifier, known_since, last_execution)
-                    select
-                        specs.identifier,
-                        $2 as known_since,
-                        $2 as last_execution
-                    from specs
+                insert into {escaped_schema}.known_crontabs as known_crontabs (identifier, known_since, last_execution)
+                select
+                    specs.identifier,
+                    $2::timestamptz as known_since,
+                    $2::timestamptz as last_execution
+                from specs
                 on conflict (identifier)
                 do update set last_execution = excluded.last_execution
                 where (known_crontabs.last_execution is null or known_crontabs.last_execution < excluded.last_execution)
@@ -127,8 +146,10 @@ where
                     specs.queue_name,
                     coalesce(specs.run_at, $3::timestamptz, now()),
                     specs.max_attempts,
-                    null, -- job key
-                    specs.priority
+                    specs.job_key,
+                    specs.priority,
+                    null, -- flags
+                    specs.job_key_mode
                 )
             from specs
             inner join locks on (locks.identifier = specs.identifier)
@@ -148,33 +169,21 @@ where
 
 impl CrontabJob {
     pub fn for_cron<Tz: TimeZone>(crontab: &Crontab, ts: &DateTime<Tz>, backfilled: bool) -> Self {
-        let mut payload = crontab.payload.clone();
-        if let Some(payload) = payload.as_mut() {
-            if let Some(payload) = payload.as_object_mut() {
-                payload.insert(
-                    "_cron".into(),
-                    json!({
-                        "ts": format!("{ts:?}"),
-                        "backfilled": backfilled
-                    }),
-                );
-            }
+        let mut job = CrontabJobInner::from_crontab_and_run_at(crontab, ts);
+
+        if let Some(payload) = job.payload.as_mut().and_then(|p| p.as_object_mut()) {
+            payload.insert(
+                "_cron".into(),
+                json!({
+                    "ts": format!("{ts:?}"),
+                    "backfilled": backfilled
+                }),
+            );
         }
 
         Self {
-            identifier: crontab
-                .options()
-                .id()
-                .to_owned()
-                .unwrap_or_else(|| crontab.task_identifier.to_owned()),
-            job: CrontabJobInner {
-                task: crontab.task_identifier.to_owned(),
-                payload: crontab.payload.to_owned(),
-                queue_name: crontab.options.queue.to_owned(),
-                run_at: ts.with_timezone(&Local),
-                max_attempts: crontab.options.max.to_owned(),
-                priority: crontab.options.priority.to_owned(),
-            },
+            identifier: crontab.identifier().to_owned(),
+            job,
         }
     }
 }

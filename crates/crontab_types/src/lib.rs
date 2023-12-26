@@ -49,6 +49,21 @@ pub struct CrontabFill {
     pub s: u32,
 }
 
+/// Behavior when an existing job with the same job key is found is controlled by this setting
+#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq, Clone)]
+pub enum JobKeyMode {
+    /// Overwrites the unlocked job with the new values. This is primarily useful for rescheduling, updating, or debouncing
+    /// (delaying execution until there have been no events for at least a certain time period).
+    /// Locked jobs will cause a new job to be scheduled instead.
+    #[serde(rename = "replace")]
+    Replace,
+    /// overwrites the unlocked job with the new values, but preserves run_at.
+    /// This is primarily useful for throttling (executing at most once over a given time period).
+    /// Locked jobs will cause a new job to be scheduled instead.
+    #[serde(rename = "preserve_run_at")]
+    PreserveRunAt,
+}
+
 /// Crontab options
 #[derive(Debug, PartialEq, Eq, Default, Getters, Clone)]
 #[getset(get = "pub")]
@@ -69,6 +84,10 @@ pub struct CrontabOptions {
     pub queue: Option<String>,
     /// Override the priority of the job (affects the order in which it is executed).
     pub priority: Option<i16>,
+    /// Replace/update the existing job with this key, if present.
+    pub job_key: Option<String>,
+    /// If jobKey is specified, affects what it does.
+    pub job_key_mode: Option<JobKeyMode>,
 }
 
 const SECOND: u32 = 1;
@@ -179,6 +198,15 @@ impl Crontab {
     /// ```
     pub fn should_run_at(&self, at: &NaiveDateTime) -> bool {
         self.timer().should_run_at(at)
+    }
+
+    /// Get the identifier of the crontab
+    /// If the id option is specified, it will be used, otherwise the task identifier will be used
+    pub fn identifier(&self) -> &str {
+        self.options
+            .id
+            .as_deref()
+            .unwrap_or(self.task_identifier.as_str())
     }
 }
 

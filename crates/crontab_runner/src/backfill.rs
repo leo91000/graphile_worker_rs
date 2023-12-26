@@ -81,9 +81,10 @@ where
         .await?;
     }
 
-    let largest_backfill = crontabs
+    let largest_backfill = backfill_items_and_date
         .iter()
-        .filter_map(|c| c.options().fill().as_ref().map(|c| c.to_secs()))
+        .filter_map(|c| c.item.options().fill().as_ref())
+        .map(|f| f.to_secs())
         .max();
 
     if let Some(largest_backfill) = largest_backfill {

@@ -51,9 +51,9 @@ async fn main() {
         // Run say_hello every two minutes with a backfill of 10 minutes
         .with_crontab(
             r#"
-            */2 * * * * say_hello ?fill=10m {message:"Crontab"}
-            */1 * * * * say_hello_2 ?fill=10m {message:"Crontab"}
-        "#,
+                */2 * * * * say_hello ?fill=10m&job_key=say_hello_dedupe&job_key_mode=preserve_run_at {message:"Crontab"}
+                */1 * * * * say_hello_2 ?fill=10m&job_key=say_hello_dedupe&job_key_mode=preserve_run_at {message:"Crontab"}
+            "#,
         )
         .unwrap()
         .init()
