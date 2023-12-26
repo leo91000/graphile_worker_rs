@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
 
@@ -171,6 +172,8 @@ enum RunJobError {
     TaskPanic(#[from] tokio::task::JoinError),
     #[error("Task returned the following error : {0}")]
     TaskError(String),
+    #[error("Task was aborted by shutdown signal")]
+    TaskAborted,
 }
 
 async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<(), RunJobError> {
@@ -191,10 +194,25 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
     let task_fut = task_fn(worker.into(), payload.clone());
 
     let start = Instant::now();
-    tokio::spawn(task_fut)
-        .await?
-        .map_err(RunJobError::TaskError)?;
-    let duration = start.elapsed().as_millis();
+    let job_task = tokio::spawn(task_fut);
+    let abort_handle = job_task.abort_handle();
+    let mut shutdown_signal = worker.shutdown_signal().clone();
+    let shutdown_timeout = async {
+        (&mut shutdown_signal).await;
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    };
+    tokio::select! {
+        res = job_task => {
+            res.map_err(RunJobError::TaskPanic).and_then(|res| res.map_err(RunJobError::TaskError))
+        }
+        _ = shutdown_timeout => {
+            error!(task_identifier, payload, job_id = job.id(), timeout = 10, "Job interrupted by shutdown signal after timeout");
+            abort_handle.abort();
+            Err(RunJobError::TaskAborted)
+        }
+    }?;
+    let duration = start.elapsed();
+    let duration = duration.as_millis();
 
     info!(
         task_identifier,

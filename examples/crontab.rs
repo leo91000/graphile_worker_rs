@@ -52,7 +52,6 @@ async fn main() {
         .with_crontab(
             r#"
                 */2 * * * * say_hello ?fill=10m&job_key=say_hello_dedupe&job_key_mode=preserve_run_at {message:"Crontab"}
-                */1 * * * * say_hello_2 ?fill=10m&job_key=say_hello_dedupe&job_key_mode=preserve_run_at {message:"Crontab"}
             "#,
         )
         .unwrap()
