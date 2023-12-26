@@ -206,19 +206,18 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
             res.map_err(RunJobError::TaskPanic).and_then(|res| res.map_err(RunJobError::TaskError))
         }
         _ = shutdown_timeout => {
-            error!(task_identifier, payload, job_id = job.id(), timeout = 10, "Job interrupted by shutdown signal after timeout");
+            warn!(task_identifier, payload, job_id = job.id(), "Job interrupted by shutdown signal after 5 seconds timeout");
             abort_handle.abort();
             Err(RunJobError::TaskAborted)
         }
     }?;
     let duration = start.elapsed();
-    let duration = duration.as_millis();
 
     info!(
         task_identifier,
         payload,
         job_id = job.id(),
-        duration,
+        duration = duration.as_millis(),
         "Completed task with success"
     );
 
