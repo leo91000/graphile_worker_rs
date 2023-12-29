@@ -1,0 +1,24 @@
+[package]
+name = "archimedes_macros"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Archimedes macros"
+homepage = "https://docs.rs/archimedes_macros"
+documentation = "https://docs.rs/archimedes_macros"
+repository = "https://github.com/leo91000/archimedes/crates/macros"
+keywords = []
+categories = []
+readme = "README.md"
+
+[dependencies]
+archimedes_task_handler = { path = "../task_handler", version = "0.1.0" }
+syn = { workspace = true }
+quote = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+
+[lib]
+proc-macro = true
