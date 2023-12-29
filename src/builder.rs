@@ -122,7 +122,7 @@ impl WorkerOptions {
         self
     }
 
-    pub fn define_job<T, E, Fut, F>(mut self, identifier: &str, job_fn: F) -> Self
+    pub fn define_raw_job<T, E, Fut, F>(mut self, identifier: &str, job_fn: F) -> Self
     where
         T: for<'de> Deserialize<'de> + Send,
         E: Debug,
