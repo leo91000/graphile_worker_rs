@@ -45,8 +45,8 @@ async fn main() {
     WorkerOptions::default()
         .concurrency(10)
         .schema("example_simple_worker")
-        .define_job("say_hello", say_hello)
-        .define_job("say_hello_2", say_hello)
+        .define_raw_job("say_hello", say_hello)
+        .define_raw_job("say_hello_2", say_hello)
         .pg_pool(pg_pool)
         // Run say_hello every two minutes with a backfill of 10 minutes
         .with_crontab(

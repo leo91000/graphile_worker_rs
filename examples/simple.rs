@@ -43,7 +43,7 @@ async fn main() {
     WorkerOptions::default()
         .concurrency(2)
         .schema("example_simple_worker")
-        .define_job("say_hello", say_hello)
+        .define_raw_job("say_hello", say_hello)
         .pg_pool(pg_pool)
         .init()
         .await
