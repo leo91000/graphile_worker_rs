@@ -1,9 +1,11 @@
+#[derive(Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub enum RunTaskError<E> {
     TaskPanic,
     TaskAborted,
     TaskError(E),
 }
 
+#[derive(Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub struct SpawnTaskResult<E> {
     pub duration: std::time::Duration,
     pub result: Result<(), RunTaskError<E>>,
