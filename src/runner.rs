@@ -5,12 +5,14 @@ use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
 
 use crate::errors::ArchimedesError;
+use crate::sql::add_job::{add_job, JobSpec};
 use crate::sql::get_job::Job;
 use crate::sql::{get_job::get_job, task_identifiers::TaskDetails};
 use crate::streams::job_signal_stream;
 use archimedes_crontab_runner::{cron_main, ScheduleCronJobError};
 use archimedes_crontab_types::Crontab;
 use archimedes_shutdown_signal::ShutdownSignal;
+use archimedes_task_handler::TaskDefinition;
 use futures::{try_join, StreamExt, TryStreamExt};
 use getset::Getters;
 use thiserror::Error;
@@ -116,6 +118,23 @@ impl Worker {
         .await?;
 
         Ok(())
+    }
+
+    pub async fn add_job<T: TaskDefinition<WorkerContext>>(
+        &self,
+        payload: T::Payload,
+        spec: Option<JobSpec>,
+    ) -> Result<(), ArchimedesError> {
+        let identifier = T::identifier();
+        let payload = serde_json::to_value(payload)?;
+        add_job(
+            self.pg_pool(),
+            self.escaped_schema(),
+            identifier,
+            payload,
+            spec.unwrap_or_default(),
+        )
+        .await
     }
 }
 

@@ -4,7 +4,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::task_result::{RunTaskError, SpawnTaskResult};
 
-pub trait TaskHandler<Payload, Context>
+pub trait TaskHandler<Payload, Context>: Send
 where
     Payload: for<'de> Deserialize<'de> + Serialize + Send,
     Context: Send,
@@ -18,34 +18,6 @@ where
     fn identifier(&self) -> &str {
         std::any::type_name::<Self>()
     }
-
-    fn spawn_task(
-        &self,
-        payload: Payload,
-        ctx: Context,
-        cancel_token: CancellationToken,
-    ) -> impl Future<Output = SpawnTaskResult<String>> {
-        async move {
-            let start = Instant::now();
-
-            let task_fut = async {
-                tokio::spawn(self.run(payload, ctx))
-                    .await
-                    .map_err(|_| RunTaskError::TaskPanic)
-                    .and_then(|r| r.map_err(RunTaskError::TaskError))
-            };
-            let cancel_fut = async {
-                cancel_token.cancelled().await;
-            };
-
-            let result = tokio::select! {
-                _ = cancel_fut => Err(RunTaskError::TaskAborted),
-                r = task_fut => r,
-            };
-            let duration = start.elapsed();
-            SpawnTaskResult { duration, result }
-        }
-    }
 }
 
 impl<Payload, Context, Error, F, Fut> TaskHandler<Payload, Context> for F
@@ -54,7 +26,7 @@ where
     Context: Send,
     Error: Debug + Send,
     Fut: Future<Output = Result<(), Error>> + Send + 'static,
-    F: Fn(Payload, Context) -> Fut,
+    F: Fn(Payload, Context) -> Fut + Send,
 {
     fn run(
         &self,

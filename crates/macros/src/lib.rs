@@ -13,20 +13,6 @@ use syn::{parse_macro_input, FnArg, ItemFn, PatType};
 ///    Ok(())
 /// }
 /// ```
-/// This will output :
-/// ```rust
-/// struct my_task;
-/// async fn my_task_inner(ctx: String, payload: String) -> Result<(), String> {
-///    println!("{} {}", ctx, payload);
-///    Ok(())
-/// }
-/// impl archimedes_task_handler::TaskDefinition<String> for my_task {
-///    type Payload = String;
-///    fn get_task_runner(&self) -> impl archimedes_task_handler::TaskHandler<Self::Payload, String> {
-///        my_task_inner
-///    }
-/// }
-/// ```
 #[proc_macro_attribute]
 pub fn task(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemFn);
@@ -42,13 +28,13 @@ pub fn task(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Extract parameter types
     let params: Vec<_> = input.sig.inputs.iter().collect();
-    let ctx_type = match &params[0] {
-        FnArg::Typed(PatType { ty, .. }) => ty,
-        _ => panic!("Expected a typed argument for context"),
-    };
-    let payload_type = match &params[1] {
+    let payload_type = match &params[0] {
         FnArg::Typed(PatType { ty, .. }) => ty,
         _ => panic!("Expected a typed argument for payload"),
+    };
+    let ctx_type = match &params[1] {
+        FnArg::Typed(PatType { ty, .. }) => ty,
+        _ => panic!("Expected a typed argument for context"),
     };
 
     // Create new function signature with the new name
@@ -57,6 +43,12 @@ pub fn task(_attr: TokenStream, item: TokenStream) -> TokenStream {
         ..sig.clone()
     };
 
+    // If the feature reexport is enabled, we need to use archimedes instead of archimedes_task_handler & archimedes_macros
+    #[cfg(feature = "reexport")]
+    let crate_source_task_handler = quote! { archimedes };
+    #[cfg(not(feature = "reexport"))]
+    let crate_source_task_handler = quote! { archimedes_task_handler };
+
     // Generate the output tokens
     let output = quote! {
         #[allow(non_camel_case_types)]
@@ -64,10 +56,13 @@ pub fn task(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #new_sig {
             #body
         }
-        impl archimedes_task_handler::TaskDefinition<#ctx_type> for #name_struct {
+        impl #crate_source_task_handler::TaskDefinition<#ctx_type> for #name_struct {
             type Payload = #payload_type;
-            fn get_task_runner(&self) -> impl archimedes_task_handler::TaskHandler<#payload_type, #ctx_type> {
+            fn get_task_runner(&self) -> impl #crate_source_task_handler::TaskHandler<#payload_type, #ctx_type> + Clone + 'static {
                 #name_inner
+            }
+            fn identifier() -> &'static str {
+                stringify!(#name_struct)
             }
         }
     };

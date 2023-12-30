@@ -6,6 +6,7 @@ use archimedes_crontab_parser::{parse_crontab, CrontabParseError};
 use archimedes_crontab_types::Crontab;
 use archimedes_migrations::migrate;
 use archimedes_shutdown_signal::shutdown_signal;
+use archimedes_task_handler::{TaskDefinition, TaskHandler};
 use futures::FutureExt;
 use rand::RngCore;
 use serde::Deserialize;
@@ -139,6 +140,38 @@ impl WorkerOptions {
                     Err(e) => Err(format!("{e:?}")),
                     Ok(p) => {
                         let job_result = job_fn(ctx, p).await;
+                        match job_result {
+                            Err(e) => Err(format!("{e:?}")),
+                            Ok(v) => Ok(v),
+                        }
+                    }
+                }
+            }
+            .boxed()
+        };
+
+        self.jobs
+            .insert(identifier.to_string(), Box::new(worker_fn));
+        self
+    }
+
+    pub fn define_job<T>(mut self, task: T) -> Self
+    where
+        T: TaskDefinition<WorkerContext>,
+    {
+        let task_runner = task.get_task_runner();
+
+        let identifier = T::identifier();
+
+        let worker_fn = move |ctx: WorkerContext, payload: String| {
+            let payload = serde_json::from_str(&payload);
+            let task_runner = task_runner.clone();
+
+            async move {
+                match payload {
+                    Err(e) => Err(format!("{e:?}")),
+                    Ok(p) => {
+                        let job_result = task_runner.run(p, ctx).await;
                         match job_result {
                             Err(e) => Err(format!("{e:?}")),
                             Ok(v) => Ok(v),
