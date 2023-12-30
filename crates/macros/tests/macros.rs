@@ -13,17 +13,7 @@ async fn test_fn(payload: String, ctx: String) -> Result<(), String> {
 
 #[tokio::test]
 async fn test_sample_task() {
-    let runner = archimedes_task_handler::TaskDefinition::get_task_runner(&test_fn);
+    let identifier = test_fn::identifier();
 
-    // You can test the behavior here, for example, by checking the output of the handler
-    let result = runner
-        .spawn_task(
-            "payload".to_string(),
-            "context".to_string(),
-            CancellationToken::new(),
-        )
-        .await;
-
-    assert_eq!(Ok(()), result.result);
-    assert!(result.duration > std::time::Duration::from_millis(0));
+    assert_eq!("test_fn", identifier);
 }

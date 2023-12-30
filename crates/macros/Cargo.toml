@@ -11,6 +11,10 @@ keywords = []
 categories = []
 readme = "README.md"
 
+[features]
+default = []
+reexport = []
+
 [dependencies]
 archimedes_task_handler = { path = "../task_handler", version = "0.1.0" }
 syn = { workspace = true }

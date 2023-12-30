@@ -1,18 +1,20 @@
 use std::str::FromStr;
 
-use archimedes::{WorkerContext, WorkerOptions};
-use serde::Deserialize;
+use archimedes::{task, JobSpec, WorkerContext, WorkerOptions};
+use chrono::{offset::Utc, Duration};
+use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgConnectOptions;
 use tracing_subscriber::{
     filter::EnvFilter, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct HelloPayload {
     message: String,
 }
 
-async fn say_hello(_ctx: WorkerContext, payload: HelloPayload) -> Result<(), ()> {
+#[task]
+async fn say_hello(payload: HelloPayload, _ctx: WorkerContext) -> Result<(), ()> {
     println!("Hello {} !", payload.message);
     Ok(())
 }
@@ -40,15 +42,27 @@ async fn main() {
         .await
         .unwrap();
 
-    WorkerOptions::default()
+    let worker = WorkerOptions::default()
         .concurrency(2)
         .schema("example_simple_worker")
-        .define_raw_job("say_hello", say_hello)
+        .define_job(say_hello)
         .pg_pool(pg_pool)
         .init()
         .await
-        .unwrap()
-        .run()
+        .unwrap();
+
+    worker
+        .add_job::<say_hello>(
+            HelloPayload {
+                message: "world".to_string(),
+            },
+            Some(JobSpec {
+                // Now + 10 seconds
+                run_at: Some(Utc::now() + Duration::seconds(10)),
+                ..Default::default()
+            }),
+        )
         .await
         .unwrap();
+    worker.run().await.unwrap();
 }
