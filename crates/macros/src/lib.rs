@@ -1,20 +1,65 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, FnArg, ItemFn, PatType};
+use syn::{
+    parse::{Parse, ParseStream},
+    parse_macro_input, FnArg, Ident, ItemFn, LitStr, PatType, Token,
+};
+
+struct TaskAttributes {
+    source_crate: Option<String>,
+    identifier: Option<String>,
+}
+
+impl Parse for TaskAttributes {
+    fn parse(input: ParseStream) -> syn::parse::Result<Self> {
+        let mut source_crate = None;
+        let mut identifier = None;
+
+        while !input.is_empty() {
+            let ident: Ident = input.parse()?;
+            match ident.to_string().as_str() {
+                "source_crate" => {
+                    input.parse::<Token![=]>()?;
+                    let lit: LitStr = input.parse()?;
+                    source_crate = Some(lit.value());
+                }
+                "identifier" => {
+                    input.parse::<Token![=]>()?;
+                    let lit: LitStr = input.parse()?;
+                    identifier = Some(lit.value());
+                }
+                _ => return Err(syn::Error::new(ident.span(), "Unknown attribute")),
+            }
+            if input.is_empty() {
+                break;
+            }
+            input.parse::<Token![,]>()?;
+        }
+
+        Ok(Self {
+            source_crate,
+            identifier,
+        })
+    }
+}
 
 /// Procedural macro to generate a task definition based on a function.
 /// Example :
 /// ```rust
 /// use archimedes_task_handler::TaskHandler;
 ///
-/// #[archimedes_macros::task]
+/// #[archimedes_macros::task(
+///     // This parameter is optional, it will default to "archimedes"
+///     source_crate = "archimedes_task_handler"
+/// )]
 /// async fn my_task(ctx: String, payload: String) -> Result<(), String> {
 ///    println!("{} {}", ctx, payload);
 ///    Ok(())
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn task(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn task(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as TaskAttributes);
     let input = parse_macro_input!(item as ItemFn);
 
     // Extract the function name
@@ -43,11 +88,23 @@ pub fn task(_attr: TokenStream, item: TokenStream) -> TokenStream {
         ..sig.clone()
     };
 
-    // If the feature reexport is enabled, we need to use archimedes instead of archimedes_task_handler & archimedes_macros
-    #[cfg(feature = "reexport")]
-    let crate_source_task_handler = quote! { archimedes };
-    #[cfg(not(feature = "reexport"))]
-    let crate_source_task_handler = quote! { archimedes_task_handler };
+    // Extract the source crate
+    let crate_source_task_handler = match args.source_crate {
+        Some(crate_name) => {
+            let crate_name = syn::Ident::new(&crate_name, name.span());
+            quote! { #crate_name }
+        }
+        None => quote! { archimedes },
+    };
+
+    // Extract the identifier
+    let identifier = match args.identifier {
+        Some(identifier) => {
+            let identifier = syn::Ident::new(&identifier, name.span());
+            quote! { stringify!(#identifier) }
+        }
+        None => quote! { stringify!(#name_struct) },
+    };
 
     // Generate the output tokens
     let output = quote! {
@@ -62,7 +119,7 @@ pub fn task(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 #name_inner
             }
             fn identifier() -> &'static str {
-                stringify!(#name_struct)
+                #identifier
             }
         }
     };

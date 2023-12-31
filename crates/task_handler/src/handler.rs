@@ -1,8 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, future::Future, time::Instant};
-use tokio_util::sync::CancellationToken;
-
-use crate::task_result::{RunTaskError, SpawnTaskResult};
+use std::{fmt::Debug, future::Future};
 
 pub trait TaskHandler<Payload, Context>: Send
 where
@@ -58,22 +55,22 @@ mod test {
         Err(1)
     }
 
-    #[tokio::test]
-    async fn test_task_handler() {
+    #[test]
+    fn test_task_handler() {
         assert_task_handler(task_fn);
         assert_task_handler(task_fn_with_error);
     }
 
-    #[tokio::test]
-    async fn test_task_identifier() {
+    #[test]
+    fn test_task_identifier() {
         let crate_name = env!("CARGO_PKG_NAME");
         assert_eq!(
             task_fn.identifier(),
-            format!("{crate_name}::runner::test::task_fn")
+            format!("{crate_name}::handler::test::task_fn")
         );
         assert_eq!(
             task_fn_with_error.identifier(),
-            format!("{crate_name}::runner::test::task_fn_with_error")
+            format!("{crate_name}::handler::test::task_fn_with_error")
         );
     }
 }

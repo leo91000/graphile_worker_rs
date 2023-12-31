@@ -1,5 +1,6 @@
 mod builder;
 pub mod errors;
+mod helpers;
 mod runner;
 mod sql;
 mod streams;
