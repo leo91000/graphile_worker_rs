@@ -40,7 +40,7 @@ async fn say_hello(payload: HelloPayload, _ctx: WorkerContext) -> Result<(), ()>
 }
 
 #[tokio::main]
-async fn main() -> Result<(), ..> {
+async fn main() -> Result<(), ()> {
     archimedes::WorkerOptions::default()
         .concurrency(2)
         .schema("example_simple_worker")
@@ -66,46 +66,22 @@ SELECT archimedes_worker.add_job('say_hello', json_build_object('name', 'Bobby T
 ### Schedule a job via RUST
 
 ```rust
-// Reuse the task defined earlier :
-use serde::{Deserialize, Serialize};
-use archimedes::{task, WorkerContext};
-
-#[derive(Deserialize, Serialize)]
-struct HelloPayload {
-    name: String,
-}
-
-#[task]
-async fn say_hello(payload: HelloPayload, _ctx: WorkerContext) -> Result<(), ()> {
-    println!("Hello {} !", payload.name);
-    Ok(())
-}
-
-// Run the task:
 #[tokio::main]
 async fn main() -> Result<(), ()> {
-    let worker = archimedes::WorkerOptions::default()
-        .concurrency(2)
-        .schema("example_simple_worker")
-        .define_job(say_hello)
-        .pg_pool(pg_pool)
-        .init()
-        .await?;
+    // ...
+    let helpers = worker.create_helpers();
 
-    let worker_helpers = worker.create_helpers();
-
-    worker_helpers.add_job::<say_hello>(
-        // Using add_job forces the payload to be same struct defined in our type
+    // Using add_job forces the payload to be same struct defined in our type
+    helpers.add_job::<say_hello>(
         HelloPayload { name: "world".to_string() },
         Default::default(),
     ).await.unwrap();
 
     // You can also use `add_raw_job` if you don't have access to the task, or don't care about end 2 end safety
-    worker_helpers.add_raw_job("say_hello", serde_json::json!({ "message": "world" })).await.unwrap();
+    helpers.add_raw_job("say_hello", serde_json::json!({ "message": "world" })).await.unwrap();
 
     Ok(())
 }
-
 ```
 
 ### Success!
