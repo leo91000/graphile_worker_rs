@@ -10,6 +10,7 @@ pub struct WorkerHelpers {
 }
 
 impl WorkerHelpers {
+    /// Create a new instance of WorkerHelpers
     pub fn new(pg_pool: PgPool, escaped_schema: String) -> Self {
         Self {
             pg_pool,
