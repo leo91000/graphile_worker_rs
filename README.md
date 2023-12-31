@@ -78,7 +78,7 @@ async fn main() -> Result<(), ()> {
     ).await.unwrap();
 
     // You can also use `add_raw_job` if you don't have access to the task, or don't care about end 2 end safety
-    helpers.add_raw_job("say_hello", serde_json::json!({ "message": "world" })).await.unwrap();
+    helpers.add_raw_job("say_hello", serde_json::json!({ "message": "world" }), Default::default()).await.unwrap();
 
     Ok(())
 }
