@@ -18,7 +18,7 @@ mod m000017;
 mod m000018;
 
 use sqlx::{query, Acquire, Error as SqlxError, PgExecutor, Postgres, Row};
-use tracing::{info};
+use tracing::info;
 
 use m000001::M000001_MIGRATION;
 use m000002::M000002_MIGRATION;

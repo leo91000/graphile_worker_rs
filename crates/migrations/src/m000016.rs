@@ -12,7 +12,6 @@ pub const M000016_MIGRATION: &[&str] = &[
     r#"
         ALTER TABLE :ARCHIMEDES_SCHEMA.known_crontabs RENAME TO _private_known_crontabs;
     "#,
-
     // Drop and create new 'add_job' function
     r#"
         DROP FUNCTION :ARCHIMEDES_SCHEMA.add_job;
@@ -92,7 +91,6 @@ pub const M000016_MIGRATION: &[&str] = &[
         end;
         $$;
     "#,
-
     // Drop and create new 'add_jobs' function
     r#"
         DROP FUNCTION :ARCHIMEDES_SCHEMA.add_jobs;
@@ -183,7 +181,6 @@ pub const M000016_MIGRATION: &[&str] = &[
         end;
         $$;
     "#,
-
     // Drop and create new 'complete_jobs' function
     r#"
         DROP FUNCTION :ARCHIMEDES_SCHEMA.complete_jobs;
@@ -202,7 +199,6 @@ pub const M000016_MIGRATION: &[&str] = &[
             returning *;
         $$;
     "#,
-
     // Drop and create new 'force_unlock_workers' function
     r#"
         DROP FUNCTION :ARCHIMEDES_SCHEMA.force_unlock_workers;
@@ -219,7 +215,6 @@ pub const M000016_MIGRATION: &[&str] = &[
         where locked_by = any(worker_ids);
 $$;
     "#,
-
     // Drop and create new 'permanently_fail_jobs' function
     r#"
         DROP FUNCTION IF EXISTS :ARCHIMEDES_SCHEMA.permanently_fail_jobs;
@@ -242,7 +237,6 @@ $$;
             RETURNING *;
         $$;
     "#,
-
     // Drop and create new 'remove_job' function
     r#"
         DROP FUNCTION :ARCHIMEDES_SCHEMA.remove_job;
@@ -278,7 +272,6 @@ $$;
         end;
         $$;
     "#,
-
     // Drop and create new 'reschedule_jobs' function
     r#"
         DROP FUNCTION :ARCHIMEDES_SCHEMA.reschedule_jobs;

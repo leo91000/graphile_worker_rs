@@ -6,7 +6,6 @@ pub const M000018_MIGRATION: &[&str] = &[
     r#"
         DROP FUNCTION :ARCHIMEDES_SCHEMA.tg_jobs__after_insert;
     "#,
-
     // Create or replace 'add_job' function with full function body
     r#"
         CREATE OR REPLACE FUNCTION :ARCHIMEDES_SCHEMA.add_job(identifier text, payload json DEFAULT NULL::json, queue_name text DEFAULT NULL::text, run_at timestamp with time zone DEFAULT NULL::timestamp with time zone, max_attempts integer DEFAULT NULL::integer, job_key text DEFAULT NULL::text, priority integer DEFAULT NULL::integer, flags text[] DEFAULT NULL::text[], job_key_mode text DEFAULT 'replace'::text) RETURNS :ARCHIMEDES_SCHEMA._private_jobs
@@ -86,7 +85,6 @@ pub const M000018_MIGRATION: &[&str] = &[
         end;
         $$;
     "#,
-
     // Create or replace 'add_jobs' function with full function body
     r#"
         CREATE OR REPLACE FUNCTION :ARCHIMEDES_SCHEMA.add_jobs(specs :ARCHIMEDES_SCHEMA.job_spec[], job_key_preserve_run_at boolean DEFAULT false) RETURNS SETOF :ARCHIMEDES_SCHEMA._private_jobs
@@ -178,7 +176,6 @@ pub const M000018_MIGRATION: &[&str] = &[
         end;
         $$;
     "#,
-
     // Create or replace 'remove_job' function with full function body
     r#"
         CREATE OR REPLACE FUNCTION :ARCHIMEDES_SCHEMA.remove_job(job_key text) RETURNS :ARCHIMEDES_SCHEMA._private_jobs

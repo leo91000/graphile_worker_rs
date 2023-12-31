@@ -9,7 +9,6 @@ pub const M000015_MIGRATION: &[&str] = &[
     r#"
         DROP FUNCTION :ARCHIMEDES_SCHEMA.tg__update_timestamp();
     "#,
-
     // Create a new function to unlock jobs and job queues
     r#"
         CREATE FUNCTION :ARCHIMEDES_SCHEMA.force_unlock_workers(worker_ids text[]) RETURNS void AS $$

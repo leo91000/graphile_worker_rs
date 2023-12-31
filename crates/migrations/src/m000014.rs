@@ -3,7 +3,6 @@ pub const M000014_MIGRATION: &[&str] = &[
     r#"
         DROP FUNCTION :ARCHIMEDES_SCHEMA.add_job;
     "#,
-
     // Create the new 'add_job' function with changed parameters
     r#"
         CREATE FUNCTION :ARCHIMEDES_SCHEMA.add_job(identifier text, payload json DEFAULT NULL::json, queue_name text DEFAULT NULL::text, run_at timestamp with time zone DEFAULT NULL::timestamp with time zone, max_attempts int DEFAULT NULL::int, job_key text DEFAULT NULL::text, priority int DEFAULT NULL::int, flags text[] DEFAULT NULL::text[], job_key_mode text DEFAULT 'replace'::text) RETURNS :ARCHIMEDES_SCHEMA.jobs
@@ -77,12 +76,10 @@ pub const M000014_MIGRATION: &[&str] = &[
         end;
         $$;
     "#,
-
     // Drop the existing 'reschedule_jobs' function
     r#"
         DROP FUNCTION :ARCHIMEDES_SCHEMA.reschedule_jobs;
     "#,
-
     // Create the new 'reschedule_jobs' function with changed parameters
     r#"
         CREATE FUNCTION :ARCHIMEDES_SCHEMA.reschedule_jobs(job_ids bigint[], run_at timestamp with time zone DEFAULT NULL::timestamp with time zone, priority int DEFAULT NULL::int, attempts int DEFAULT NULL::int, max_attempts int DEFAULT NULL::int) RETURNS SETOF :ARCHIMEDES_SCHEMA.jobs
