@@ -12,4 +12,5 @@ pub use archimedes_macros::task;
 pub use archimedes_task_handler::*;
 
 pub use builder::{WorkerBuildError, WorkerOptions};
+pub use helpers::WorkerHelpers;
 pub use runner::{Worker, WorkerContext};
