@@ -37,14 +37,14 @@ pub async fn get_tasks_details<'e>(
     escaped_schema: &str,
     task_names: Vec<String>,
 ) -> Result<TaskDetails> {
-    let insert_tasks_query = format!("insert into {escaped_schema}.tasks (identifier) select unnest($1::text[]) on conflict do nothing");
+    let insert_tasks_query = format!("insert into {escaped_schema}._private_tasks as tasks (identifier) select unnest($1::text[]) on conflict do nothing");
     query(&insert_tasks_query)
         .bind(&task_names)
         .execute(executor.clone())
         .await?;
 
     let select_tasks_query = format!(
-        "select id, identifier from {escaped_schema}.tasks where identifier = any($1::text[])"
+        "select id, identifier from {escaped_schema}._private_tasks as tasks where identifier = any($1::text[])"
     );
     let tasks: Vec<TaskRow> = query_as(&select_tasks_query)
         .bind(&task_names)

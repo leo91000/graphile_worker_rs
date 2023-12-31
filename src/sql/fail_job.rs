@@ -18,20 +18,20 @@ pub async fn fail_job(
         let sql = format!(
             r#"
                 with j as (
-                    update {escaped_schema}.jobs
+                    update {escaped_schema}._private_jobs as jobs
                         set
-                            last_error = $2,
+                            last_error = $2::text,
                             run_at = greatest(now(), run_at) + (exp(least(attempts, 10)) * interval '1 second'),
                             locked_by = null,
                             locked_at = null,
                             payload = coalesce($4::json, jobs.payload)
-                        where id = $1 and locked_by = $3
+                        where id = $1::bigint and locked_by = $3::text
                         returning *
                 )
-                update {escaped_schema}.job_queues
+                update {escaped_schema}._private_job_queues as job_queues
                     set locked_by = null, locked_at = null
                     from j
-                    where job_queues.id = j.job_queue_id and job_queues.locked_by = $3;
+                    where job_queues.id = j.job_queue_id and job_queues.locked_by = $3::text;
             "#
         );
 
@@ -45,14 +45,14 @@ pub async fn fail_job(
     } else {
         let sql = format!(
             r#"
-                update {escaped_schema}.jobs
+                update {escaped_schema}._private_jobs as jobs
                     set
-                        last_error = $2,
+                        last_error = $2::text,
                         run_at = greatest(now(), run_at) + (exp(least(attempts, 10)) * interval '1 second'),
                         locked_by = null,
                         locked_at = null,
                         payload = coalesce($4::json, jobs.payload)
-                    where id = $1 and locked_by = $3;
+                    where id = $1::bigint and locked_by = $3::text;
             "#
         );
 
@@ -79,16 +79,16 @@ pub async fn fail_jobs(
     let sql = format!(
         r#"
             with j as (
-                update {escaped_schema}.jobs
+                update {escaped_schema}._private_jobs as jobs
                     set
-                        last_error = $2,
+                        last_error = $2::text,
                         run_at = greatest(now(), run_at) + (exp(least(attempts, 10)) * interval '1 second'),
                         locked_by = null,
                         locked_at = null
                     where id = any($1::int[]) and locked_by = any($3::text[])
                     returning *
             ), queues as (
-                update {escaped_schema}.job_queues
+                update {escaped_schema}._private_job_queues as job_queues
                     set locked_by = null, locked_at = null
                     from j
                     where job_queues.id = j.job_queue_id and job_queues.locked_by = any($3::text[])
@@ -101,7 +101,6 @@ pub async fn fail_jobs(
 
     query(&sql)
         .bind(job_ids)
-        .bind(message)
         .bind(message)
         .bind(worker_id)
         .execute(executor)

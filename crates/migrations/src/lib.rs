@@ -11,9 +11,14 @@ mod m000010;
 mod m000011;
 mod m000012;
 mod m000013;
+mod m000014;
+mod m000015;
+mod m000016;
+mod m000017;
+mod m000018;
 
 use sqlx::{query, Acquire, Error as SqlxError, PgExecutor, Postgres, Row};
-use tracing::info;
+use tracing::{info};
 
 use m000001::M000001_MIGRATION;
 use m000002::M000002_MIGRATION;
@@ -28,6 +33,11 @@ use m000010::M000010_MIGRATION;
 use m000011::M000011_MIGRATION;
 use m000012::M000012_MIGRATION;
 use m000013::M000013_MIGRATION;
+use m000014::M000014_MIGRATION;
+use m000015::M000015_MIGRATION;
+use m000016::M000016_MIGRATION;
+use m000017::M000017_MIGRATION;
+use m000018::M000018_MIGRATION;
 
 pub const MIGRATIONS: &[&[&str]] = &[
     M000001_MIGRATION,
@@ -43,6 +53,11 @@ pub const MIGRATIONS: &[&[&str]] = &[
     M000011_MIGRATION,
     M000012_MIGRATION,
     M000013_MIGRATION,
+    M000014_MIGRATION,
+    M000015_MIGRATION,
+    M000016_MIGRATION,
+    M000017_MIGRATION,
+    M000018_MIGRATION,
 ];
 
 async fn install_schema<'e, E>(executor: E, escaped_schema: &str) -> Result<(), sqlx::Error>

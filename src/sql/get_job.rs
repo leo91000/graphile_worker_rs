@@ -54,7 +54,7 @@ pub async fn get_job<'e>(
         r#"
             with j as (
                 select jobs.job_queue_id, jobs.priority, jobs.run_at, jobs.id
-                    from {escaped_schema}.jobs
+                    from {escaped_schema}._private_jobs as jobs
                     where jobs.is_available = true
                     and run_at <= now()
                     and task_id = any($2::int[])
@@ -65,7 +65,7 @@ pub async fn get_job<'e>(
                     for update
                     skip locked
                 ) {update_queue_clause}
-                    update {escaped_schema}.jobs
+                    update {escaped_schema}._private_jobs as jobs
                         set
                             attempts = jobs.attempts + 1,
                             locked_by = $1::text,
@@ -76,7 +76,6 @@ pub async fn get_job<'e>(
         "#
     );
 
-    // TODO: get task details and bind task ids
     let mut q = query_as(&sql).bind(worker_id).bind(task_details.task_ids());
     if !flags_to_skip.is_empty() {
         q = q.bind(flags_to_skip);
@@ -101,7 +100,7 @@ fn get_queue_clause(escaped_schema: &str) -> String {
                 or 
                 jobs.job_queue_id in (
                     select id 
-                    from {escaped_schema}.job_queues
+                    from {escaped_schema}._private_job_queues as job_queues
                     where job_queues.is_available = true
                     for update
                     skip locked
@@ -115,9 +114,10 @@ fn get_update_queue_clause(escaped_schema: &str, param_ord: u8) -> String {
     format!(
         r#",
             q as (
-                update {escaped_schema}.job_queues
-                    set locked_by = ${param_ord},
-                    locked_at = now()
+                update {escaped_schema}._private_job_queues as job_queues
+                    set
+                        locked_by = ${param_ord},
+                        locked_at = now()
                 from j
                 where job_queues.id = j.job_queue_id
             )

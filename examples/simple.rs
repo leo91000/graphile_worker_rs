@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use archimedes::{task, JobSpec, WorkerContext, WorkerOptions};
 use chrono::{offset::Utc, Duration};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgConnectOptions;
 use tracing_subscriber::{
@@ -14,8 +15,13 @@ struct HelloPayload {
 }
 
 #[task]
-async fn say_hello(payload: HelloPayload, _ctx: WorkerContext) -> Result<(), ()> {
+async fn say_hello(payload: HelloPayload, _ctx: WorkerContext) -> Result<(), String> {
     println!("Hello {} !", payload.message);
+    // 30% chance to succeed to test retry
+    let mut rng = rand::thread_rng();
+    if rng.gen_range(0..100) < 70 {
+        return Err("Failed".to_string());
+    }
     Ok(())
 }
 

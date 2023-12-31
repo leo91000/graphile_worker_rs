@@ -13,16 +13,16 @@ pub async fn complete_job(
     if job.job_queue_id().is_some() {
         let sql = format!(
             r#"
-            with j as (
-                delete from {escaped_schema}.jobs
-                where id = $1
-                returning *
-            )
-            update {escaped_schema}.job_queues
-                set locked_by = null, locked_at = null
-                from j
-                where job_queues.id = j.job_queue_id and job_queues.locked_by = $2;
-        "#
+                with j as (
+                    delete from {escaped_schema}._private_jobs as jobs
+                    where id = $1::bigint
+                    returning *
+                )
+                update {escaped_schema}._private_job_queues as job_queues
+                    set locked_by = null, locked_at = null
+                    from j
+                    where job_queues.id = j.job_queue_id and job_queues.locked_by = $2::text;
+            "#
         );
 
         query(&sql)
@@ -33,8 +33,8 @@ pub async fn complete_job(
     } else {
         let sql = format!(
             r#"
-                delete from {escaped_schema}.jobs
-                where id = $1
+                delete from {escaped_schema}._private_jobs
+                where id = $1::bigint;
             "#
         );
 

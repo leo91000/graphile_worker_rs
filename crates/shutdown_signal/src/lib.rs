@@ -11,11 +11,15 @@ cfg_if! {
         use tokio::signal::windows::*;
 
         async fn raw_shutdown_signal() {
+            let mut  ctrl_c = ctrl_c().expect("Failed to attach Ctrl_C shutdown signal (windows)");
+            let mut  ctrl_close = ctrl_close().expect("Failed to attach Ctrl_close shutdown signal (windows)");
+            let mut  ctrl_shutdown = ctrl_shutdown().expect("Failed to attach Ctrl_shutdown shutdown signal (windows)");
+            let mut  ctrl_logoff = ctrl_logoff().expect("Failed to attach Ctrl_logoff shutdown signal (windows)");
             select! {
-                _ = ctrl_c().recv() => (),
-                _ = ctrl_close().recv() => (),
-                _ = ctrl_shutdown().recv() => (),
-                _ = ctrl_logoff().recv() => (),
+                _ = ctrl_c.recv() => (),
+                _ = ctrl_close.recv() => (),
+                _ = ctrl_shutdown.recv() => (),
+                _ = ctrl_logoff.recv() => (),
             }
         }
     } else if #[cfg(unix)] {
