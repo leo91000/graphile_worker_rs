@@ -2,6 +2,7 @@ use crate::errors::ArchimedesError;
 use chrono::Utc;
 use getset::Getters;
 use sqlx::{query, PgExecutor};
+use tracing::info;
 
 #[derive(Debug, Default)]
 pub enum JobKeyMode {
@@ -59,7 +60,7 @@ pub async fn add_job(
 
     query(&sql)
         .bind(identifier)
-        .bind(payload)
+        .bind(&payload)
         .bind(spec.queue_name)
         .bind(spec.run_at)
         .bind(spec.max_attempts)
@@ -69,6 +70,12 @@ pub async fn add_job(
         .bind(job_key_mode)
         .execute(executor)
         .await?;
+
+    info!(
+        identifier,
+        payload = ?payload,
+        "Job added to queue"
+    );
 
     Ok(())
 }

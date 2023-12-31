@@ -25,12 +25,16 @@ cargo add archimedes
 The definition of a task consist simply of an async function and a task identifier
 
 ```rust
-#[derive(Deserialize)]
+use serde::{Deserialize, Serialize};
+use archimedes::{task, WorkerContext};
+
+#[derive(Deserialize, Serialize)]
 struct HelloPayload {
     name: String,
 }
 
-async fn say_hello(_ctx: WorkerCtx, payload: HelloPayload) -> Result<(), ..> {
+#[task]
+async fn say_hello(payload: HelloPayload, _ctx: WorkerContext) -> Result<(), ()> {
     println!("Hello {} !", payload.name);
     Ok(())
 }
@@ -40,7 +44,7 @@ async fn main() -> Result<(), ..> {
     archimedes::WorkerOptions::default()
         .concurrency(2)
         .schema("example_simple_worker")
-        .define_job("say_hello", say_hello)
+        .define_job(say_hello)
         .pg_pool(pg_pool)
         .init()
         .await?
@@ -57,6 +61,51 @@ Connect to your database and run the following SQL:
 
 ```sql
 SELECT archimedes_worker.add_job('say_hello', json_build_object('name', 'Bobby Tables'));
+```
+
+### Schedule a job via RUST
+
+```rust
+// Reuse the task defined earlier :
+use serde::{Deserialize, Serialize};
+use archimedes::{task, WorkerContext};
+
+#[derive(Deserialize, Serialize)]
+struct HelloPayload {
+    name: String,
+}
+
+#[task]
+async fn say_hello(payload: HelloPayload, _ctx: WorkerContext) -> Result<(), ()> {
+    println!("Hello {} !", payload.name);
+    Ok(())
+}
+
+// Run the task:
+#[tokio::main]
+async fn main() -> Result<(), ()> {
+    let worker = archimedes::WorkerOptions::default()
+        .concurrency(2)
+        .schema("example_simple_worker")
+        .define_job(say_hello)
+        .pg_pool(pg_pool)
+        .init()
+        .await?;
+
+    let worker_helpers = worker.create_helpers();
+
+    worker_helpers.add_job::<say_hello>(
+        // Using add_job forces the payload to be same struct defined in our type
+        HelloPayload { name: "world".to_string() },
+        Default::default(),
+    ).await.unwrap();
+
+    // You can also use `add_raw_job` if you don't have access to the task, or don't care about end 2 end safety
+    worker_helpers.add_raw_job("say_hello", serde_json::json!({ "message": "world" })).await.unwrap();
+
+    Ok(())
+}
+
 ```
 
 ### Success!
