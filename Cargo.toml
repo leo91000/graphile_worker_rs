@@ -57,9 +57,7 @@ archimedes_crontab_runner = { path = "./crates/crontab_runner", version = "0.4.2
 archimedes_crontab_types = { path = "./crates/crontab_types", version = "0.4.0" }
 archimedes_crontab_parser = { path = "./crates/crontab_parser", version = "0.4.2" }
 archimedes_migrations = { path = "./crates/migrations", version = "0.2.4" }
-archimedes_macros = { path = "./crates/macros", version = "0.1.0", features = [
-  "reexport",
-] }
+archimedes_macros = { path = "./crates/macros", version = "0.1.0" }
 archimedes_task_handler = { path = "./crates/task_handler", version = "0.1.0" }
 archimedes_shutdown_signal = { path = "./crates/shutdown_signal", version = "0.2.4" }
 chrono = { version = "0.4.31", features = ["serde"] }

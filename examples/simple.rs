@@ -51,7 +51,9 @@ async fn main() {
         .await
         .unwrap();
 
-    worker
+    let helpers = worker.create_helpers();
+
+    helpers
         .add_job::<say_hello>(
             HelloPayload {
                 message: "world".to_string(),
