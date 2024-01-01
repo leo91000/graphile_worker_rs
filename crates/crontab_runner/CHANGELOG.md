@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.2](https://github.com/leo91000/archimedes/releases/tag/archimedes_crontab_runner@0.4.2)
+
+
+### ✨Features
+
+* feat: Handle job_key & job_key_mode in cron ([faa9d12](https://github.com/leo91000/archimedes/commit/faa9d12))
+
+### 🐛 Fixes
+
+* fix: Fix a bug where jobs would block event loop ([4861dd4](https://github.com/leo91000/archimedes/commit/4861dd4))
+
+### 🧹 chores
+
+* chore(deps): update all non-major dependencies ([554a4c0](https://github.com/leo91000/archimedes/commit/554a4c0))
+* chore(deps): update all non-major dependencies ([3731c13](https://github.com/leo91000/archimedes/commit/3731c13))
+* chore(deps): update rust crate serde_json to 1.0.96 ([d5ad5ce](https://github.com/leo91000/archimedes/commit/d5ad5ce))
+* chore(deps): update rust crate serde to 1.0.160 ([1b17a9e](https://github.com/leo91000/archimedes/commit/1b17a9e))
+* chore(deps): update rust crate serde to 1.0.159 ([4691d72](https://github.com/leo91000/archimedes/commit/4691d72))
+* chore(deps): update all non-major dependencies ([60d004e](https://github.com/leo91000/archimedes/commit/60d004e))
+* chore(deps): update rust crate serde_json to 1.0.95 ([10772ac](https://github.com/leo91000/archimedes/commit/10772ac))
+
+
 ## [0.4.1](https://github.com/leo91000/archimedes/releases/tag/archimedes_crontab_runner@0.4.1)
 
 
@@ -83,6 +105,7 @@
 
 * wip: Adds signal handling ([a8d11b2](https://github.com/leo91000/archimedes/commit/a8d11b2))
 * wip: first attempts at crontab_runner ([4c59b2e](https://github.com/leo91000/archimedes/commit/4c59b2e))
+
 
 
 
