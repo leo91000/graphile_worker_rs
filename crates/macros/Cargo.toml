@@ -1,6 +1,6 @@
 [package]
 name = "archimedes_macros"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 description = "Archimedes macros"
@@ -12,7 +12,7 @@ categories = []
 readme = "README.md"
 
 [dependencies]
-archimedes_task_handler = { path = "../task_handler", version = "0.1.0" }
+archimedes_task_handler = { path = "../task_handler", version = "0.2.0" }
 syn = { workspace = true }
 quote = { workspace = true }
 
