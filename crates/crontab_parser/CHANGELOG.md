@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.2](https://github.com/leo91000/archimedes/releases/tag/archimedes_crontab_parser@0.4.2)
+
+
+### ✨Features
+
+* feat: Handle job_key & job_key_mode in cron ([faa9d12](https://github.com/leo91000/archimedes/commit/faa9d12))
+
+### 🧹 chores
+
+* chore(deps): update all non-major dependencies ([554a4c0](https://github.com/leo91000/archimedes/commit/554a4c0))
+* chore(deps): update rust crate serde_json to 1.0.96 ([d5ad5ce](https://github.com/leo91000/archimedes/commit/d5ad5ce))
+* chore(deps): update rust crate serde to 1.0.160 ([1b17a9e](https://github.com/leo91000/archimedes/commit/1b17a9e))
+* chore(deps): update rust crate serde to 1.0.159 ([4691d72](https://github.com/leo91000/archimedes/commit/4691d72))
+* chore(deps): update rust crate serde_json to 1.0.95 ([10772ac](https://github.com/leo91000/archimedes/commit/10772ac))
+
+
 ## [0.4.1](https://github.com/leo91000/archimedes/releases/tag/archimedes_crontab_parser@0.4.1)
 
 
@@ -71,6 +87,7 @@
 ### 🚧 WIP
 
 * wip: attempt at nom parsing crontab ([c48e972](https://github.com/leo91000/archimedes/commit/c48e972))
+
 
 
 
