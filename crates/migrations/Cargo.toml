@@ -1,6 +1,6 @@
 [package]
 name = "archimedes_migrations"
-version = "0.2.4"
+version = "0.3.0"
 edition = "2021"
 license = "MIT"
 description = "Migrations package for archimedes, a high performance Rust/PostgreSQL job queue"

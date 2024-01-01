@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.4](https://github.com/leo91000/archimedes/releases/tag/archimedes_migrations@0.2.4)
+
+
+### ✨Features
+
+* feat: Sync with latest graphile worker changes ([ab25f29](https://github.com/leo91000/archimedes/commit/ab25f29))
+
+### 🐛 Fixes
+
+* fix: Rustfmt ([39841ad](https://github.com/leo91000/archimedes/commit/39841ad))
+
+### 🧹 chores
+
+* chore: Fmt ([170ef3c](https://github.com/leo91000/archimedes/commit/170ef3c))
+* chore(deps): update all non-major dependencies ([554a4c0](https://github.com/leo91000/archimedes/commit/554a4c0))
+* chore(deps): update all non-major dependencies ([3731c13](https://github.com/leo91000/archimedes/commit/3731c13))
+* chore(deps): update all non-major dependencies ([60d004e](https://github.com/leo91000/archimedes/commit/60d004e))
+
+
 ## [0.2.3](https://github.com/leo91000/archimedes/releases/tag/archimedes_migrations@0.2.3)
 
 
@@ -52,6 +71,7 @@
 ### 🤖 CI
 
 * ci: Update release script ([3614a76](https://github.com/leo91000/archimedes/commit/3614a76))
+
 
 
 
