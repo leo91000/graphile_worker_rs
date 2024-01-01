@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.0](https://github.com/leo91000/archimedes/releases/tag/archimedes_crontab_types@0.4.0)
+
+
+### ✨Features
+
+* feat: Handle job_key & job_key_mode in cron ([faa9d12](https://github.com/leo91000/archimedes/commit/faa9d12))
+
+### 🐛 Fixes
+
+* fix: Fix a bug where jobs would block event loop ([4861dd4](https://github.com/leo91000/archimedes/commit/4861dd4))
+
+### 🧹 chores
+
+* chore(deps): update all non-major dependencies ([554a4c0](https://github.com/leo91000/archimedes/commit/554a4c0))
+* chore: Add comments to crontab_types ([8aebeed](https://github.com/leo91000/archimedes/commit/8aebeed))
+* chore: Add more cases in should_run_at doc tests ([a3465cc](https://github.com/leo91000/archimedes/commit/a3465cc))
+* chore(deps): update rust crate serde_json to 1.0.96 ([d5ad5ce](https://github.com/leo91000/archimedes/commit/d5ad5ce))
+* chore(deps): update rust crate serde_json to 1.0.95 ([10772ac](https://github.com/leo91000/archimedes/commit/10772ac))
+
+
 ## 0.3.0
 
 
@@ -43,5 +63,6 @@
 ### 🚧 WIP
 
 * wip: first attempts at crontab_runner ([4c59b2e](https://github.com/leo91000/archimedes/commit/4c59b2e))
+
 
 
