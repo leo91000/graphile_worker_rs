@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.4](https://github.com/leo91000/archimedes/releases/tag/archimedes_shutdown_signal@0.2.4)
+
+
+### ✨Features
+
+* feat: Sync with latest graphile worker changes ([ab25f29](https://github.com/leo91000/archimedes/commit/ab25f29))
+
+### 🧹 chores
+
+* chore(deps): update all non-major dependencies ([554a4c0](https://github.com/leo91000/archimedes/commit/554a4c0))
+* chore(deps): update all non-major dependencies ([3731c13](https://github.com/leo91000/archimedes/commit/3731c13))
+* chore(deps): update rust crate futures to 0.3.28 ([9a59868](https://github.com/leo91000/archimedes/commit/9a59868))
+* chore(deps): update all non-major dependencies ([60d004e](https://github.com/leo91000/archimedes/commit/60d004e))
+
+
 ## [0.2.3](https://github.com/leo91000/archimedes/releases/tag/archimedes_shutdown_signal@0.2.3)
 
 
@@ -42,6 +57,7 @@
 ### 🚧 WIP
 
 * wip: Adds signal handling ([a8d11b2](https://github.com/leo91000/archimedes/commit/a8d11b2))
+
 
 
 
