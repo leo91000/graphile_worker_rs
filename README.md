@@ -6,7 +6,7 @@ Rewrite of [Graphile Worker](https://github.com/graphile/worker) in Rust. If you
 The port should mostly be compatible with `graphile-worker` (meaning you can run it side by side with Node.JS).
 
 The following differs from `Graphile Worker` :
-- No support for batch job
+- No support for batch job (I don't need it personnally, but if this is not your case, create an issue and I will see what I can do)
 - In `Graphile Worker`, each process has it's worker_id. In rust there is only one worker_id, then jobs are processed in your async runtime thread.
 
 Job queue for PostgreSQL running on Rust - allows you to run jobs (e.g.
