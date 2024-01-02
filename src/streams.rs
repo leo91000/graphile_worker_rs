@@ -43,6 +43,8 @@ pub async fn job_signal_stream(
     Ok(stream)
 }
 
+/// Returns a stream that yield every job that is available to be processed
+/// It stops when the shutdown_signal is triggered or when there is no more job to process
 pub fn job_stream(
     pg_pool: PgPool,
     shutdown_signal: ShutdownSignal,

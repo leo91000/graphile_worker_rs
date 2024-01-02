@@ -69,6 +69,8 @@ impl Worker {
         WorkerOptions::default()
     }
 
+    /// Run the worker and return when the shutdown signal is triggered
+    /// It listen for new jobs and run them as soon as they are available
     pub async fn run(&self) -> Result<(), WorkerRuntimeError> {
         let job_runner = self.job_runner();
         let crontab_scheduler = self.crontab_scheduler();
@@ -78,6 +80,8 @@ impl Worker {
         Ok(())
     }
 
+    /// Run the worker once and return when all jobs are processed
+    /// An error in the job will not stop the stream
     pub async fn run_once(&self) -> Result<(), WorkerRuntimeError> {
         let job_stream = job_stream(
             self.pg_pool.clone(),
@@ -89,13 +93,18 @@ impl Worker {
         );
 
         job_stream
-            .map(Ok::<_, ProcessJobError>)
-            .try_for_each_concurrent(self.concurrency, |job| async move {
-                run_and_release_job(&job, self, &StreamSource::RunOnce).await?;
-                info!(job_id = job.id(), "Job processed");
-                Ok(())
+            .for_each_concurrent(self.concurrency, |job| async move {
+                let result = run_and_release_job(&job, self, &StreamSource::RunOnce).await;
+                match result {
+                    Ok(_) => {
+                        info!(job_id = job.id(), "Job processed");
+                    }
+                    Err(e) => {
+                        error!("Error while processing job : {:?}", e);
+                    }
+                }
             })
-            .await?;
+            .await;
 
         Ok(())
     }
