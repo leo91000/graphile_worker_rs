@@ -8,7 +8,7 @@ use crate::errors::ArchimedesError;
 use crate::helpers::WorkerHelpers;
 use crate::sql::get_job::Job;
 use crate::sql::{get_job::get_job, task_identifiers::TaskDetails};
-use crate::streams::job_signal_stream;
+use crate::streams::{job_signal_stream, job_stream};
 use archimedes_crontab_runner::{cron_main, ScheduleCronJobError};
 use archimedes_crontab_types::Crontab;
 use archimedes_shutdown_signal::ShutdownSignal;
@@ -74,6 +74,28 @@ impl Worker {
         let crontab_scheduler = self.crontab_scheduler();
 
         try_join!(crontab_scheduler, job_runner)?;
+
+        Ok(())
+    }
+
+    pub async fn run_once(&self) -> Result<(), WorkerRuntimeError> {
+        let job_stream = job_stream(
+            self.pg_pool.clone(),
+            self.shutdown_signal.clone(),
+            self.task_details.clone(),
+            self.escaped_schema.clone(),
+            self.worker_id.clone(),
+            self.forbidden_flags.clone(),
+        );
+
+        job_stream
+            .map(Ok::<_, ProcessJobError>)
+            .try_for_each_concurrent(self.concurrency, |job| async move {
+                run_and_release_job(&job, self, &StreamSource::RunOnce).await?;
+                info!(job_id = job.id(), "Job processed");
+                Ok(())
+            })
+            .await?;
 
         Ok(())
     }
@@ -151,11 +173,7 @@ async fn process_one_job(
 
     match job {
         Some(job) => {
-            let job_result = run_job(&job, worker, &source).await;
-            release_job(job_result, &job, worker).await.map_err(|e| {
-                error!("Release job error : {:?}", e);
-                e
-            })?;
+            run_and_release_job(&job, worker, &source).await?;
             Ok(Some(job))
         }
         None => {
@@ -164,6 +182,19 @@ async fn process_one_job(
             Ok(None)
         }
     }
+}
+
+async fn run_and_release_job<'a>(
+    job: &'a Job,
+    worker: &Worker,
+    source: &StreamSource,
+) -> Result<&'a Job, ProcessJobError> {
+    let job_result = run_job(job, worker, source).await;
+    release_job(job_result, job, worker).await.map_err(|e| {
+        error!("Release job error : {:?}", e);
+        e
+    })?;
+    Ok(job)
 }
 
 #[derive(Error, Debug)]

@@ -4,6 +4,7 @@ use sqlx::{query, query_as, FromRow, PgExecutor};
 
 use crate::errors::Result;
 
+#[derive(Debug, Clone)]
 pub struct TaskDetails(HashMap<i32, String>);
 
 impl TaskDetails {
