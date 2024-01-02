@@ -73,12 +73,12 @@ async fn main() -> Result<(), ()> {
 
     // Using add_job forces the payload to be same struct defined in our type
     helpers.add_job::<say_hello>(
-        HelloPayload { name: "world".to_string() },
+        HelloPayload { name: "Bobby Tables".to_string() },
         Default::default(),
     ).await.unwrap();
 
     // You can also use `add_raw_job` if you don't have access to the task, or don't care about end 2 end safety
-    helpers.add_raw_job("say_hello", serde_json::json!({ "message": "world" }), Default::default()).await.unwrap();
+    helpers.add_raw_job("say_hello", serde_json::json!({ "name": "Bobby Tables" }), Default::default()).await.unwrap();
 
     Ok(())
 }
@@ -92,7 +92,7 @@ You should see the worker output `Hello Bobby Tables !`. Gosh, that was fast!
 
 - Standalone and embedded modes
 - Designed to be used both from JavaScript or directly in the database
-- <!-- TODO --> Easy to test (recommended: `runTaskListOnce` util) 
+- Easy to test (recommended: `run_once` util) 
 - Low latency (typically under 3ms from task schedule to execution, uses
   `LISTEN`/`NOTIFY` to be informed of jobs as they're inserted)
 - High performance (uses `SKIP LOCKED` to find jobs to execute, resulting in
@@ -110,7 +110,7 @@ You should see the worker output `Hello Bobby Tables !`. Gosh, that was fast!
 - Executes tasks written in Rust (these can call out to any other language or
   networked service)
 - Written natively in Rust
-- If you're running really lean, you can run Archimedes in the same Node
+- If you're running really lean, you can run Archimedes in the same Rust
   process as your server to keep costs and devops complexity down.
 
 ## Status

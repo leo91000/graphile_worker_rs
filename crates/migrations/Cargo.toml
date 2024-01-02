@@ -2,7 +2,7 @@
 name = "archimedes_migrations"
 version = "0.3.0"
 edition = "2021"
-license = "MIT"
+license-file = "LICENSE.md"
 description = "Migrations package for archimedes, a high performance Rust/PostgreSQL job queue"
 homepage = "https://docs.rs/archimedes_migrations"
 documentation = "https://docs.rs/archimedes_migrations"
