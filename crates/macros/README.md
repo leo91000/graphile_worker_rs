@@ -1,3 +1,3 @@
 # Archimedes migrations
 
-This package provide the migrations for the [Archimedes](docs.rs/archimedes) job scheduler.
+This package provide the macros for the [Archimedes](docs.rs/archimedes) job scheduler.

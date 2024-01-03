@@ -2,7 +2,7 @@
 name = "archimedes_crontab_types"
 version = "0.5.0"
 edition = "2021"
-license = "MIT"
+license-file = "LICENSE.md"
 description = "Crontab types package for archimedes, a high performance Rust/PostgreSQL job queue"
 homepage = "https://docs.rs/archimedes_crontab_types"
 documentation = "https://docs.rs/archimedes_crontab_types"
