@@ -14,7 +14,7 @@ pub enum MigrateError {
     ParseVersionError(#[from] std::num::ParseIntError),
     #[error("This version of Archimedes requires PostgreSQL v12.0 or greater (detected `server_version_num` = {0})")]
     IncompatibleVersion(u32),
-    #[error("Error occured while installing schema: {0}")]
+    #[error("Error occured while migrate: {0}")]
     SqlError(#[from] sqlx::Error),
 }
 
