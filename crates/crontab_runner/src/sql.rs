@@ -20,7 +20,7 @@ pub async fn get_known_crontabs<'e>(
 ) -> Result<Vec<KnownCrontab>, sqlx::Error> {
     let sql = format!(
         r#"
-            select * from {escaped_schema}.known_crontabs
+            select * from {escaped_schema}._private_known_crontabs
         "#
     );
 
@@ -40,7 +40,7 @@ where
 {
     let sql = format!(
         r#"
-            INSERT INTO {escaped_schema}.known_crontabs (identifier, known_since)
+            INSERT INTO {escaped_schema}._private_known_crontabs (identifier, known_since)
             SELECT identifier, $2
             FROM unnest($1::text[]) AS unnest (identifier)
             ON CONFLICT DO NOTHING
@@ -128,7 +128,7 @@ where
                 from json_array_elements($1::json) with ordinality AS entries (json, index)
             ),
             locks as (
-                insert into {escaped_schema}.known_crontabs as known_crontabs (identifier, known_since, last_execution)
+                insert into {escaped_schema}._private_known_crontabs as known_crontabs (identifier, known_since, last_execution)
                 select
                     specs.identifier,
                     $2::timestamptz as known_since,

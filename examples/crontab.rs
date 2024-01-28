@@ -57,8 +57,8 @@ async fn main() {
         .unwrap()
         .init()
         .await
-        .unwrap()
+        .expect("Failed to init worker")
         .run()
         .await
-        .unwrap();
+        .expect("Unexpected worker error");
 }

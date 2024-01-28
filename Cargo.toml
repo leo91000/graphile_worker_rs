@@ -33,6 +33,7 @@ cfg-if = "1.0.0"
 futures = "0.3.30"
 syn = "2.0.48"
 quote = "1.0.35"
+indoc = "2.0.4"
 
 [features]
 default = ["runtime-tokio-native-tls"]
