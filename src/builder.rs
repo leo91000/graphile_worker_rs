@@ -41,6 +41,8 @@ pub enum WorkerBuildError {
     QueryError(#[from] crate::errors::ArchimedesError),
     #[error("Missing database_url config")]
     MissingDatabaseUrl,
+    #[error("Error occured while migrating : {0}")]
+    MigrationError(#[from] archimedes_migrations::MigrateError),
 }
 
 impl WorkerOptions {
