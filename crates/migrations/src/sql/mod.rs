@@ -19,6 +19,7 @@ pub mod m000016;
 pub mod m000017;
 pub mod m000018;
 
+#[derive(Default)]
 pub struct ArchimedesMigration {
     name: &'static str,
     is_breaking: bool,
@@ -32,6 +33,23 @@ impl ArchimedesMigration {
 
     pub fn is_breaking(&self) -> bool {
         self.is_breaking
+    }
+
+    /// Parses the migration name and returns the migration number.
+    /// ```rust
+    /// let migration = ArchimedesMigration {
+    ///     name: "m000001_initial",
+    ///     ..Default::default(),
+    /// };
+    /// assert_eq!(migration.migration_number(), 1);
+    /// let migration = ArchimedesMigration {
+    ///     name: "m000002",
+    ///     ..Default::default(),
+    /// };
+    /// assert_eq!(migration.migration_number(), 2);
+    /// ```
+    pub fn migration_number(&self) -> u32 {
+        self.name[1..7].parse().expect("Invalid migration name")
     }
 
     pub async fn execute<'e>(
