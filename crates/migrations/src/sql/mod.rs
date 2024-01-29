@@ -21,9 +21,9 @@ pub mod m000018;
 
 #[derive(Default)]
 pub struct ArchimedesMigration {
-    name: &'static str,
-    is_breaking: bool,
-    pub(crate) stmts: &'static [&'static str],
+    pub name: &'static str,
+    pub is_breaking: bool,
+    pub stmts: &'static [&'static str],
 }
 
 impl ArchimedesMigration {
@@ -37,14 +37,15 @@ impl ArchimedesMigration {
 
     /// Parses the migration name and returns the migration number.
     /// ```rust
+    /// use archimedes_migrations::sql::ArchimedesMigration;
     /// let migration = ArchimedesMigration {
     ///     name: "m000001_initial",
-    ///     ..Default::default(),
+    ///     ..Default::default()
     /// };
     /// assert_eq!(migration.migration_number(), 1);
     /// let migration = ArchimedesMigration {
     ///     name: "m000002",
-    ///     ..Default::default(),
+    ///     ..Default::default()
     /// };
     /// assert_eq!(migration.migration_number(), 2);
     /// ```

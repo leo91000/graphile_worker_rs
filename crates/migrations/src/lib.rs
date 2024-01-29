@@ -1,5 +1,5 @@
 pub mod pg_version;
-mod sql;
+pub mod sql;
 
 use indoc::formatdoc;
 use pg_version::{check_postgres_version, fetch_and_check_postgres_version};
@@ -59,7 +59,7 @@ where
 }
 
 #[derive(FromRow, Default)]
-struct LastMigration {
+pub struct LastMigration {
     server_version_num: String,
     id: Option<i32>,
     biggest_breaking_id: Option<i32>,
