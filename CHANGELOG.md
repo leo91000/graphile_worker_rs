@@ -1,5 +1,223 @@
 # Changelog
 
+## [0.4.0](https://github.com/leo91000/graphile_worker_rs/releases/tag/graphile_worker-v0.4.0) - 2024-01-31
+
+### Added
+- Port breaking migration algorithm
+- Add pg version checking
+- Add initial support for breaking
+- Add run_once
+- Sync with latest graphile worker changes
+- add_job & add_raw_job
+- Add helpers
+- Make simple macro example working
+- Add task macro
+- Add task handler definitions
+- Abort running tasks 5 seconds after shutdown signal
+- Handle job_key & job_key_mode in cron
+- Add release xtask ([#32](https://github.com/leo91000/graphile_worker_rs/pull/32))
+- Cron runner done ✔️
+- Add backfill handling for crontab
+- Added utilities for `CrontabFill`
+- Handle process job error and stop stream
+- Done with parsing crontab
+- All parsing done
+- Add query parser
+- Can now complete jobs !
+- First working POC of hashmap of async fns
+- Add migration
+- first commit
+
+### Fixed
+- Rustfmt
+- Fix a bug where jobs would block event loop
+- Add correct feature flag for sqlx dependency
+- Fix typo in Cargo package keywords
+- use modulus instead of substraction for duration remaining
+
+### Other
+- Remove xtask
+- Add release workflow
+- Rename lib to graphile_worker
+- *(deps)* update rust crate itertools to 0.12.1
+- Fix tests
+- *(deps)* update rust crate serde_json to 1.0.113
+- Add comments
+- Update flake dependencies
+- Update flake buildInputs
+- Add nix flake
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate chrono to 0.4.33
+- *(deps)* update rust crate chrono to 0.4.32
+- *(deps)* update rust crate regex to 1.10.3
+- *(deps)* update rust crate clap to 4.4.18
+- *(deps)* update rust crate clap to 4.4.17
+- *(deps)* update rust crate clap to 4.4.16
+- *(deps)* update rust crate clap to 4.4.15
+- *(deps)* update rust crate clap to 4.4.14
+- *(deps)* update rust crate serde to 1.0.195
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate serde_json to 1.0.111
+- *(deps)* update rust crate syn to 2.0.47
+- Add mroe license
+- Add more precision in README.md
+- Add license & fix typos in README
+- *(deps)* update all non-major dependencies
+- Add comments
+- *(deps)* update rust crate syn to 2.0.45
+- *(release)* archimedes@0.4.0
+- *(release)* archimedes_migrations@0.3.0
+- *(release)* archimedes_macros@0.2.0
+- *(release)* archimedes_crontab_runner@0.5.0
+- *(release)* archimedes_crontab_parser@0.5.0
+- *(release)* archimedes_task_handler@0.2.0
+- *(release)* archimedes_shutdown_signal@0.3.0
+- *(release)* archimedes_crontab_types@0.5.0
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate quote to 1.0.34
+- Fmt
+- Add code comment on WorkerHelpers and add_job
+- Fix invalid example in README
+- Reduce README.md example
+- Remove invalid chunks in README.md
+- Update README
+- Add comment on the WorkerHelpers::new method
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate clap to 4.4.12
+- *(deps)* update actions/checkout action to v4
+- *(deps)* update rust crate anyhow to 1.0.77
+- Remove unused import
+- Remove duration in TaskAbort timeout log
+- *(deps)* update rust crate thiserror to 1.0.52
+- *(deps)* update all non-major dependencies
+- Add comments to crontab_types
+- Add more cases in should_run_at doc tests
+- *(deps)* update rust crate clap to 4.2.5
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate tracing-subscriber to 0.3.17
+- *(deps)* update rust crate regex to 1.8.1
+- *(deps)* update rust crate regex to 1.8.0
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate clap to 4.2.3
+- *(deps)* update rust crate clap to 4.2.2
+- *(deps)* update rust crate serde_json to 1.0.96
+- *(deps)* update rust crate serde to 1.0.160
+- *(deps)* update rust crate futures to 0.3.28
+- *(deps)* update rust crate clap to 4.2.1
+- *(deps)* update rust crate clap to 4.2.0
+- *(deps)* update rust crate serde to 1.0.159
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate serde_json to 1.0.95
+- *(deps)* update rust crate regex to 1.7.3
+- *(deps)* update rust crate clap to 4.1.13
+- *(deps)* update rust crate clap to 4.1.12
+- *(release)* archimedes@0.3.3
+- *(release)* Fix changelog not using latest tag for new changelog
+- *(release)* Remove unused import
+- *(release)* archimedes@0.3.2
+- *(release)* archimedes_migrations@0.2.4
+- *(release)* archimedes_crontab_runner@0.4.2
+- *(release)* archimedes_crontab_parser@0.4.2
+- *(release)* archimedes_shutdown_signal@0.2.4
+- *(release)* Add URL to tag release in github
+- Print error to STERR instead of STDOUT
+- Use `git push --tags` command instead of `git push --follow-tags`
+- *(release)* archimedes@0.3.1
+- *(release)* archimedes_migrations@0.2.3
+- *(release)* archimedes_crontab_runner@0.4.1
+- *(release)* archimedes_crontab_parser@0.4.1
+- *(release)* archimedes_shutdown_signal@0.2.3
+- Fix release script adding dependencies
+- *(deps)* update rust crate toml_edit to 0.19.8
+- *(deps)* update all non-major dependencies
+- Release script now update dependencies version for non updated
+- *(release)* archimedes@0.3.0
+- *(release)* archimedes_migrations@0.2.2
+- *(release)* archimedes_crontab_runner@0.4.0
+- *(release)* archimedes_crontab_parser@0.4.0
+- *(release)* archimedes_shutdown_signal@0.2.2
+- *(release)* archimedes_crontab_types@0.4.0
+- Update release script
+- *(shutdown_signal)* Use tokio macros features
+- *(release)* archimedes@0.1.0
+- *(release)* archimedes_migrations@0.1.1
+- *(release)* archimedes_crontab_runner@0.2.0
+- *(release)* archimedes_crontab_parser@0.2.0
+- *(release)* archimedes_shutdown_signal@0.1.1
+- *(release)* archimedes_crontab_types@0.2.0
+- *(deps)* update rust crate serde to 1.0.158
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate serde to 1.0.156
+- *(deps)* update rust crate chrono to 0.4.24
+- *(deps)* update rust crate serde to 1.0.155
+- *(deps)* update rust crate futures to 0.3.27
+- *(deps)* update rust crate serde to 1.0.154
+- *(deps)* update rust crate serde to 1.0.153
+- *(deps)* update rust crate thiserror to 1.0.39
+- *(deps)* update rust crate serde_json to 1.0.94
+- *(deps)* update rust crate serde_qs to 0.12.0
+- *(deps)* update rust crate tokio to 1.26.0
+- *(deps)* update rust crate once_cell to 1.17.1
+- *(deps)* update rust crate serde_json to 1.0.93
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate futures to 0.3.26
+- *(deps)* update rust crate tokio to 1.25.0
+- *(deps)* update rust crate tokio to 1.24.2
+- *(deps)* update rust crate nom to 7.1.3
+- *(deps)* update rust crate serde_qs to 0.11.0
+- *(deps)* update rust crate tokio to 1.24.1
+- *(deps)* update rust crate tokio to 1.24.0
+- *(deps)* update rust crate tokio to 1.23.1
+- *(deps)* update rust crate nom to 7.1.2
+- *(deps)* update rust crate once_cell to 1.17.0
+- *(deps)* update rust crate serde to 1.0.152
+- Adds signal handling
+- *(deps)* update rust crate num_cpus to 1.15.0
+- Fix error in code block in README
+- Add differences with graphile-worker in README
+- Add crontab runner to the worker main run function
+- Add license field for crontab_runner toml file
+- Specify version for workspace packages
+- Remove keywords and categories from packages metadata
+- Include https:// in package metadata documentation and homepage
+- Add license to crontab_types
+- Prepare packages for publishing
+- Apply clippy lint
+- *(deps)* update all non-major dependencies
+- Remove unused deps
+- Add renovate
+- Remove all features flags on clippy check
+- Remove nightly flag
+- Allow dead code for temporarly unused function
+- Clippy fixes
+- Add CI
+- Remove unused test
+- Improve README
+- Fix typo
+- Add README
+- Refactor folder structure
+- first attempts at crontab_runner
+- Use u32 for crontab value
+- Update schedule_crontab_jobs_at signature
+- Added should_run_at documentation
+- Add CrontabTimer tests
+- Refactor folder structure
+- reexport error kind
+- Remove unused regexes module
+- Replace manual digit parsing with character::complete::u8
+- attempt at nom parsing crontab
+- cleanup
+- Remove empty file
+- Refactor folder structure
+- Remove unused Error
+- Refactor worker
+- Added example
+- dynamic fn map
+- Clippy fixes
+- extract escape_identifier
+- Remove .env file
+- Gitignore .env file
+
 ## [0.3.3](https://github.com/leo91000/archimedes/releases/tag/archimedes@0.3.3)
 
 
