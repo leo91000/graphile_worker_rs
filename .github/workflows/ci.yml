@@ -1,21 +1,16 @@
 name: Test
-
+permissions: "write-all"
 on:
   push:
     branches:
       - main
-
   pull_request:
     branches:
       - main
-
-
 jobs:
   test:
     timeout-minutes: 20
-
     runs-on: ubuntu-22.04
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
