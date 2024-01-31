@@ -1,18 +1,18 @@
 [package]
-name = "archimedes_macros"
+name = "graphile_worker_macros"
 version = "0.2.0"
 edition = "2021"
 license-file = "LICENSE.md"
-description = "Archimedes macros"
-homepage = "https://docs.rs/archimedes_macros"
-documentation = "https://docs.rs/archimedes_macros"
-repository = "https://github.com/leo91000/archimedes/crates/macros"
+description = "Graphile Worker macros"
+homepage = "https://docs.rs/graphile_worker_macros"
+documentation = "https://docs.rs/graphile_worker_macros"
+repository = "https://github.com/leo91000/graphile_worker/crates/macros"
 keywords = []
 categories = []
 readme = "README.md"
 
 [dependencies]
-archimedes_task_handler = { path = "../task_handler", version = "0.2.0" }
+graphile_worker_task_handler = { path = "../task_handler", version = "0.2.0" }
 syn = { workspace = true }
 quote = { workspace = true }
 

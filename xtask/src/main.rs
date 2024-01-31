@@ -23,7 +23,12 @@ enum Command {
 }
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = "Archimedes helper tasks cli")]
+#[command(
+    author,
+    version,
+    about,
+    long_about = "Graphile Worker helper tasks cli"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,

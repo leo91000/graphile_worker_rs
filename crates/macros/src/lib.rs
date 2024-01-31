@@ -46,11 +46,11 @@ impl Parse for TaskAttributes {
 /// Procedural macro to generate a task definition based on a function.
 /// Example :
 /// ```rust
-/// use archimedes_task_handler::TaskHandler;
+/// use graphile_worker_task_handler::TaskHandler;
 ///
-/// #[archimedes_macros::task(
-///     // This parameter is optional, it will default to "archimedes"
-///     source_crate = "archimedes_task_handler"
+/// #[graphile_worker_macros::task(
+///     // This parameter is optional, it will default to "graphile_worker"
+///     source_crate = "graphile_worker_task_handler"
 /// )]
 /// async fn my_task(ctx: String, payload: String) -> Result<(), String> {
 ///    println!("{} {}", ctx, payload);
@@ -94,7 +94,7 @@ pub fn task(attr: TokenStream, item: TokenStream) -> TokenStream {
             let crate_name = syn::Ident::new(&crate_name, name.span());
             quote! { #crate_name }
         }
-        None => quote! { archimedes },
+        None => quote! { graphile_worker },
     };
 
     // Extract the identifier

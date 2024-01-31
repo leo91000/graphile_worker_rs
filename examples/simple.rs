@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
-use archimedes::{task, JobSpec, WorkerContext, WorkerOptions};
 use chrono::{offset::Utc, Duration};
+use graphile_worker::{task, JobSpec, WorkerContext, WorkerOptions};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgConnectOptions;

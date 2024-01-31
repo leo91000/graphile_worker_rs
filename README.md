@@ -1,4 +1,4 @@
-# Archimedes
+# Graphile Worker RS
 
 **NOT PRODUCTION READY**
 
@@ -17,7 +17,7 @@ used with any PostgreSQL-backed application.
 ### Add the worker to your project:
 
 ```
-cargo add archimedes
+cargo add graphile_worker
 ```
 
 ### Create tasks and run the worker
@@ -26,7 +26,7 @@ The definition of a task consist simply of an async function and a task identifi
 
 ```rust
 use serde::{Deserialize, Serialize};
-use archimedes::{task, WorkerContext};
+use graphile_worker::{task, WorkerContext};
 
 #[derive(Deserialize, Serialize)]
 struct HelloPayload {
@@ -41,7 +41,7 @@ async fn say_hello(payload: HelloPayload, _ctx: WorkerContext) -> Result<(), ()>
 
 #[tokio::main]
 async fn main() -> Result<(), ()> {
-    archimedes::WorkerOptions::default()
+    graphile_worker::WorkerOptions::default()
         .concurrency(2)
         .schema("example_simple_worker")
         .define_job(say_hello)
@@ -60,7 +60,7 @@ async fn main() -> Result<(), ()> {
 Connect to your database and run the following SQL:
 
 ```sql
-SELECT archimedes_worker.add_job('say_hello', json_build_object('name', 'Bobby Tables'));
+SELECT graphile_worker.add_job('say_hello', json_build_object('name', 'Bobby Tables'));
 ```
 
 ### Schedule a job via RUST
@@ -110,7 +110,7 @@ You should see the worker output `Hello Bobby Tables !`. Gosh, that was fast!
 - Executes tasks written in Rust (these can call out to any other language or
   networked service)
 - Written natively in Rust
-- If you're running really lean, you can run Archimedes in the same Rust
+- If you're running really lean, you can run Graphile Worker in the same Rust
   process as your server to keep costs and devops complexity down.
 
 ## Status
@@ -127,11 +127,11 @@ Note: Postgres 12 is required for the `generated always as (expression)` feature
 ## Installation
 
 ```
-cargo add archimedes
+cargo add graphile_worker
 ```
 
 ## Running
 
-`archimedes` manages its own database schema (`archimedes_worker`). Just
+`graphile_worker` manages its own database schema (`graphile_worker_worker`). Just
 point at your database and we handle our own migrations.
 

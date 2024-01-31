@@ -105,7 +105,7 @@ impl CrontabFill {
     /// Convert a crontab fill to a number of seconds
     ///
     /// ```rust
-    /// use archimedes_crontab_types::CrontabFill;
+    /// use graphile_worker_crontab_types::CrontabFill;
     ///
     /// let fill = CrontabFill::new(0, 0, 0, 0, 0);
     /// assert_eq!(0, fill.to_secs());
@@ -147,7 +147,7 @@ impl CrontabTimer {
     /// Check if the timer should run at specifed date
     ///
     /// ```rust
-    /// use archimedes_crontab_types::{CrontabValue, CrontabTimer};
+    /// use graphile_worker_crontab_types::{CrontabValue, CrontabTimer};
     ///
     /// let crontab_timer = CrontabTimer {
     ///     minutes: vec![CrontabValue::Number(30)],
@@ -178,7 +178,7 @@ impl Crontab {
     /// Shorcut method to timer : check if the crontab should run at specified date
     ///
     /// ```rust
-    /// use archimedes_crontab_types::{CrontabValue, CrontabTimer, Crontab};
+    /// use graphile_worker_crontab_types::{CrontabValue, CrontabTimer, Crontab};
     /// use chrono::prelude::*;
     /// use std::str::FromStr;
     ///

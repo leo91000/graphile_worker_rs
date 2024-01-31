@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use archimedes_shutdown_signal::ShutdownSignal;
 use futures::{stream, Stream};
+use graphile_worker_shutdown_signal::ShutdownSignal;
 use sqlx::{postgres::PgListener, PgPool};
 use tracing::error;
 

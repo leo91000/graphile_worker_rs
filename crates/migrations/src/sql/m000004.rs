@@ -1,16 +1,16 @@
 use indoc::indoc;
 
-use super::ArchimedesMigration;
+use super::GraphileWorkerMigration;
 
-pub const M000004_MIGRATION: ArchimedesMigration = ArchimedesMigration {
+pub const M000004_MIGRATION: GraphileWorkerMigration = GraphileWorkerMigration {
     name: "m000004",
     is_breaking: false,
     stmts: &[
         indoc! {r#"
-            drop function :ARCHIMEDES_SCHEMA.add_job(text, json, text, timestamptz, int, text);
+            drop function :GRAPHILE_WORKER_SCHEMA.add_job(text, json, text, timestamptz, int, text);
         "#},
         indoc! {r#"
-            create function :ARCHIMEDES_SCHEMA.add_job(
+            create function :GRAPHILE_WORKER_SCHEMA.add_job(
                 identifier text,
                 payload json = null,
                 queue_name text = null,
@@ -18,9 +18,9 @@ pub const M000004_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                 max_attempts int = null,
                 job_key text = null,
                 priority int = null
-            ) returns :ARCHIMEDES_SCHEMA.jobs as $$
+            ) returns :GRAPHILE_WORKER_SCHEMA.jobs as $$
             declare
-                v_job :ARCHIMEDES_SCHEMA.jobs;
+                v_job :GRAPHILE_WORKER_SCHEMA.jobs;
             begin
                 -- Apply rationality checks
                 if length(identifier) > 128 then
@@ -38,7 +38,7 @@ pub const M000004_MIGRATION: ArchimedesMigration = ArchimedesMigration {
         
                 if job_key is not null then
                     -- Upsert job
-                    insert into :ARCHIMEDES_SCHEMA.jobs (
+                    insert into :GRAPHILE_WORKER_SCHEMA.jobs (
                         task_identifier,
                         payload,
                         queue_name,
@@ -79,7 +79,7 @@ pub const M000004_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                     -- Upsert failed -> there must be an existing job that is locked. Remove
                     -- existing key to allow a new one to be inserted, and prevent any
                     -- subsequent retries by bumping attempts to the max allowed.
-                    update :ARCHIMEDES_SCHEMA.jobs
+                    update :GRAPHILE_WORKER_SCHEMA.jobs
                         set
                             key = null,
                             attempts = jobs.max_attempts
@@ -87,7 +87,7 @@ pub const M000004_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                 end if;
 
                 -- insert the new job. Assume no conflicts due to the update above
-                insert into :ARCHIMEDES_SCHEMA.jobs(
+                insert into :GRAPHILE_WORKER_SCHEMA.jobs(
                     task_identifier,
                     payload,
                     queue_name,
@@ -113,10 +113,10 @@ pub const M000004_MIGRATION: ArchimedesMigration = ArchimedesMigration {
             $$ language plpgsql volatile;
         "#},
         indoc! {r#"
-            create function :ARCHIMEDES_SCHEMA.complete_jobs(
+            create function :GRAPHILE_WORKER_SCHEMA.complete_jobs(
                 job_ids bigint[]
-            ) returns setof :ARCHIMEDES_SCHEMA.jobs as $$
-                delete from :ARCHIMEDES_SCHEMA.jobs
+            ) returns setof :GRAPHILE_WORKER_SCHEMA.jobs as $$
+                delete from :GRAPHILE_WORKER_SCHEMA.jobs
                     where id = any(job_ids)
                     and (
                         locked_by is null
@@ -127,11 +127,11 @@ pub const M000004_MIGRATION: ArchimedesMigration = ArchimedesMigration {
             $$ language sql volatile;
         "#},
         indoc! {r#"
-            create function :ARCHIMEDES_SCHEMA.permanently_fail_jobs(
+            create function :GRAPHILE_WORKER_SCHEMA.permanently_fail_jobs(
                 job_ids bigint[],
                 error_message text = null
-            ) returns setof :ARCHIMEDES_SCHEMA.jobs as $$
-                update :ARCHIMEDES_SCHEMA.jobs
+            ) returns setof :GRAPHILE_WORKER_SCHEMA.jobs as $$
+                update :GRAPHILE_WORKER_SCHEMA.jobs
                     set
                         last_error = coalesce(error_message, 'Manually marked as failed'),
                         attempts = max_attempts
@@ -145,14 +145,14 @@ pub const M000004_MIGRATION: ArchimedesMigration = ArchimedesMigration {
             $$ language sql volatile;
         "#},
         indoc! {r#"
-            create function :ARCHIMEDES_SCHEMA.reschedule_jobs(
+            create function :GRAPHILE_WORKER_SCHEMA.reschedule_jobs(
                 job_ids bigint[],
                 run_at timestamptz = null,
                 priority int = null,
                 attempts int = null,
                 max_attempts int = null
-            ) returns setof :ARCHIMEDES_SCHEMA.jobs as $$
-                update :ARCHIMEDES_SCHEMA.jobs
+            ) returns setof :GRAPHILE_WORKER_SCHEMA.jobs as $$
+                update :GRAPHILE_WORKER_SCHEMA.jobs
                     set
                         run_at = coalesce(reschedule_jobs.run_at, jobs.run_at),
                         priority = coalesce(reschedule_jobs.priority, jobs.priority),

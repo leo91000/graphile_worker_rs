@@ -1,3 +1,3 @@
-# Archimedes migrations
+# Graphile Worker migrations
 
-This package provide the migrations for the [Archimedes](docs.rs/archimedes) job scheduler.
+This package provide the migrations for the [Graphile Worker](docs.rs/graphile_worker) job scheduler.

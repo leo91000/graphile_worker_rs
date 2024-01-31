@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use archimedes::{task, WorkerContext, WorkerOptions};
+use graphile_worker::{task, WorkerContext, WorkerOptions};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgConnectOptions;
 use tracing_subscriber::{

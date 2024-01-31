@@ -1,16 +1,16 @@
 use indoc::indoc;
 
-use super::ArchimedesMigration;
+use super::GraphileWorkerMigration;
 
-pub const M000007_MIGRATION: ArchimedesMigration = ArchimedesMigration {
+pub const M000007_MIGRATION: GraphileWorkerMigration = GraphileWorkerMigration {
     name: "m000007",
     is_breaking: false,
     stmts: &[
         indoc! {r#"
-            drop function :ARCHIMEDES_SCHEMA.add_job(text, json, text, timestamptz, int, text, int, text[]);
+            drop function :GRAPHILE_WORKER_SCHEMA.add_job(text, json, text, timestamptz, int, text, int, text[]);
         "#},
         indoc! {r#"
-            create function :ARCHIMEDES_SCHEMA.add_job(
+            create function :GRAPHILE_WORKER_SCHEMA.add_job(
                 identifier text,
                 payload json = null,
                 queue_name text = null,
@@ -20,9 +20,9 @@ pub const M000007_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                 priority integer = null,
                 flags text[] = null,
                 job_key_mode text = 'replace'
-            ) returns :ARCHIMEDES_SCHEMA.jobs as $$
+            ) returns :GRAPHILE_WORKER_SCHEMA.jobs as $$
             declare
-                v_job :ARCHIMEDES_SCHEMA.jobs;
+                v_job :GRAPHILE_WORKER_SCHEMA.jobs;
             begin
                 -- Apply rationality checks
                 if length(identifier) > 128 then
@@ -43,7 +43,7 @@ pub const M000007_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                     -- executing (i.e. it's world state is out of date, and the fact add_job
                     -- has been called again implies there's new information that needs to be
                     -- acted upon).
-                    insert into :ARCHIMEDES_SCHEMA.jobs (
+                    insert into :GRAPHILE_WORKER_SCHEMA.jobs (
                         task_identifier,
                         payload,
                         queue_name,
@@ -92,7 +92,7 @@ pub const M000007_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                     -- existing key to allow a new one to be inserted, and prevent any
                     -- subsequent retries of existing job by bumping attempts to the max
                     -- allowed.
-                    update :ARCHIMEDES_SCHEMA.jobs
+                    update :GRAPHILE_WORKER_SCHEMA.jobs
                         set
                             key = null,
                             attempts = jobs.max_attempts
@@ -105,7 +105,7 @@ pub const M000007_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                     -- after the existing job started executing, but no further job is being
                     -- scheduled), but it is useful in very rare circumstances for
                     -- de-duplication. If in doubt, DO NOT USE THIS.
-                    insert into :ARCHIMEDES_SCHEMA.jobs (
+                    insert into :GRAPHILE_WORKER_SCHEMA.jobs (
                         task_identifier,
                         payload,
                         queue_name,
@@ -138,7 +138,7 @@ pub const M000007_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                     raise exception 'Invalid job_key_mode value, expected ''replace'', ''preserve_run_at'' or ''unsafe_dedupe''.' using errcode = 'GWBKM';
                 end if;
                 -- insert the new job. Assume no conflicts due to the update above
-                insert into :ARCHIMEDES_SCHEMA.jobs(
+                insert into :GRAPHILE_WORKER_SCHEMA.jobs(
                     task_identifier,
                     payload,
                     queue_name,

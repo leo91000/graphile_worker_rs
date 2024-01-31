@@ -3,7 +3,7 @@ pub mod sql;
 
 use indoc::formatdoc;
 use pg_version::{check_postgres_version, fetch_and_check_postgres_version};
-use sql::ARCHIMEDES_MIGRATIONS;
+use sql::GRAPHILE_WORKER_MIGRATIONS;
 use sqlx::{query, query_as, Acquire, Error as SqlxError, FromRow, PgExecutor, Postgres};
 use thiserror::Error;
 use tracing::{info, warn};
@@ -12,7 +12,7 @@ use tracing::{info, warn};
 pub enum MigrateError {
     #[error("Error occured while parsing postgres version: {0}")]
     ParseVersionError(#[from] std::num::ParseIntError),
-    #[error("This version of Archimedes requires PostgreSQL v12.0 or greater (detected `server_version_num` = {0})")]
+    #[error("This version of Graphile Worker requires PostgreSQL v12.0 or greater (detected `server_version_num` = {0})")]
     IncompatibleVersion(u32),
     #[error("Database is using Graphile Worker schema revision {} which includes breaking migration {}, but the currently running worker only supports up to revision {}. It would be unsafe to continue; please ensure all versions of Graphile Worker are compatible.", .latest_migration, .latest_breaking_migration, .highest_migration)]
     IncompatbleRevision {
@@ -24,13 +24,13 @@ pub enum MigrateError {
     SqlError(#[from] sqlx::Error),
 }
 
-/// Installs the Archimedes schema into the database.
+/// Installs the Graphile Worker schema into the database.
 async fn install_schema<'e, E>(executor: E, escaped_schema: &str) -> Result<(), MigrateError>
 where
     E: PgExecutor<'e> + Acquire<'e, Database = Postgres> + Clone,
 {
     let version = fetch_and_check_postgres_version(executor.clone()).await?;
-    info!(pg_version = version, "Installing Archimedes schema");
+    info!(pg_version = version, "Installing Graphile Worker schema");
 
     let create_schema_query = formatdoc!(
         r#"
@@ -66,7 +66,7 @@ pub struct LastMigration {
 }
 
 /// Returns the last migration that was run against the database.
-/// It also installs the Archimedes schema if it doesn't exist.
+/// It also installs the Graphile Worker schema if it doesn't exist.
 async fn get_last_migration<'e, E>(
     executor: &E,
     escaped_schema: &str,
@@ -125,7 +125,7 @@ where
 
     let mut highest_migration = 0;
     let mut migrated = false;
-    for migration in ARCHIMEDES_MIGRATIONS.iter() {
+    for migration in GRAPHILE_WORKER_MIGRATIONS.iter() {
         let migration_number = migration.migration_number();
 
         if migration_number > highest_migration {

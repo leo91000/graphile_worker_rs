@@ -2,12 +2,12 @@ use crate::runner::WorkerFn;
 use crate::sql::task_identifiers::get_tasks_details;
 use crate::utils::escape_identifier;
 use crate::{Worker, WorkerContext};
-use archimedes_crontab_parser::{parse_crontab, CrontabParseError};
-use archimedes_crontab_types::Crontab;
-use archimedes_migrations::migrate;
-use archimedes_shutdown_signal::shutdown_signal;
-use archimedes_task_handler::{TaskDefinition, TaskHandler};
 use futures::FutureExt;
+use graphile_worker_crontab_parser::{parse_crontab, CrontabParseError};
+use graphile_worker_crontab_types::Crontab;
+use graphile_worker_migrations::migrate;
+use graphile_worker_shutdown_signal::shutdown_signal;
+use graphile_worker_task_handler::{TaskDefinition, TaskHandler};
 use rand::RngCore;
 use serde::Deserialize;
 use sqlx::postgres::PgPoolOptions;
@@ -38,11 +38,11 @@ pub enum WorkerBuildError {
     #[error("Error occured while connecting to the postgres database : {0}")]
     ConnectError(#[from] sqlx::Error),
     #[error("Error occured while querying : {0}")]
-    QueryError(#[from] crate::errors::ArchimedesError),
+    QueryError(#[from] crate::errors::GraphileWorkerError),
     #[error("Missing database_url config")]
     MissingDatabaseUrl,
     #[error("Error occured while migrating : {0}")]
-    MigrationError(#[from] archimedes_migrations::MigrateError),
+    MigrationError(#[from] graphile_worker_migrations::MigrateError),
 }
 
 impl WorkerOptions {
@@ -63,7 +63,7 @@ impl WorkerOptions {
 
         let schema = self
             .schema
-            .unwrap_or_else(|| String::from("archimedes_worker"));
+            .unwrap_or_else(|| String::from("graphile_worker"));
         let escaped_schema = escape_identifier(&pg_pool, &schema).await?;
 
         migrate(&pg_pool, &escaped_schema).await?;
@@ -79,7 +79,7 @@ impl WorkerOptions {
         rand::thread_rng().fill_bytes(&mut random_bytes);
 
         let worker = Worker {
-            worker_id: format!("archimedes_worker_{}", hex::encode(random_bytes)),
+            worker_id: format!("graphile_worker_{}", hex::encode(random_bytes)),
             concurrency: self.concurrency.unwrap_or_else(num_cpus::get),
             poll_interval: self.poll_interval.unwrap_or(Duration::from_millis(1000)),
             jobs: self.jobs,

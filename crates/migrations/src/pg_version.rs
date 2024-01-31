@@ -3,7 +3,7 @@ use sqlx::{query, PgExecutor, Row};
 
 use crate::MigrateError;
 
-/// Fetches the postgres version and checks if it is compatible with Archimedes
+/// Fetches the postgres version and checks if it is compatible with Garphile Worker
 pub async fn fetch_and_check_postgres_version<'e, E>(executor: E) -> Result<u32, MigrateError>
 where
     E: PgExecutor<'e>,
@@ -20,7 +20,7 @@ where
     check_postgres_version(&version_string)
 }
 
-/// Checks if the given postgres version is compatible with Archimedes
+/// Checks if the given postgres version is compatible with Graphile Worker
 pub fn check_postgres_version(version_string: &str) -> Result<u32, MigrateError> {
     let version = version_string.parse::<u32>()?;
 

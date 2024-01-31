@@ -20,13 +20,13 @@ pub mod m000017;
 pub mod m000018;
 
 #[derive(Default)]
-pub struct ArchimedesMigration {
+pub struct GraphileWorkerMigration {
     pub name: &'static str,
     pub is_breaking: bool,
     pub stmts: &'static [&'static str],
 }
 
-impl ArchimedesMigration {
+impl GraphileWorkerMigration {
     pub fn name(&self) -> &'static str {
         self.name
     }
@@ -37,13 +37,13 @@ impl ArchimedesMigration {
 
     /// Parses the migration name and returns the migration number.
     /// ```rust
-    /// use archimedes_migrations::sql::ArchimedesMigration;
-    /// let migration = ArchimedesMigration {
+    /// use graphile_worker_migrations::sql::GraphileWorkerMigration;
+    /// let migration = GraphileWorkerMigration {
     ///     name: "m000001_initial",
     ///     ..Default::default()
     /// };
     /// assert_eq!(migration.migration_number(), 1);
-    /// let migration = ArchimedesMigration {
+    /// let migration = GraphileWorkerMigration {
     ///     name: "m000002",
     ///     ..Default::default()
     /// };
@@ -59,7 +59,7 @@ impl ArchimedesMigration {
         escaped_schema: &str,
     ) -> Result<(), sqlx::Error> {
         for stmt in self.stmts {
-            let stmt = stmt.replace(":ARCHIMEDES_SCHEMA", escaped_schema);
+            let stmt = stmt.replace(":GRAPHILE_WORKER_SCHEMA", escaped_schema);
             sqlx::query(&stmt).execute(tx.as_mut()).await?;
         }
 
@@ -67,7 +67,7 @@ impl ArchimedesMigration {
     }
 }
 
-pub const ARCHIMEDES_MIGRATIONS: &[ArchimedesMigration] = &[
+pub const GRAPHILE_WORKER_MIGRATIONS: &[GraphileWorkerMigration] = &[
     m000001::M000001_MIGRATION,
     m000002::M000002_MIGRATION,
     m000003::M000003_MIGRATION,

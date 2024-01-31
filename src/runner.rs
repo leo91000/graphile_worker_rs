@@ -4,16 +4,16 @@ use std::pin::Pin;
 use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
 
-use crate::errors::ArchimedesError;
+use crate::errors::GraphileWorkerError;
 use crate::helpers::WorkerHelpers;
 use crate::sql::get_job::Job;
 use crate::sql::{get_job::get_job, task_identifiers::TaskDetails};
 use crate::streams::{job_signal_stream, job_stream};
-use archimedes_crontab_runner::{cron_main, ScheduleCronJobError};
-use archimedes_crontab_types::Crontab;
-use archimedes_shutdown_signal::ShutdownSignal;
 use futures::{try_join, StreamExt, TryStreamExt};
 use getset::Getters;
+use graphile_worker_crontab_runner::{cron_main, ScheduleCronJobError};
+use graphile_worker_crontab_types::Crontab;
+use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
 
@@ -59,7 +59,7 @@ pub enum WorkerRuntimeError {
     #[error("Unexpected error occured while processing job : '{0}'")]
     ProcessJob(#[from] ProcessJobError),
     #[error("Failed to listen to postgres notifications : '{0}'")]
-    PgListen(#[from] ArchimedesError),
+    PgListen(#[from] GraphileWorkerError),
     #[error("Error occured while trying to schedule cron job : {0}")]
     Crontab(#[from] ScheduleCronJobError),
 }
@@ -160,7 +160,7 @@ pub enum ProcessJobError {
     #[error("An error occured while releasing a job : '{0}'")]
     ReleaseJobError(#[from] ReleaseJobError),
     #[error("An error occured while fetching a job to run : '{0}'")]
-    GetJobError(#[from] ArchimedesError),
+    GetJobError(#[from] GraphileWorkerError),
 }
 
 async fn process_one_job(
@@ -276,7 +276,7 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
 pub struct ReleaseJobError {
     job_id: i64,
     #[source]
-    source: ArchimedesError,
+    source: GraphileWorkerError,
 }
 
 async fn release_job(

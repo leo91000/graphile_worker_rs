@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.4.2](https://github.com/leo91000/archimedes/releases/tag/archimedes_crontab_runner@0.4.2)
+## [0.4.2](https://github.com/leo91000/graphile_worker/releases/tag/archimedes_crontab_runner@0.4.2)
 
 
 ### ✨Features

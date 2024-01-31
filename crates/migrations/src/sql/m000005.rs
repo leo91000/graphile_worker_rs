@@ -1,22 +1,22 @@
 use indoc::indoc;
 
-use super::ArchimedesMigration;
+use super::GraphileWorkerMigration;
 
-pub const M000005_MIGRATION: ArchimedesMigration = ArchimedesMigration {
+pub const M000005_MIGRATION: GraphileWorkerMigration = GraphileWorkerMigration {
     name: "m000005",
     is_breaking: false,
     stmts: &[
         indoc! {r#"
-            alter table :ARCHIMEDES_SCHEMA.jobs add column revision int default 0 not null;
+            alter table :GRAPHILE_WORKER_SCHEMA.jobs add column revision int default 0 not null;
         "#},
         indoc! {r#"
-            alter table :ARCHIMEDES_SCHEMA.jobs add column flags jsonb default null;
+            alter table :GRAPHILE_WORKER_SCHEMA.jobs add column flags jsonb default null;
         "#},
         indoc! {r#"
-            drop function :ARCHIMEDES_SCHEMA.add_job(text, json, text, timestamptz, int, text, int);
+            drop function :GRAPHILE_WORKER_SCHEMA.add_job(text, json, text, timestamptz, int, text, int);
         "#},
         indoc! {r#"
-            create function :ARCHIMEDES_SCHEMA.add_job(
+            create function :GRAPHILE_WORKER_SCHEMA.add_job(
                 identifier text,
                 payload json = null,
                 queue_name text = null,
@@ -25,9 +25,9 @@ pub const M000005_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                 job_key text = null,
                 priority int = null,
                 flags text[] = null
-            ) returns :ARCHIMEDES_SCHEMA.jobs as $$
+            ) returns :GRAPHILE_WORKER_SCHEMA.jobs as $$
             declare
-                v_job :ARCHIMEDES_SCHEMA.jobs;
+                v_job :GRAPHILE_WORKER_SCHEMA.jobs;
             begin
                 -- Apply rationality checks
                 if length(identifier) > 128 then
@@ -45,7 +45,7 @@ pub const M000005_MIGRATION: ArchimedesMigration = ArchimedesMigration {
 
                 if job_key is not null then
                     -- Upsert job
-                    insert into :ARCHIMEDES_SCHEMA.jobs (
+                    insert into :GRAPHILE_WORKER_SCHEMA.jobs (
                         task_identifier,
                         payload,
                         queue_name,
@@ -93,7 +93,7 @@ pub const M000005_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                     -- Upsert failed -> there must be an existing job that is locked. Remove
                     -- existing key to allow a new one to be inserted, and prevent any
                     -- subsequent retries by bumping attempts to the max allowed.
-                    update :ARCHIMEDES_SCHEMA.jobs
+                    update :GRAPHILE_WORKER_SCHEMA.jobs
                         set
                             key = null,
                             attempts = jobs.max_attempts
@@ -101,7 +101,7 @@ pub const M000005_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                 end if;
 
                 -- insert the new job. Assume no conflicts due to the update above
-                insert into :ARCHIMEDES_SCHEMA.jobs(
+                insert into :GRAPHILE_WORKER_SCHEMA.jobs(
                     task_identifier,
                     payload,
                     queue_name,
@@ -132,19 +132,19 @@ pub const M000005_MIGRATION: ArchimedesMigration = ArchimedesMigration {
             $$ language plpgsql volatile;
         "#},
         indoc! {r#"
-            drop function :ARCHIMEDES_SCHEMA.get_job(text, text[], interval);
+            drop function :GRAPHILE_WORKER_SCHEMA.get_job(text, text[], interval);
         "#},
         indoc! {r#"
-            create function :ARCHIMEDES_SCHEMA.get_job(
+            create function :GRAPHILE_WORKER_SCHEMA.get_job(
                 worker_id text,
                 task_identifiers text[] = null,
                 job_expiry interval = interval '4 hours',
                 forbidden_flags text[] = null
-            ) returns :ARCHIMEDES_SCHEMA.jobs as $$
+            ) returns :GRAPHILE_WORKER_SCHEMA.jobs as $$
             declare
                 v_job_id bigint;
                 v_queue_name text;
-                v_row :ARCHIMEDES_SCHEMA.jobs;
+                v_row :GRAPHILE_WORKER_SCHEMA.jobs;
                 v_now timestamptz = now();
             begin
                 if worker_id is null or length(worker_id) < 10 then
@@ -152,14 +152,14 @@ pub const M000005_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                 end if;
 
                 select jobs.queue_name, jobs.id into v_queue_name, v_job_id
-                    from :ARCHIMEDES_SCHEMA.jobs
+                    from :GRAPHILE_WORKER_SCHEMA.jobs
                     where (jobs.locked_at is null or jobs.locked_at < (v_now - job_expiry))
                     and (
                         jobs.queue_name is null
                         or
                         exists (
                             select 1
-                            from :ARCHIMEDES_SCHEMA.job_queues
+                            from :GRAPHILE_WORKER_SCHEMA.job_queues
                             where job_queues.queue_name = jobs.queue_name
                             and (job_queues.locked_at is null or job_queues.locked_at < (v_now - job_expiry))
                             for update
@@ -180,14 +180,14 @@ pub const M000005_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                 end if;
 
                 if v_queue_name is not null then
-                    update :ARCHIMEDES_SCHEMA.job_queues
+                    update :GRAPHILE_WORKER_SCHEMA.job_queues
                     set
                         locked_by = worker_id,
                         locked_at = v_now
                     where job_queues.queue_name = v_queue_name;
                 end if;
 
-                update :ARCHIMEDES_SCHEMA.jobs
+                update :GRAPHILE_WORKER_SCHEMA.jobs
                     set
                         attempts = attempts + 1,
                         locked_by = worker_id,

@@ -1,8 +1,8 @@
-use archimedes_task_handler::TaskDefinition;
+use graphile_worker_task_handler::TaskDefinition;
 use serde::Serialize;
 use sqlx::PgPool;
 
-use crate::{errors::ArchimedesError, sql::add_job::add_job, JobSpec, WorkerContext};
+use crate::{errors::GraphileWorkerError, sql::add_job::add_job, JobSpec, WorkerContext};
 
 /// The WorkerHelpers struct provides a set of methods to add jobs to the queue
 pub struct WorkerHelpers {
@@ -25,7 +25,7 @@ impl WorkerHelpers {
         &self,
         payload: T::Payload,
         spec: Option<JobSpec>,
-    ) -> Result<(), ArchimedesError> {
+    ) -> Result<(), GraphileWorkerError> {
         let identifier = T::identifier();
         let payload = serde_json::to_value(payload)?;
         add_job(
@@ -45,7 +45,7 @@ impl WorkerHelpers {
         identifier: &str,
         payload: P,
         spec: Option<JobSpec>,
-    ) -> Result<(), ArchimedesError>
+    ) -> Result<(), GraphileWorkerError>
     where
         P: Serialize,
     {

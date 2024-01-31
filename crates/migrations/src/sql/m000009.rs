@@ -1,40 +1,40 @@
 use indoc::indoc;
 
-use super::ArchimedesMigration;
+use super::GraphileWorkerMigration;
 
-pub const M000009_MIGRATION: ArchimedesMigration = ArchimedesMigration {
+pub const M000009_MIGRATION: GraphileWorkerMigration = GraphileWorkerMigration {
     name: "m000009",
     is_breaking: false,
     stmts: &[
         indoc! {r#"
-            drop function :ARCHIMEDES_SCHEMA.get_job(text, text[], interval, text[]);
+            drop function :GRAPHILE_WORKER_SCHEMA.get_job(text, text[], interval, text[]);
         "#},
         indoc! {r#"
-            create function :ARCHIMEDES_SCHEMA.get_job(
+            create function :GRAPHILE_WORKER_SCHEMA.get_job(
                 worker_id text,
                 task_identifiers text[] = null,
                 job_expiry interval = interval '4 hours',
                 forbidden_flags text[] = null,
                 now timestamptz = now()
-            ) returns :ARCHIMEDES_SCHEMA.jobs as $$
+            ) returns :GRAPHILE_WORKER_SCHEMA.jobs as $$
             declare
                 v_job_id bigint;
                 v_queue_name text;
-                v_row :ARCHIMEDES_SCHEMA.jobs;
+                v_row :GRAPHILE_WORKER_SCHEMA.jobs;
             begin
                 if worker_id is null or length(worker_id) < 10 then
                     raise exception 'invalid worker id';
                 end if;
 
                 select jobs.queue_name, jobs.id into v_queue_name, v_job_id
-                    from :ARCHIMEDES_SCHEMA.jobs
+                    from :GRAPHILE_WORKER_SCHEMA.jobs
                     where (jobs.locked_at is null or jobs.locked_at < (now - job_expiry))
                     and (
                         jobs.queue_name is null
                     or
                         exists (
                             select 1
-                            from :ARCHIMEDES_SCHEMA.job_queues
+                            from :GRAPHILE_WORKER_SCHEMA.job_queues
                             where job_queues.queue_name = jobs.queue_name
                             and (job_queues.locked_at is null or job_queues.locked_at < (now - job_expiry))
                             for update
@@ -55,14 +55,14 @@ pub const M000009_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                 end if;
 
                 if v_queue_name is not null then
-                    update :ARCHIMEDES_SCHEMA.job_queues
+                    update :GRAPHILE_WORKER_SCHEMA.job_queues
                         set
                             locked_by = worker_id,
                             locked_at = now
                         where job_queues.queue_name = v_queue_name;
                 end if;
 
-                update :ARCHIMEDES_SCHEMA.jobs
+                update :GRAPHILE_WORKER_SCHEMA.jobs
                     set
                         attempts = attempts + 1,
                         locked_by = worker_id,

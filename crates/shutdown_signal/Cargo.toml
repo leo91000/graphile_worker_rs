@@ -1,12 +1,12 @@
 [package]
-name = "archimedes_shutdown_signal"
+name = "graphile_worker_shutdown_signal"
 version = "0.3.0"
 edition = "2021"
 license-file = "LICENSE.md"
-description = "Migrations package for archimedes, a high performance Rust/PostgreSQL job queue"
-homepage = "https://docs.rs/archimedes_shutdown_signal"
-documentation = "https://docs.rs/archimedes_shutdown_signal"
-repository = "https://github.com/leo91000/archimedes/crates/shutdown_signal"
+description = "Migrations package for graphile_worker, a high performance Rust/PostgreSQL job queue"
+homepage = "https://docs.rs/graphile_worker_shutdown_signal"
+documentation = "https://docs.rs/graphile_worker_shutdown_signal"
+repository = "https://github.com/leo91000/graphile_worker/crates/shutdown_signal"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

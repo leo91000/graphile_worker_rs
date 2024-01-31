@@ -1,4 +1,4 @@
-use crate::errors::ArchimedesError;
+use crate::errors::GraphileWorkerError;
 use chrono::Utc;
 use getset::Getters;
 use sqlx::{query, PgExecutor};
@@ -59,7 +59,7 @@ pub async fn add_job(
     identifier: &str,
     payload: serde_json::Value,
     spec: JobSpec,
-) -> Result<(), ArchimedesError> {
+) -> Result<(), GraphileWorkerError> {
     let sql = format!(
         r#"
             select * from {escaped_schema}.add_job(

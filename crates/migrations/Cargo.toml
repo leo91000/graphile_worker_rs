@@ -1,12 +1,12 @@
 [package]
-name = "archimedes_migrations"
+name = "graphile_worker_migrations"
 version = "0.3.0"
 edition = "2021"
 license-file = "LICENSE.md"
-description = "Migrations package for archimedes, a high performance Rust/PostgreSQL job queue"
-homepage = "https://docs.rs/archimedes_migrations"
-documentation = "https://docs.rs/archimedes_migrations"
-repository = "https://github.com/leo91000/archimedes/crates/migrations"
+description = "Migrations package for graphile_worker, a high performance Rust/PostgreSQL job queue"
+homepage = "https://docs.rs/graphile_worker_migrations"
+documentation = "https://docs.rs/graphile_worker_migrations"
+repository = "https://github.com/leo91000/graphile_worker/crates/migrations"
 keywords = []
 categories = []
 readme = "README.md"

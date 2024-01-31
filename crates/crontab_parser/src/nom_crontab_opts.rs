@@ -7,7 +7,7 @@ use nom::{
 };
 use serde::Deserialize;
 
-use archimedes_crontab_types::{CrontabFill, CrontabOptions, JobKeyMode};
+use graphile_worker_crontab_types::{CrontabFill, CrontabOptions, JobKeyMode};
 
 /// Intermediate miror of CrontabOptions
 /// This is used to parse the query string

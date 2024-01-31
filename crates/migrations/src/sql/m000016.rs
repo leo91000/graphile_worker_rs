@@ -1,38 +1,38 @@
 use indoc::indoc;
 
-use super::ArchimedesMigration;
+use super::GraphileWorkerMigration;
 
-pub const M000016_MIGRATION: ArchimedesMigration = ArchimedesMigration {
+pub const M000016_MIGRATION: GraphileWorkerMigration = GraphileWorkerMigration {
     name: "m000016",
     is_breaking: true,
     stmts: &[
         // Rename tables
         indoc! {r#"
-            ALTER TABLE :ARCHIMEDES_SCHEMA.jobs RENAME TO _private_jobs;
+            ALTER TABLE :GRAPHILE_WORKER_SCHEMA.jobs RENAME TO _private_jobs;
         "#},
         indoc! {r#"
-            ALTER TABLE :ARCHIMEDES_SCHEMA.job_queues RENAME TO _private_job_queues;
+            ALTER TABLE :GRAPHILE_WORKER_SCHEMA.job_queues RENAME TO _private_job_queues;
         "#},
         indoc! {r#"
-            ALTER TABLE :ARCHIMEDES_SCHEMA.tasks RENAME TO _private_tasks;
+            ALTER TABLE :GRAPHILE_WORKER_SCHEMA.tasks RENAME TO _private_tasks;
         "#},
         indoc! {r#"
-            ALTER TABLE :ARCHIMEDES_SCHEMA.known_crontabs RENAME TO _private_known_crontabs;
+            ALTER TABLE :GRAPHILE_WORKER_SCHEMA.known_crontabs RENAME TO _private_known_crontabs;
         "#},
         // Drop and create new 'add_job' function
         indoc! {r#"
-            DROP FUNCTION :ARCHIMEDES_SCHEMA.add_job;
+            DROP FUNCTION :GRAPHILE_WORKER_SCHEMA.add_job;
         "#},
         indoc! {r#"
-            CREATE FUNCTION :ARCHIMEDES_SCHEMA.add_job(identifier text, payload json DEFAULT NULL::json, queue_name text DEFAULT NULL::text, run_at timestamp with time zone DEFAULT NULL::timestamp with time zone, max_attempts integer DEFAULT NULL::integer, job_key text DEFAULT NULL::text, priority integer DEFAULT NULL::integer, flags text[] DEFAULT NULL::text[], job_key_mode text DEFAULT 'replace'::text) RETURNS :ARCHIMEDES_SCHEMA._private_jobs
+            CREATE FUNCTION :GRAPHILE_WORKER_SCHEMA.add_job(identifier text, payload json DEFAULT NULL::json, queue_name text DEFAULT NULL::text, run_at timestamp with time zone DEFAULT NULL::timestamp with time zone, max_attempts integer DEFAULT NULL::integer, job_key text DEFAULT NULL::text, priority integer DEFAULT NULL::integer, flags text[] DEFAULT NULL::text[], job_key_mode text DEFAULT 'replace'::text) RETURNS :GRAPHILE_WORKER_SCHEMA._private_jobs
             LANGUAGE plpgsql
             AS $$
             declare
-                v_job :ARCHIMEDES_SCHEMA._private_jobs;
+                v_job :GRAPHILE_WORKER_SCHEMA._private_jobs;
             begin
                 if (job_key is null or job_key_mode is null or job_key_mode in ('replace', 'preserve_run_at')) then
                     select * into v_job
-                    from :ARCHIMEDES_SCHEMA.add_jobs(
+                    from :GRAPHILE_WORKER_SCHEMA.add_jobs(
                         ARRAY[(
                             identifier,
                             payload,
@@ -42,24 +42,24 @@ pub const M000016_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                             job_key,
                             priority::smallint,
                             flags
-                        ):::ARCHIMEDES_SCHEMA.job_spec],
+                        ):::GRAPHILE_WORKER_SCHEMA.job_spec],
                         (job_key_mode = 'preserve_run_at')
                     )
                     limit 1;
                     return v_job;
                 elsif job_key_mode = 'unsafe_dedupe' then
                     -- Ensure all the tasks exist
-                    insert into :ARCHIMEDES_SCHEMA._private_tasks as tasks (identifier)
+                    insert into :GRAPHILE_WORKER_SCHEMA._private_tasks as tasks (identifier)
                     values (identifier)
                     on conflict do nothing;
                     -- Ensure all the queues exist
                     if queue_name is not null then
-                        insert into :ARCHIMEDES_SCHEMA._private_job_queues as job_queues (queue_name)
+                        insert into :GRAPHILE_WORKER_SCHEMA._private_job_queues as job_queues (queue_name)
                         values (queue_name)
                         on conflict do nothing;
                     end if;
                     -- Insert job, but if one already exists then do nothing
-                    insert into :ARCHIMEDES_SCHEMA._private_jobs as jobs (
+                    insert into :GRAPHILE_WORKER_SCHEMA._private_jobs as jobs (
                         job_queue_id,
                         task_id,
                         payload,
@@ -81,8 +81,8 @@ pub const M000016_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                             select jsonb_object_agg(flag, true)
                             from unnest(flags) as item(flag)
                         )
-                    from :ARCHIMEDES_SCHEMA._private_tasks as tasks
-                    left join :ARCHIMEDES_SCHEMA._private_job_queues as job_queues
+                    from :GRAPHILE_WORKER_SCHEMA._private_tasks as tasks
+                    left join :GRAPHILE_WORKER_SCHEMA._private_job_queues as job_queues
                     on job_queues.queue_name = queue_name
                     where tasks.identifier = identifier
                     on conflict (key)
@@ -100,20 +100,20 @@ pub const M000016_MIGRATION: ArchimedesMigration = ArchimedesMigration {
         "#},
         // Drop and create new 'add_jobs' function
         indoc! {r#"
-            DROP FUNCTION :ARCHIMEDES_SCHEMA.add_jobs;
+            DROP FUNCTION :GRAPHILE_WORKER_SCHEMA.add_jobs;
         "#},
         indoc! {r#"
-            CREATE FUNCTION :ARCHIMEDES_SCHEMA.add_jobs(specs :ARCHIMEDES_SCHEMA.job_spec[], job_key_preserve_run_at boolean DEFAULT false) RETURNS SETOF :ARCHIMEDES_SCHEMA._private_jobs
+            CREATE FUNCTION :GRAPHILE_WORKER_SCHEMA.add_jobs(specs :GRAPHILE_WORKER_SCHEMA.job_spec[], job_key_preserve_run_at boolean DEFAULT false) RETURNS SETOF :GRAPHILE_WORKER_SCHEMA._private_jobs
             LANGUAGE plpgsql
             AS $$
             begin
                 -- Ensure all the tasks exist
-                insert into :ARCHIMEDES_SCHEMA._private_tasks as tasks (identifier)
+                insert into :GRAPHILE_WORKER_SCHEMA._private_tasks as tasks (identifier)
                 select distinct spec.identifier
                 from unnest(specs) spec
                 on conflict do nothing;
                 -- Ensure all the queues exist
-                insert into :ARCHIMEDES_SCHEMA._private_job_queues as job_queues (queue_name)
+                insert into :GRAPHILE_WORKER_SCHEMA._private_job_queues as job_queues (queue_name)
                 select distinct spec.queue_name
                 from unnest(specs) spec
                 where spec.queue_name is not null
@@ -123,7 +123,7 @@ pub const M000016_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                 -- executing (i.e., it's world state is out of date, and the fact add_job
                 -- has been called again implies there's new information that needs to be
                 -- acted upon).
-                update :ARCHIMEDES_SCHEMA._private_jobs as jobs
+                update :GRAPHILE_WORKER_SCHEMA._private_jobs as jobs
                 set
                     key = null,
                     attempts = jobs.max_attempts,
@@ -134,7 +134,7 @@ pub const M000016_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                 and is_available is not true;
                 -- TODO: is there a risk that a conflict could occur depending on the
                 -- isolation level?
-                return query insert into :ARCHIMEDES_SCHEMA._private_jobs as jobs (
+                return query insert into :GRAPHILE_WORKER_SCHEMA._private_jobs as jobs (
                     job_queue_id,
                     task_id,
                     payload,
@@ -157,9 +157,9 @@ pub const M000016_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                             from unnest(spec.flags) as item(flag)
                         )
                     from unnest(specs) spec
-                    inner join :ARCHIMEDES_SCHEMA._private_tasks as tasks
+                    inner join :GRAPHILE_WORKER_SCHEMA._private_tasks as tasks
                     on tasks.identifier = spec.identifier
-                    left join :ARCHIMEDES_SCHEMA._private_job_queues as job_queues
+                    left join :GRAPHILE_WORKER_SCHEMA._private_job_queues as job_queues
                     on job_queues.queue_name = spec.queue_name
                 on conflict (key) do update set
                     job_queue_id = excluded.job_queue_id,
@@ -190,13 +190,13 @@ pub const M000016_MIGRATION: ArchimedesMigration = ArchimedesMigration {
         "#},
         // Drop and create new 'complete_jobs' function
         indoc! {r#"
-            DROP FUNCTION :ARCHIMEDES_SCHEMA.complete_jobs;
+            DROP FUNCTION :GRAPHILE_WORKER_SCHEMA.complete_jobs;
         "#},
         indoc! {r#"
-            CREATE FUNCTION :ARCHIMEDES_SCHEMA.complete_jobs(job_ids bigint[]) RETURNS SETOF :ARCHIMEDES_SCHEMA._private_jobs
+            CREATE FUNCTION :GRAPHILE_WORKER_SCHEMA.complete_jobs(job_ids bigint[]) RETURNS SETOF :GRAPHILE_WORKER_SCHEMA._private_jobs
                 LANGUAGE sql
                 AS $$
-                delete from :ARCHIMEDES_SCHEMA._private_jobs as jobs
+                delete from :GRAPHILE_WORKER_SCHEMA._private_jobs as jobs
                     where id = any(job_ids)
                     and (
                         locked_at is null
@@ -208,29 +208,29 @@ pub const M000016_MIGRATION: ArchimedesMigration = ArchimedesMigration {
         "#},
         // Drop and create new 'force_unlock_workers' function
         indoc! {r#"
-            DROP FUNCTION :ARCHIMEDES_SCHEMA.force_unlock_workers;
+            DROP FUNCTION :GRAPHILE_WORKER_SCHEMA.force_unlock_workers;
         "#},
         indoc! {r#"
-            CREATE FUNCTION :ARCHIMEDES_SCHEMA.force_unlock_workers(worker_ids text[]) RETURNS void
+            CREATE FUNCTION :GRAPHILE_WORKER_SCHEMA.force_unlock_workers(worker_ids text[]) RETURNS void
                 LANGUAGE sql
                 AS $$
-                    update :ARCHIMEDES_SCHEMA._private_jobs as jobs
+                    update :GRAPHILE_WORKER_SCHEMA._private_jobs as jobs
                     set locked_at = null, locked_by = null
                     where locked_by = any(worker_ids);
-                    update :ARCHIMEDES_SCHEMA._private_job_queues as job_queues
+                    update :GRAPHILE_WORKER_SCHEMA._private_job_queues as job_queues
                     set locked_at = null, locked_by = null
                     where locked_by = any(worker_ids);
             $$;
         "#},
         // Drop and create new 'permanently_fail_jobs' function
         indoc! {r#"
-            DROP FUNCTION IF EXISTS :ARCHIMEDES_SCHEMA.permanently_fail_jobs;
+            DROP FUNCTION IF EXISTS :GRAPHILE_WORKER_SCHEMA.permanently_fail_jobs;
         "#},
         indoc! {r#"
-            CREATE FUNCTION :ARCHIMEDES_SCHEMA.permanently_fail_jobs(job_ids bigint[], error_message text DEFAULT NULL::text) RETURNS SETOF :ARCHIMEDES_SCHEMA._private_jobs
+            CREATE FUNCTION :GRAPHILE_WORKER_SCHEMA.permanently_fail_jobs(job_ids bigint[], error_message text DEFAULT NULL::text) RETURNS SETOF :GRAPHILE_WORKER_SCHEMA._private_jobs
             LANGUAGE sql
             AS $$
-                UPDATE :ARCHIMEDES_SCHEMA._private_jobs AS jobs
+                UPDATE :GRAPHILE_WORKER_SCHEMA._private_jobs AS jobs
                 SET
                     last_error = COALESCE(error_message, 'Manually marked as failed'),
                     attempts = max_attempts,
@@ -246,17 +246,17 @@ pub const M000016_MIGRATION: ArchimedesMigration = ArchimedesMigration {
         "#},
         // Drop and create new 'remove_job' function
         indoc! {r#"
-            DROP FUNCTION :ARCHIMEDES_SCHEMA.remove_job;
+            DROP FUNCTION :GRAPHILE_WORKER_SCHEMA.remove_job;
         "#},
         indoc! {r#"
-            CREATE FUNCTION :ARCHIMEDES_SCHEMA.remove_job(job_key text) RETURNS :ARCHIMEDES_SCHEMA._private_jobs
+            CREATE FUNCTION :GRAPHILE_WORKER_SCHEMA.remove_job(job_key text) RETURNS :GRAPHILE_WORKER_SCHEMA._private_jobs
             LANGUAGE plpgsql STRICT
             AS $$
             declare
-                v_job :ARCHIMEDES_SCHEMA._private_jobs;
+                v_job :GRAPHILE_WORKER_SCHEMA._private_jobs;
             begin
                 -- Delete job if not locked
-                DELETE FROM :ARCHIMEDES_SCHEMA._private_jobs AS jobs
+                DELETE FROM :GRAPHILE_WORKER_SCHEMA._private_jobs AS jobs
                 WHERE key = job_key
                 AND (
                     locked_at IS NULL
@@ -268,7 +268,7 @@ pub const M000016_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                     RETURN v_job;
                 END IF;
                 -- Otherwise prevent job from retrying, and clear the key
-                UPDATE :ARCHIMEDES_SCHEMA._private_jobs AS jobs
+                UPDATE :GRAPHILE_WORKER_SCHEMA._private_jobs AS jobs
                 SET
                     key = NULL,
                     attempts = jobs.max_attempts,
@@ -281,13 +281,13 @@ pub const M000016_MIGRATION: ArchimedesMigration = ArchimedesMigration {
         "#},
         // Drop and create new 'reschedule_jobs' function
         indoc! {r#"
-            DROP FUNCTION :ARCHIMEDES_SCHEMA.reschedule_jobs;
+            DROP FUNCTION :GRAPHILE_WORKER_SCHEMA.reschedule_jobs;
         "#},
         indoc! {r#"
-            CREATE FUNCTION :ARCHIMEDES_SCHEMA.reschedule_jobs(job_ids bigint[], run_at timestamp with time zone DEFAULT NULL::timestamp with time zone, priority integer DEFAULT NULL::integer, attempts integer DEFAULT NULL::integer, max_attempts integer DEFAULT NULL::integer) RETURNS SETOF :ARCHIMEDES_SCHEMA._private_jobs
+            CREATE FUNCTION :GRAPHILE_WORKER_SCHEMA.reschedule_jobs(job_ids bigint[], run_at timestamp with time zone DEFAULT NULL::timestamp with time zone, priority integer DEFAULT NULL::integer, attempts integer DEFAULT NULL::integer, max_attempts integer DEFAULT NULL::integer) RETURNS SETOF :GRAPHILE_WORKER_SCHEMA._private_jobs
             LANGUAGE sql
             AS $$
-                UPDATE :ARCHIMEDES_SCHEMA._private_jobs AS jobs
+                UPDATE :GRAPHILE_WORKER_SCHEMA._private_jobs AS jobs
                 SET
                     run_at = COALESCE(reschedule_jobs.run_at, jobs.run_at),
                     priority = COALESCE(reschedule_jobs.priority::smallint, jobs.priority),

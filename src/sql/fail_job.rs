@@ -1,6 +1,6 @@
 use sqlx::{query, PgExecutor};
 
-use crate::errors::ArchimedesError;
+use crate::errors::GraphileWorkerError;
 
 use super::get_job::Job;
 
@@ -11,7 +11,7 @@ pub async fn fail_job(
     worker_id: &str,
     message: &str,
     replacement_payload: Option<Vec<String>>,
-) -> Result<(), ArchimedesError> {
+) -> Result<(), GraphileWorkerError> {
     let replacement_payload = replacement_payload.and_then(|v| serde_json::to_string(&v).ok());
 
     if job.job_queue_id().is_some() {
@@ -75,7 +75,7 @@ pub async fn fail_jobs(
     escaped_schema: &str,
     worker_id: &str,
     message: &str,
-) -> Result<(), ArchimedesError> {
+) -> Result<(), GraphileWorkerError> {
     let sql = format!(
         r#"
             with j as (

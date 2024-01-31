@@ -1,4 +1,4 @@
-use archimedes_crontab_types::Crontab;
+use graphile_worker_crontab_types::Crontab;
 pub use nom::error::ErrorKind;
 use nom_crontab::nom_crontab;
 use thiserror::Error;
@@ -38,7 +38,7 @@ impl<'a> From<nom::Err<nom::error::Error<&'a str>>> for CrontabParseError {
 ///
 /// Tasks are by default read from a crontab file next to the tasks folder (but this is configurable in library mode).
 /// Please note that our syntax is not 100% compatible with cron's, and our task payload differs.
-/// We only handle timestamps in UTC. The following diagram details the parts of a Archimedes crontab schedule:
+/// We only handle timestamps in UTC. The following diagram details the parts of a Graphile Worker crontab schedule:
 ///
 /// ```crontab
 /// ┌───────────── UTC minute (0 - 59)
@@ -64,7 +64,7 @@ impl<'a> From<nom::Err<nom::error::Error<&'a str>>> for CrontabParseError {
 /// The task identifier should match the following regexp
 /// `/^[_a-zA-Z][_a-zA-Z0-9:_-]*$/` (namely it should start with an alphabetic
 /// character and it should only contain alphanumeric characters, colon, underscore
-/// and hyphen). It should be the name of one of your Archimedes Worker tasks.
+/// and hyphen). It should be the name of one of your Graphile Worker tasks.
 ///
 /// The `opts` must always be prefixed with a `?` if provided and details
 /// configuration for the task such as what should be done in the event that the

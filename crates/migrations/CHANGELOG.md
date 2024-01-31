@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.2.4](https://github.com/leo91000/archimedes/releases/tag/archimedes_migrations@0.2.4)
+## [0.2.4](https://github.com/leo91000/graphile_worker/releases/tag/archimedes_migrations@0.2.4)
 
 
 ### ✨Features

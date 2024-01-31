@@ -1,6 +1,6 @@
 use sqlx::{query, PgExecutor};
 
-use crate::errors::ArchimedesError;
+use crate::errors::GraphileWorkerError;
 
 use super::get_job::Job;
 
@@ -9,7 +9,7 @@ pub async fn complete_job(
     job: &Job,
     worker_id: &str,
     escaped_schema: &str,
-) -> Result<(), ArchimedesError> {
+) -> Result<(), GraphileWorkerError> {
     if job.job_queue_id().is_some() {
         let sql = format!(
             r#"

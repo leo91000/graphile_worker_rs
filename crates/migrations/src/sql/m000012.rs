@@ -1,26 +1,26 @@
 use indoc::indoc;
 
-use super::ArchimedesMigration;
+use super::GraphileWorkerMigration;
 
-pub const M000012_MIGRATION: ArchimedesMigration = ArchimedesMigration {
+pub const M000012_MIGRATION: GraphileWorkerMigration = GraphileWorkerMigration {
     name: "m000012",
     is_breaking: false,
     stmts: &[indoc! {r#"
-        create or replace function :ARCHIMEDES_SCHEMA.add_jobs(
-            specs :ARCHIMEDES_SCHEMA.job_spec[],
+        create or replace function :GRAPHILE_WORKER_SCHEMA.add_jobs(
+            specs :GRAPHILE_WORKER_SCHEMA.job_spec[],
             job_key_preserve_run_at boolean default false
         )
-        returns setof :ARCHIMEDES_SCHEMA.jobs
+        returns setof :GRAPHILE_WORKER_SCHEMA.jobs
         as $$
         begin
             -- Ensure all the tasks exist
-            insert into :ARCHIMEDES_SCHEMA.tasks (identifier)
+            insert into :GRAPHILE_WORKER_SCHEMA.tasks (identifier)
             select distinct spec.identifier
             from unnest(specs) spec
             on conflict do nothing;
         
             -- Ensure all the queues exist
-            insert into :ARCHIMEDES_SCHEMA.job_queues (queue_name)
+            insert into :GRAPHILE_WORKER_SCHEMA.job_queues (queue_name)
             select distinct spec.queue_name
             from unnest(specs) spec
             where spec.queue_name is not null
@@ -31,7 +31,7 @@ pub const M000012_MIGRATION: ArchimedesMigration = ArchimedesMigration {
             -- executing (i.e. it's world state is out of date, and the fact add_job
             -- has been called again implies there's new information that needs to be
             -- acted upon).
-            update :ARCHIMEDES_SCHEMA.jobs
+            update :GRAPHILE_WORKER_SCHEMA.jobs
             set
                 key = null,
                 attempts = jobs.max_attempts,
@@ -44,7 +44,7 @@ pub const M000012_MIGRATION: ArchimedesMigration = ArchimedesMigration {
             -- TODO: is there a risk that a conflict could occur depending on the
             -- isolation level?
         
-            return query insert into :ARCHIMEDES_SCHEMA.jobs (
+            return query insert into :GRAPHILE_WORKER_SCHEMA.jobs (
                 job_queue_id,
                 task_id,
                 payload,
@@ -67,9 +67,9 @@ pub const M000012_MIGRATION: ArchimedesMigration = ArchimedesMigration {
                         from unnest(spec.flags) as item(flag)
                     )
                     from unnest(specs) spec
-                    inner join :ARCHIMEDES_SCHEMA.tasks
+                    inner join :GRAPHILE_WORKER_SCHEMA.tasks
                     on tasks.identifier = spec.identifier
-                    left join :ARCHIMEDES_SCHEMA.job_queues
+                    left join :GRAPHILE_WORKER_SCHEMA.job_queues
                     on job_queues.queue_name = spec.queue_name
                 on conflict (key) do update set
                     job_queue_id = excluded.job_queue_id,

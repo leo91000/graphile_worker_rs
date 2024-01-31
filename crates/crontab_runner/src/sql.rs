@@ -1,6 +1,6 @@
-use archimedes_crontab_types::{Crontab, JobKeyMode};
 use chrono::prelude::*;
 use getset::Getters;
+use graphile_worker_crontab_types::{Crontab, JobKeyMode};
 use serde::Serialize;
 use serde_json::json;
 use sqlx::{query, query_as, FromRow, PgExecutor};

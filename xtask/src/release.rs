@@ -314,7 +314,7 @@ strike! {
 impl Commit {
     pub fn get_markdown(&self) -> String {
         format!(
-            "* {}{} ([{}](https://github.com/leo91000/archimedes/commit/{2}))",
+            "* {}{} ([{}](https://github.com/leo91000/graphile_worker/commit/{2}))",
             if self.breaking_change { "🔥 " } else { "" },
             self.message,
             self.short_hash,
@@ -509,7 +509,7 @@ impl FixedReleaseType {
 
 fn generate_changelog(commits: &mut [Commit], version: &str, package_name: &str) -> String {
     let mut changelog = format!(
-        "## [{version}](https://github.com/leo91000/archimedes/releases/tag/{})\n\n",
+        "## [{version}](https://github.com/leo91000/graphile_worker/releases/tag/{})\n\n",
         utf8_percent_encode(&format!("{package_name}@{version}"), CONTROLS)
     );
     println!("----------------");
