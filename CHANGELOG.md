@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.4.0...graphile_worker-v0.5.0) - 2024-02-01
+
+### Other
+- Rename create_helpers method to create_utils
+- Fix ci permissions
+- release
+
 ## [0.4.0](https://github.com/leo91000/graphile_worker_rs/releases/tag/graphile_worker-v0.4.0) - 2024-01-31
 
 ### Added
