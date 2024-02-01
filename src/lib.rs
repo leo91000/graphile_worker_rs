@@ -1,10 +1,10 @@
-mod builder;
+pub mod builder;
 pub mod errors;
-mod helpers;
-mod runner;
-mod sql;
-mod streams;
-mod utils;
+pub mod helpers;
+pub mod runner;
+pub mod sql;
+pub mod streams;
+pub mod utils;
 
 pub use crate::sql::add_job::JobSpec;
 pub use graphile_worker_crontab_parser::parse_crontab;

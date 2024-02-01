@@ -78,3 +78,4 @@ cfg-if = "1.0.0"
 [dev-dependencies]
 tokio = { version = "1.35.1", features = ["macros", "rt-multi-thread"] }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+uuid = { version = "1.7.0", features = ["v7"] }

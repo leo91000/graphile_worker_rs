@@ -58,11 +58,21 @@ where
     Ok(())
 }
 
-#[derive(FromRow, Default)]
+#[derive(FromRow, Debug)]
 pub struct LastMigration {
     server_version_num: String,
     id: Option<i32>,
     biggest_breaking_id: Option<i32>,
+}
+
+impl Default for LastMigration {
+    fn default() -> Self {
+        Self {
+            server_version_num: String::from("120000"),
+            id: None,
+            biggest_breaking_id: None,
+        }
+    }
 }
 
 /// Returns the last migration that was run against the database.
@@ -92,7 +102,7 @@ where
 
             if code == "42P01" {
                 install_schema(executor.clone(), escaped_schema).await?;
-                Default::default()
+                return Ok(Default::default());
             }
 
             return Err(MigrateError::SqlError(SqlxError::Database(e)));

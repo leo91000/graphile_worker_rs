@@ -1,3 +1,5 @@
+set dotenv-load
+
 test:
   cargo test --all
 
