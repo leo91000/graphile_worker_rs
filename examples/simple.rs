@@ -57,7 +57,7 @@ async fn main() {
         .await
         .unwrap();
 
-    let helpers = worker.create_helpers();
+    let helpers = worker.create_utils();
 
     helpers
         .add_job::<say_hello>(

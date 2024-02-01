@@ -50,7 +50,7 @@ async fn main() {
         .await
         .unwrap();
 
-    let helpers = worker.create_helpers();
+    let helpers = worker.create_utils();
 
     // Schedule 10 jobs
     for i in 0..10 {

@@ -69,16 +69,16 @@ SELECT graphile_worker.add_job('say_hello', json_build_object('name', 'Bobby Tab
 #[tokio::main]
 async fn main() -> Result<(), ()> {
     // ...
-    let helpers = worker.create_helpers();
+    let utils = worker.create_utils();
 
     // Using add_job forces the payload to be same struct defined in our type
-    helpers.add_job::<say_hello>(
+    utils.add_job::<say_hello>(
         HelloPayload { name: "Bobby Tables".to_string() },
         Default::default(),
     ).await.unwrap();
 
     // You can also use `add_raw_job` if you don't have access to the task, or don't care about end 2 end safety
-    helpers.add_raw_job("say_hello", serde_json::json!({ "name": "Bobby Tables" }), Default::default()).await.unwrap();
+    utils.add_raw_job("say_hello", serde_json::json!({ "name": "Bobby Tables" }), Default::default()).await.unwrap();
 
     Ok(())
 }

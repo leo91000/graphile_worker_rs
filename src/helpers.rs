@@ -5,12 +5,12 @@ use sqlx::PgPool;
 use crate::{errors::GraphileWorkerError, sql::add_job::add_job, JobSpec, WorkerContext};
 
 /// The WorkerHelpers struct provides a set of methods to add jobs to the queue
-pub struct WorkerHelpers {
+pub struct WorkerUtils {
     pg_pool: PgPool,
     escaped_schema: String,
 }
 
-impl WorkerHelpers {
+impl WorkerUtils {
     /// Create a new instance of WorkerHelpers
     pub fn new(pg_pool: PgPool, escaped_schema: String) -> Self {
         Self {

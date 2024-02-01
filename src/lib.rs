@@ -12,5 +12,5 @@ pub use graphile_worker_macros::task;
 pub use graphile_worker_task_handler::*;
 
 pub use builder::{WorkerBuildError, WorkerOptions};
-pub use helpers::WorkerHelpers;
+pub use helpers::WorkerUtils;
 pub use runner::{Worker, WorkerContext};

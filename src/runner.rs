@@ -5,7 +5,7 @@ use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
 
 use crate::errors::GraphileWorkerError;
-use crate::helpers::WorkerHelpers;
+use crate::helpers::WorkerUtils;
 use crate::sql::get_job::Job;
 use crate::sql::{get_job::get_job, task_identifiers::TaskDetails};
 use crate::streams::{job_signal_stream, job_stream};
@@ -150,8 +150,8 @@ impl Worker {
         Ok(())
     }
 
-    pub fn create_helpers(&self) -> WorkerHelpers {
-        WorkerHelpers::new(self.pg_pool.clone(), self.escaped_schema.clone())
+    pub fn create_utils(&self) -> WorkerUtils {
+        WorkerUtils::new(self.pg_pool.clone(), self.escaped_schema.clone())
     }
 }
 
