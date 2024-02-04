@@ -192,10 +192,11 @@ impl StaticCounter {
         }
     }
 
-    pub async fn increment(&self) {
+    pub async fn increment(&self) -> u32 {
         let cell = self.cell.get_or_init(init_job_count).await;
         let mut count = cell.lock().await;
         *count += 1;
+        *count
     }
 
     pub async fn get(&self) -> u32 {
