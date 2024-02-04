@@ -11,6 +11,7 @@ use tokio::task::LocalSet;
 pub struct Job {
     pub id: i64,
     pub job_queue_id: Option<i32>,
+    pub task_identifier: String,
     pub queue_name: Option<String>,
     pub payload: serde_json::Value,
     pub priority: i16,
@@ -26,6 +27,15 @@ pub struct Job {
     pub locked_by: Option<String>,
     pub flags: Option<Value>,
     pub task_id: i32,
+}
+
+#[derive(FromRow, Debug)]
+pub struct JobQueue {
+    pub id: i32,
+    pub queue_name: String,
+    pub job_count: i32,
+    pub locked_at: Option<DateTime<Utc>>,
+    pub locked_by: Option<String>,
 }
 
 #[derive(Clone)]
@@ -64,6 +74,24 @@ impl TestDatabase {
             .fetch_all(&self.test_pool)
             .await
             .expect("Failed to get jobs")
+    }
+
+    #[allow(dead_code)]
+    pub async fn get_job_queues(&self) -> Vec<JobQueue> {
+        sqlx::query_as(
+            r#"
+                select job_queues.*, count(jobs.*)::int as job_count
+                    from graphile_worker._private_job_queues as job_queues
+                    left join graphile_worker._private_jobs as jobs on (
+                        jobs.job_queue_id = job_queues.id
+                    )
+                    group by job_queues.id
+                    order by job_queues.queue_name asc
+            "#,
+        )
+        .fetch_all(&self.test_pool)
+        .await
+        .expect("Failed to get job queues")
     }
 }
 
@@ -105,7 +133,6 @@ async fn create_test_database() -> TestDatabase {
     }
 }
 
-// The `with_test_db` function
 pub async fn with_test_db<F, Fut>(test_fn: F)
 where
     F: FnOnce(TestDatabase) -> Fut + 'static,
