@@ -15,14 +15,12 @@ async fn it_should_run_jobs() {
         let worker = test_db
             .create_worker_options()
             .define_raw_job("job3", |_, _: serde_json::Value| async move {
-                let job_count = JOB3_CALL_COUNT.get_or_init(|| Mutex::new(0));
-                let mut job_count = job_count.lock().await;
+                let mut job_count = JOB3_CALL_COUNT.get_or_init(|| Mutex::new(0)).lock().await;
                 *job_count += 1;
                 Ok(()) as Result<(), ()>
             })
             .define_raw_job("job2", |_, _: serde_json::Value| async move {
-                let job_count = JOB2_CALL_COUNT.get_or_init(|| Mutex::new(0));
-                let mut job_count = job_count.lock().await;
+                let mut job_count = JOB2_CALL_COUNT.get_or_init(|| Mutex::new(0)).lock().await;
                 *job_count += 1;
                 Ok(()) as Result<(), ()>
             })
@@ -83,8 +81,7 @@ async fn it_should_schedule_errors_for_retry() {
         let worker = test_db
             .create_worker_options()
             .define_raw_job("job3", |_, _: serde_json::Value| async move {
-                let job_count = JOB3_CALL_COUNT.get_or_init(|| Mutex::new(0));
-                let mut job_count = job_count.lock().await;
+                let mut job_count = JOB3_CALL_COUNT.get_or_init(|| Mutex::new(0)).lock().await;
                 *job_count += 1;
                 Err("fail".to_string()) as Result<(), String>
             })
