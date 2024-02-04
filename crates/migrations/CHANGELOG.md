@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.3.0...graphile_worker_migrations-v0.3.1) - 2024-02-04
+
+### Other
+- Add the first integration test
+
 ## [0.2.4](https://github.com/leo91000/graphile_worker/releases/tag/archimedes_migrations@0.2.4)
 
 

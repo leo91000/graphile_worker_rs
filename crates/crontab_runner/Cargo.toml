@@ -1,6 +1,6 @@
 [package]
 name = "graphile_worker_crontab_runner"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 license-file = "LICENSE.md"
 description = "Crontab runner package for graphile worker, a high performance Rust/PostgreSQL job queue"
@@ -18,7 +18,7 @@ runtime-tokio-native-tls = ["sqlx/runtime-tokio-native-tls", "tokio"]
 
 [dependencies]
 graphile_worker_crontab_types = { path = "../crontab_types", version = "0.5.0" }
-graphile_worker_shutdown_signal = { path = "../shutdown_signal", version = "0.3.0" }
+graphile_worker_shutdown_signal = { path = "../shutdown_signal", version = "0.3.1" }
 chrono = { workspace = true }
 sqlx = { workspace = true }
 thiserror = { workspace = true }
