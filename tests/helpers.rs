@@ -9,6 +9,9 @@ use sqlx::PgPool;
 use tokio::sync::Mutex;
 use tokio::sync::OnceCell;
 use tokio::task::LocalSet;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 
 #[derive(FromRow, Debug)]
 pub struct Job {
@@ -199,4 +202,21 @@ impl StaticCounter {
         let cell = self.cell.get_or_init(init_job_count).await;
         *cell.lock().await
     }
+}
+
+pub async fn enable_logs() {
+    static ONCE: OnceCell<()> = OnceCell::const_new();
+
+    ONCE.get_or_init(|| async {
+        let fmt_layer = tracing_subscriber::fmt::layer();
+        // Log level set to debug except for sqlx set at warn (to not show all sql requests)
+        let filter_layer =
+            EnvFilter::try_new("debug,sqlx=warn,graphile_worker_migrations=warn").unwrap();
+
+        tracing_subscriber::registry()
+            .with(filter_layer)
+            .with(fmt_layer)
+            .init();
+    })
+    .await;
 }
