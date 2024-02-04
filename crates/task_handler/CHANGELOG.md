@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_handler-v0.2.0...graphile_worker_task_handler-v0.2.1) - 2024-02-04
+
+### Other
+- update Cargo.toml dependencies
+
 ## [0.1.0](https://github.com/leo91000/archimedes/releases/tag/archimedes_task_handler@0.1.0)
 
 

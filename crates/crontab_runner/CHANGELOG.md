@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.5.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.5.0...graphile_worker_crontab_runner-v0.5.1) - 2024-02-04
+
+### Other
+- update Cargo.toml dependencies
+
 ## [0.4.2](https://github.com/leo91000/graphile_worker/releases/tag/archimedes_crontab_runner@0.4.2)
 
 

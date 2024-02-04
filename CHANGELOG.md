@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.4.0...graphile_worker-v0.5.0) - 2024-02-04
+
+### Other
+- Add more complex test cases for run_once
+- Add more run_once test
+- Rename test file
+- Add more run_once cases & refactor
+- simplify job_count code
+- Add more integration tests
+- *(deps)* update rust crate tokio to 1.36.0
+- Add the first integration test
+- Rename create_helpers method to create_utils
+- Fix ci permissions
+- release
+
 ## [0.4.0](https://github.com/leo91000/graphile_worker_rs/releases/tag/graphile_worker-v0.4.0) - 2024-01-31
 
 ### Added

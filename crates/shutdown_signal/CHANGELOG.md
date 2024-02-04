@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_shutdown_signal-v0.3.0...graphile_worker_shutdown_signal-v0.3.1) - 2024-02-04
+
+### Other
+- update Cargo.toml dependencies
+
 ## [0.2.4](https://github.com/leo91000/archimedes/releases/tag/archimedes_shutdown_signal@0.2.4)
 
 
