@@ -1,13 +1,16 @@
+#![allow(dead_code)]
+
 use chrono::{DateTime, Utc};
 use graphile_worker::WorkerOptions;
 use serde_json::Value;
 use sqlx::postgres::PgConnectOptions;
 use sqlx::FromRow;
 use sqlx::PgPool;
+use tokio::sync::Mutex;
+use tokio::sync::OnceCell;
 use tokio::task::LocalSet;
 
 #[derive(FromRow, Debug)]
-#[allow(dead_code)]
 pub struct Job {
     pub id: i64,
     pub job_queue_id: Option<i32>,
@@ -76,7 +79,6 @@ impl TestDatabase {
             .expect("Failed to get jobs")
     }
 
-    #[allow(dead_code)]
     pub async fn get_job_queues(&self) -> Vec<JobQueue> {
         sqlx::query_as(
             r#"
@@ -92,6 +94,24 @@ impl TestDatabase {
         .fetch_all(&self.test_pool)
         .await
         .expect("Failed to get job queues")
+    }
+
+    pub async fn make_jobs_run_now(&self, task_identifier: &str) {
+        sqlx::query(
+            r#"
+                update graphile_worker._private_jobs
+                    set run_at = now()
+                    where task_id = (
+                        select id
+                            from graphile_worker._private_tasks
+                            where identifier = $1
+                    )
+            "#,
+        )
+        .bind(task_identifier)
+        .execute(&self.test_pool)
+        .await
+        .expect("Failed to update jobs");
     }
 }
 
@@ -154,4 +174,29 @@ where
             result.expect("Test failed");
         })
         .await;
+}
+
+pub struct StaticCounter {
+    cell: OnceCell<Mutex<u32>>,
+}
+async fn init_job_count() -> Mutex<u32> {
+    Mutex::new(0)
+}
+impl StaticCounter {
+    pub const fn new() -> Self {
+        Self {
+            cell: OnceCell::const_new(),
+        }
+    }
+
+    pub async fn increment(&self) {
+        let cell = self.cell.get_or_init(init_job_count).await;
+        let mut count = cell.lock().await;
+        *count += 1;
+    }
+
+    pub async fn get(&self) -> u32 {
+        let cell = self.cell.get_or_init(init_job_count).await;
+        *cell.lock().await
+    }
 }
