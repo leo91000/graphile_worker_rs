@@ -59,4 +59,20 @@ impl WorkerUtils {
         )
         .await
     }
+
+    pub async fn remove_job(&self, job_key: &str) -> Result<(), GraphileWorkerError> {
+        let sql = format!(
+            r#"
+            select * from {escaped_schema}.remove_job($1::text);
+        "#,
+            escaped_schema = self.escaped_schema
+        );
+
+        sqlx::query(&sql)
+            .bind(job_key)
+            .execute(&self.pg_pool)
+            .await?;
+
+        Ok(())
+    }
 }
