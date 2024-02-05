@@ -1189,3 +1189,102 @@ async fn single_worker_runs_jobs_in_series_purges_all_before_exit() {
     })
     .await;
 }
+
+#[tokio::test]
+async fn jobs_added_to_the_same_queue_will_be_ran_serially_even_if_multiple_workers() {
+    static JOB3_CALL_COUNT: StaticCounter = StaticCounter::new();
+    static RXS: OnceCell<Mutex<VecDeque<oneshot::Receiver<()>>>> = OnceCell::const_new();
+    RXS.set(Mutex::new(VecDeque::new())).unwrap();
+    let mut txs = vec![];
+
+    #[derive(serde::Deserialize, serde::Serialize)]
+    struct Job3Args {
+        a: i32,
+    }
+
+    #[graphile_worker::task]
+    async fn job3(_args: Job3Args, _: WorkerContext) -> Result<(), ()> {
+        let rx = RXS.get().unwrap().lock().await.pop_front().unwrap(); // Obtain the receiver for the current job
+        rx.await.unwrap(); // Wait for the signal to complete the job
+        JOB3_CALL_COUNT.increment().await;
+        Ok(())
+    }
+
+    helpers::with_test_db(|test_db| async move {
+        let worker = test_db
+            .create_worker_options()
+            .define_job(job3)
+            .init()
+            .await
+            .expect("Failed to create worker");
+        let worker = Rc::new(worker);
+
+        // Schedule 5 jobs to the same queue
+        for _ in 1..=5 {
+            let (tx, rx) = oneshot::channel::<()>();
+            txs.push(tx);
+            RXS.get().unwrap().lock().await.push_back(rx);
+
+            worker
+                .create_utils()
+                .add_job::<job3>(
+                    Job3Args { a: 1 },
+                    Some(JobSpec {
+                        queue_name: Some("serial".into()),
+                        ..Default::default()
+                    }),
+                )
+                .await
+                .expect("Failed to add job");
+        }
+
+        // Start multiple worker instances to process the jobs
+        let mut handles = vec![];
+        for _ in 0..3 {
+            let worker = worker.clone();
+            handles.push(spawn_local(async move {
+                worker.run_once().await.expect("Failed to run worker");
+            }));
+        }
+
+        // Sequentially complete each job and verify progress
+        for i in 1..=5 {
+            // Give other workers a chance to interfere
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+            // Complete the current job
+            txs.remove(0)
+                .send(())
+                .expect("Failed to send completion signal");
+
+            // Wait a brief moment to ensure the job is processed
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            assert_eq!(
+                JOB3_CALL_COUNT.get().await,
+                i,
+                "Jobs should be processed serially"
+            );
+        }
+
+        // Wait for all worker instances to finish
+        for handle in handles {
+            handle.await.expect("Worker task failed");
+        }
+
+        // Verify all jobs were completed
+        assert_eq!(
+            JOB3_CALL_COUNT.get().await,
+            5,
+            "All jobs should have completed"
+        );
+
+        // Check that all jobs are purged from the database
+        let jobs_after = test_db.get_jobs().await;
+        assert_eq!(
+            jobs_after.len(),
+            0,
+            "All jobs should be removed after completion"
+        );
+    })
+    .await;
+}

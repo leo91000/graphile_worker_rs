@@ -93,15 +93,38 @@ impl Worker {
         );
 
         job_stream
-            .for_each_concurrent(self.concurrency, |job| async move {
-                let result = run_and_release_job(&job, self, &StreamSource::RunOnce).await;
-                match result {
-                    Ok(_) => {
-                        info!(job_id = job.id(), "Job processed");
+            .for_each_concurrent(self.concurrency, |mut job| async move {
+                loop {
+                    let result = run_and_release_job(&job, self, &StreamSource::RunOnce).await;
+
+                    match result {
+                        Ok(_) => {
+                            info!(job_id = job.id(), "Job processed");
+                        }
+                        Err(e) => {
+                            error!("Error while processing job : {:?}", e);
+                        }
+                    };
+
+                    // If the job has a queue, we need to fetch another job because the job_signal will not trigger
+                    // Is there a simpler way to do this ?
+                    if job.job_queue_id().is_none() {
+                        break;
                     }
-                    Err(e) => {
-                        error!("Error while processing job : {:?}", e);
-                    }
+                    info!(job_id = job.id(), "Job has queue, fetching another job");
+                    let new_job = get_job(
+                        self.pg_pool(),
+                        self.task_details(),
+                        self.escaped_schema(),
+                        self.worker_id(),
+                        self.forbidden_flags(),
+                    )
+                    .await
+                    .unwrap_or(None);
+                    let Some(new_job) = new_job else {
+                        break;
+                    };
+                    job = new_job;
                 }
             })
             .await;
