@@ -22,6 +22,8 @@ pub enum MigrateError {
     },
     #[error("Error occured while migrate: {0}")]
     SqlError(#[from] sqlx::Error),
+    #[error("There are locked jobs present; migration 11 cannot complete. Please ensure all workers are shut down cleanly and all locked jobs and queues are unlocked before attempting this migration.")]
+    LockedJobInMigration11,
 }
 
 /// Installs the Graphile Worker schema into the database.
@@ -34,13 +36,13 @@ where
 
     let create_schema_query = formatdoc!(
         r#"
-            create schema {escaped_schema};
+            create schema if not exists {escaped_schema};
         "#
     );
 
     let create_migration_table_query = formatdoc!(
         r#"
-            create table {escaped_schema}.migrations (
+            create table if not exists {escaped_schema}.migrations (
                 id int primary key, 
                 ts timestamptz default now() not null,
                 breaking boolean not null default false
@@ -101,6 +103,7 @@ where
             };
 
             if code == "42P01" {
+                info!(error = ?e, schema = escaped_schema, "Graphile Worker schema not found, installing...");
                 install_schema(executor.clone(), escaped_schema).await?;
                 return Ok(Default::default());
             }
@@ -157,7 +160,8 @@ where
                 migration.name(),
             );
             let mut tx = executor.clone().begin().await?;
-            migration.execute(&mut tx, escaped_schema).await?;
+            let result = migration.execute(&mut tx, escaped_schema).await;
+            check_migration_error(migration_number, result)?;
             let sql =
                 format!("insert into {escaped_schema}.migrations (id, breaking) values ($1, $2)");
             query(&sql)
@@ -197,4 +201,26 @@ where
     }
 
     Ok(())
+}
+
+/// If migration number is 11 and code is 22012, it means there are locked jobs present
+fn check_migration_error(
+    migration_number: u32,
+    result: Result<(), SqlxError>,
+) -> Result<(), MigrateError> {
+    match (migration_number, result) {
+        (11, Err(SqlxError::Database(e))) => {
+            let Some(code) = e.code() else {
+                return Err(MigrateError::SqlError(SqlxError::Database(e)));
+            };
+
+            if code == "22012" {
+                return Err(MigrateError::LockedJobInMigration11);
+            }
+
+            Err(MigrateError::SqlError(SqlxError::Database(e)))
+        }
+        (_, Err(e)) => Err(MigrateError::SqlError(e)),
+        (_, Ok(())) => Ok(()),
+    }
 }

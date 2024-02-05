@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 
 use chrono::{DateTime, Utc};
+use graphile_worker::sql::add_job::add_job;
+use graphile_worker::JobSpec;
 use graphile_worker::WorkerOptions;
 use serde_json::Value;
 use sqlx::postgres::PgConnectOptions;
@@ -42,6 +44,13 @@ pub struct JobQueue {
     pub job_count: i32,
     pub locked_at: Option<DateTime<Utc>>,
     pub locked_by: Option<String>,
+}
+
+#[derive(FromRow, Debug)]
+pub struct Migration {
+    pub id: i32,
+    pub ts: DateTime<Utc>,
+    pub breaking: bool,
 }
 
 #[derive(Clone)]
@@ -115,6 +124,25 @@ impl TestDatabase {
         .execute(&self.test_pool)
         .await
         .expect("Failed to update jobs");
+    }
+
+    pub async fn get_migrations(&self) -> Vec<Migration> {
+        sqlx::query_as("select * from graphile_worker.migrations")
+            .fetch_all(&self.test_pool)
+            .await
+            .expect("Failed to get migrations")
+    }
+
+    pub async fn add_job(&self, identifier: &str, payload: impl serde::Serialize, spec: JobSpec) {
+        add_job(
+            &self.test_pool,
+            "graphile_worker",
+            identifier,
+            serde_json::to_value(payload).unwrap(),
+            spec,
+        )
+        .await
+        .expect("Failed to add job")
     }
 }
 
@@ -212,7 +240,7 @@ pub async fn enable_logs() {
         let fmt_layer = tracing_subscriber::fmt::layer();
         // Log level set to debug except for sqlx set at warn (to not show all sql requests)
         let filter_layer =
-            EnvFilter::try_new("debug,sqlx=warn,graphile_worker_migrations=warn").unwrap();
+            EnvFilter::try_new("debug,sqlx=warn,graphile_worker_migrations=info").unwrap();
 
         tracing_subscriber::registry()
             .with(filter_layer)
