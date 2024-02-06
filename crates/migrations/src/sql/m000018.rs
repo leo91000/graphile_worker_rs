@@ -74,8 +74,8 @@ pub const M000018_MIGRATION: GraphileWorkerMigration = GraphileWorkerMigration {
                         )
                     from :GRAPHILE_WORKER_SCHEMA._private_tasks as tasks
                     left join :GRAPHILE_WORKER_SCHEMA._private_job_queues as job_queues
-                    on job_queues.queue_name = queue_name
-                    where tasks.identifier = identifier
+                    on job_queues.queue_name = add_job.queue_name
+                    where tasks.identifier = add_job.identifier
                     on conflict (key)
                     do update set
                         revision = jobs.revision + 1,

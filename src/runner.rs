@@ -6,7 +6,7 @@ use std::{collections::HashMap, time::Instant};
 
 use crate::errors::GraphileWorkerError;
 use crate::helpers::WorkerUtils;
-use crate::sql::get_job::Job;
+use crate::job::Job;
 use crate::sql::{get_job::get_job, task_identifiers::TaskDetails};
 use crate::streams::{job_signal_stream, job_stream};
 use futures::{try_join, StreamExt, TryStreamExt};

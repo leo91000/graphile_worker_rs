@@ -1,43 +1,9 @@
-use chrono::prelude::*;
-use getset::Getters;
-use serde_json::Value;
-use sqlx::{query_as, FromRow, PgExecutor};
+use sqlx::{query_as, PgExecutor};
 
-use crate::errors::Result;
+use crate::DbJob;
+use crate::{errors::Result, Job};
 
 use super::task_identifiers::TaskDetails;
-
-#[derive(FromRow, Getters, Debug)]
-#[getset(get = "pub")]
-#[allow(dead_code)]
-pub struct Job {
-    id: i64,
-    /// FK to tasks
-    job_queue_id: Option<i32>,
-    /// The JSON payload of the job
-    payload: serde_json::Value,
-    /// Lower number means it should run sooner
-    priority: i16,
-    /// When it was due to run
-    run_at: DateTime<Utc>,
-    /// How many times it has been attempted
-    attempts: i16,
-    /// The limit for the number of times it should be attempted
-    max_attempts: i16,
-    /// If attempts > 0, why did it fail last ?
-    last_error: Option<String>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-    /// "job_key" - unique identifier for easy update from user code
-    key: Option<String>,
-    /// A count of the revision numbers
-    revision: i32,
-    locked_at: Option<DateTime<Utc>>,
-    locked_by: Option<String>,
-    flags: Option<Value>,
-    /// Shorcut to tasks.identifer
-    task_id: i32,
-}
 
 pub async fn get_job<'e>(
     executor: impl PgExecutor<'e>,
@@ -81,8 +47,14 @@ pub async fn get_job<'e>(
         q = q.bind(flags_to_skip);
     }
 
-    let job = q.fetch_optional(executor).await?;
-    Ok(job)
+    let job: Option<DbJob> = q.fetch_optional(executor).await?;
+    Ok(job.map(|job| {
+        let task_identifier = task_details
+            .get(job.task_id())
+            .map(ToOwned::to_owned)
+            .unwrap_or_default();
+        Job::from_db_job(job, task_identifier)
+    }))
 }
 
 fn get_flag_clause(flags_to_skip: &Vec<String>, param_ord: u8) -> String {

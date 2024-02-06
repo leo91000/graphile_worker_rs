@@ -7,10 +7,8 @@ use tracing::error;
 
 use crate::{
     errors::Result,
-    sql::{
-        get_job::{get_job, Job},
-        task_identifiers::TaskDetails,
-    },
+    sql::{get_job::get_job, task_identifiers::TaskDetails},
+    Job,
 };
 
 #[derive(Debug)]

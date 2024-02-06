@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use graphile_worker::sql::add_job::add_job;
+use graphile_worker::DbJob;
 use graphile_worker::JobSpec;
 use graphile_worker::WorkerOptions;
 use serde_json::Value;
@@ -16,7 +17,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
 #[derive(FromRow, Debug)]
-pub struct Job {
+pub struct JobWithQueueName {
     pub id: i64,
     pub job_queue_id: Option<i32>,
     pub task_identifier: String,
@@ -76,7 +77,7 @@ impl TestDatabase {
             .concurrency(4)
     }
 
-    pub async fn get_jobs(&self) -> Vec<Job> {
+    pub async fn get_jobs(&self) -> Vec<JobWithQueueName> {
         sqlx::query_as(
             r#"
                 select jobs.*, identifier as task_identifier, job_queues.queue_name as queue_name
@@ -133,7 +134,12 @@ impl TestDatabase {
             .expect("Failed to get migrations")
     }
 
-    pub async fn add_job(&self, identifier: &str, payload: impl serde::Serialize, spec: JobSpec) {
+    pub async fn add_job(
+        &self,
+        identifier: &str,
+        payload: impl serde::Serialize,
+        spec: JobSpec,
+    ) -> DbJob {
         add_job(
             &self.test_pool,
             "graphile_worker",

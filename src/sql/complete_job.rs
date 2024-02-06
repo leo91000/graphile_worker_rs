@@ -2,7 +2,7 @@ use sqlx::{query, PgExecutor};
 
 use crate::errors::GraphileWorkerError;
 
-use super::get_job::Job;
+use crate::Job;
 
 pub async fn complete_job(
     executor: impl for<'e> PgExecutor<'e>,

@@ -1,7 +1,7 @@
-use crate::errors::GraphileWorkerError;
+use crate::{errors::GraphileWorkerError, DbJob};
 use chrono::Utc;
 use getset::Getters;
-use sqlx::{query, PgExecutor};
+use sqlx::{query_as, PgExecutor};
 use tracing::info;
 
 /// Behavior when an existing job with the same job key is found is controlled by this setting
@@ -59,7 +59,7 @@ pub async fn add_job(
     identifier: &str,
     payload: serde_json::Value,
     spec: JobSpec,
-) -> Result<(), GraphileWorkerError> {
+) -> Result<DbJob, GraphileWorkerError> {
     let sql = format!(
         r#"
             select * from {escaped_schema}.add_job(
@@ -78,7 +78,7 @@ pub async fn add_job(
 
     let job_key_mode = spec.job_key_mode.map(|jkm| jkm.format().to_string());
 
-    query(&sql)
+    let job = query_as(&sql)
         .bind(identifier)
         .bind(&payload)
         .bind(spec.queue_name)
@@ -88,7 +88,7 @@ pub async fn add_job(
         .bind(spec.priority)
         .bind(spec.flags)
         .bind(job_key_mode)
-        .execute(executor)
+        .fetch_one(executor)
         .await?;
 
     info!(
@@ -97,5 +97,5 @@ pub async fn add_job(
         "Job added to queue"
     );
 
-    Ok(())
+    Ok(job)
 }
