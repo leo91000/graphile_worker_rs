@@ -2,7 +2,7 @@ use graphile_worker_task_handler::TaskDefinition;
 use serde::Serialize;
 use sqlx::PgPool;
 
-use crate::{errors::GraphileWorkerError, sql::add_job::add_job, DbJob, JobSpec, WorkerContext};
+use crate::{errors::GraphileWorkerError, sql::add_job::add_job, Job, JobSpec, WorkerContext};
 
 /// The WorkerHelpers struct provides a set of methods to add jobs to the queue
 pub struct WorkerUtils {
@@ -25,7 +25,7 @@ impl WorkerUtils {
         &self,
         payload: T::Payload,
         spec: Option<JobSpec>,
-    ) -> Result<DbJob, GraphileWorkerError> {
+    ) -> Result<Job, GraphileWorkerError> {
         let identifier = T::identifier();
         let payload = serde_json::to_value(payload)?;
         add_job(
@@ -45,7 +45,7 @@ impl WorkerUtils {
         identifier: &str,
         payload: P,
         spec: Option<JobSpec>,
-    ) -> Result<DbJob, GraphileWorkerError>
+    ) -> Result<Job, GraphileWorkerError>
     where
         P: Serialize,
     {

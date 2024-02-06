@@ -1,4 +1,4 @@
-use crate::{errors::GraphileWorkerError, DbJob};
+use crate::{errors::GraphileWorkerError, Job};
 use chrono::Utc;
 use getset::Getters;
 use sqlx::{query_as, PgExecutor};
@@ -59,7 +59,7 @@ pub async fn add_job(
     identifier: &str,
     payload: serde_json::Value,
     spec: JobSpec,
-) -> Result<DbJob, GraphileWorkerError> {
+) -> Result<Job, GraphileWorkerError> {
     let sql = format!(
         r#"
             select * from {escaped_schema}.add_job(
@@ -97,5 +97,5 @@ pub async fn add_job(
         "Job added to queue"
     );
 
-    Ok(job)
+    Ok(Job::from_db_job(job, identifier.to_string()))
 }

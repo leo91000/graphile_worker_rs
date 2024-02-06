@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use graphile_worker::sql::add_job::add_job;
-use graphile_worker::DbJob;
+use graphile_worker::Job;
 use graphile_worker::JobSpec;
 use graphile_worker::WorkerOptions;
 use serde_json::Value;
@@ -139,7 +139,7 @@ impl TestDatabase {
         identifier: &str,
         payload: impl serde::Serialize,
         spec: JobSpec,
-    ) -> DbJob {
+    ) -> Job {
         add_job(
             &self.test_pool,
             "graphile_worker",
