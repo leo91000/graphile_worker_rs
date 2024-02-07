@@ -5,10 +5,10 @@ use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
 
 use crate::errors::GraphileWorkerError;
-use crate::helpers::WorkerUtils;
 use crate::job::Job;
 use crate::sql::{get_job::get_job, task_identifiers::TaskDetails};
 use crate::streams::{job_signal_stream, job_stream};
+use crate::worker_utils::WorkerUtils;
 use futures::{try_join, StreamExt, TryStreamExt};
 use getset::Getters;
 use graphile_worker_crontab_runner::{cron_main, ScheduleCronJobError};

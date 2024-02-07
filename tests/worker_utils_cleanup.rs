@@ -1,5 +1,5 @@
 use chrono::Utc;
-use graphile_worker::{helpers::CleanupTask, JobSpec};
+use graphile_worker::{worker_utils::CleanupTask, JobSpec};
 use indoc::formatdoc;
 
 use crate::helpers::with_test_db;

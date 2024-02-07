@@ -1,5 +1,5 @@
 use chrono::{Timelike, Utc};
-use graphile_worker::helpers::RescheduleJobOptions;
+use graphile_worker::worker_utils::RescheduleJobOptions;
 
 use crate::helpers::{with_test_db, SelectionOfJobs};
 
