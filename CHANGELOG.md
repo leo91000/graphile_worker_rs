@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.5.0...graphile_worker-v0.6.0) - 2024-02-07
+
+### Added
+- Added cleanup, completed_jobs, force_unlock_workers,
+- Make add_job util returns the DbJob
+- Add migration 11 locked job error
+- Add final run_once tests
+- Add remove_job helper
+
+### Other
+- [**breaking**] Rename helpers mod to worker_utils
+- Make add_job return Job instead of DbJob
+- More run_once tests
+
 ## [0.5.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.4.0...graphile_worker-v0.5.0) - 2024-02-04
 
 ### Other

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.3.1...graphile_worker_migrations-v0.4.0) - 2024-02-07
+
+### Added
+- Make add_job util returns the DbJob
+- Add migration 11 locked job error
+
 ## [0.3.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.3.0...graphile_worker_migrations-v0.3.1) - 2024-02-04
 
 ### Other
