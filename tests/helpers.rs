@@ -2,13 +2,17 @@
 
 use chrono::{DateTime, Utc};
 use graphile_worker::sql::add_job::add_job;
+use graphile_worker::DbJob;
 use graphile_worker::Job;
 use graphile_worker::JobSpec;
 use graphile_worker::WorkerOptions;
+use graphile_worker::WorkerUtils;
 use serde_json::Value;
 use sqlx::postgres::PgConnectOptions;
+use sqlx::query_as;
 use sqlx::FromRow;
 use sqlx::PgPool;
+use sqlx::Row;
 use tokio::sync::Mutex;
 use tokio::sync::OnceCell;
 use tokio::task::LocalSet;
@@ -16,7 +20,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
-#[derive(FromRow, Debug)]
+#[derive(FromRow, Debug, PartialEq, Eq)]
 pub struct JobWithQueueName {
     pub id: i64,
     pub job_queue_id: Option<i32>,
@@ -59,6 +63,15 @@ pub struct TestDatabase {
     pub source_pool: PgPool,
     pub test_pool: PgPool,
     pub name: String,
+}
+
+#[derive(Clone)]
+pub struct SelectionOfJobs {
+    pub failed_job: Job,
+    pub regular_job_1: Job,
+    pub locked_job: Job,
+    pub regular_job_2: Job,
+    pub untouched_job: Job,
 }
 
 impl TestDatabase {
@@ -109,6 +122,15 @@ impl TestDatabase {
         .expect("Failed to get job queues")
     }
 
+    pub async fn get_tasks(&self) -> Vec<String> {
+        let rows = sqlx::query("select identifier from graphile_worker._private_tasks")
+            .fetch_all(&self.test_pool)
+            .await
+            .expect("Failed to get tasks");
+
+        rows.into_iter().map(|row| row.get("identifier")).collect()
+    }
+
     pub async fn make_jobs_run_now(&self, task_identifier: &str) {
         sqlx::query(
             r#"
@@ -149,6 +171,99 @@ impl TestDatabase {
         )
         .await
         .expect("Failed to add job")
+    }
+
+    pub fn worker_utils(&self) -> WorkerUtils {
+        WorkerUtils::new(self.test_pool.clone(), "graphile_worker".into())
+    }
+
+    pub async fn make_selection_of_jobs(&self) -> SelectionOfJobs {
+        let utils = self.worker_utils();
+
+        let in_one_hour = Utc::now() + chrono::Duration::hours(1);
+        let failed_job = utils
+            .add_raw_job(
+                "job3",
+                serde_json::json!({ "a": 1 }),
+                Some(JobSpec {
+                    run_at: Some(in_one_hour),
+                    ..Default::default()
+                }),
+            )
+            .await
+            .expect("Failed to add job");
+        let regular_job_1 = utils
+            .add_raw_job(
+                "job3",
+                serde_json::json!({ "a": 2 }),
+                Some(JobSpec {
+                    run_at: Some(in_one_hour),
+                    ..Default::default()
+                }),
+            )
+            .await
+            .expect("Failed to add job");
+        let locked_job = utils
+            .add_raw_job(
+                "job3",
+                serde_json::json!({ "a": 3 }),
+                Some(JobSpec {
+                    run_at: Some(in_one_hour),
+                    ..Default::default()
+                }),
+            )
+            .await
+            .expect("Failed to add job");
+        let regular_job_2 = utils
+            .add_raw_job(
+                "job3",
+                serde_json::json!({ "a": 4 }),
+                Some(JobSpec {
+                    run_at: Some(in_one_hour),
+                    ..Default::default()
+                }),
+            )
+            .await
+            .expect("Failed to add job");
+        let untouched_job = utils
+            .add_raw_job(
+                "job3",
+                serde_json::json!({ "a": 5 }),
+                Some(JobSpec {
+                    run_at: Some(in_one_hour),
+                    ..Default::default()
+                }),
+            )
+            .await
+            .expect("Failed to add job");
+
+        let locked_job = {
+            let locked_job_update: DbJob = query_as("update graphile_worker._private_jobs as jobs set locked_by = 'test', locked_at = now() where id = $1 returning *")
+            .bind(locked_job.id())
+            .fetch_one(&self.test_pool)
+            .await
+            .expect("Failed to lock job");
+
+            Job::from_db_job(locked_job_update, "job3".to_string())
+        };
+
+        let failed_job = {
+            let failed_job_update: DbJob = query_as("update graphile_worker._private_jobs as jobs set last_error = 'Failed forever', attempts = max_attempts where id = $1 returning *")
+                .bind(failed_job.id())
+                .fetch_one(&self.test_pool)
+                .await
+                .expect("Failed to fail job");
+
+            Job::from_db_job(failed_job_update, "job3".to_string())
+        };
+
+        SelectionOfJobs {
+            failed_job,
+            regular_job_1,
+            locked_job,
+            regular_job_2,
+            untouched_job,
+        }
     }
 }
 

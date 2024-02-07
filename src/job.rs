@@ -3,7 +3,7 @@ use getset::Getters;
 use serde_json::Value;
 use sqlx::FromRow;
 
-#[derive(FromRow, Getters, Debug)]
+#[derive(FromRow, Getters, Debug, Clone, PartialEq, Eq)]
 #[getset(get = "pub")]
 #[allow(dead_code)]
 pub struct DbJob {
@@ -35,7 +35,7 @@ pub struct DbJob {
     task_id: i32,
 }
 
-#[derive(FromRow, Getters, Debug)]
+#[derive(FromRow, Getters, Debug, Clone, PartialEq, Eq)]
 #[getset(get = "pub")]
 #[allow(dead_code)]
 pub struct Job {
