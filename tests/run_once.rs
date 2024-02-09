@@ -7,6 +7,7 @@ use serde_json::json;
 use tokio::{
     sync::{oneshot, Mutex, OnceCell},
     task::spawn_local,
+    time::{sleep, Instant},
 };
 
 mod helpers;
@@ -473,8 +474,14 @@ async fn schedules_a_new_job_if_existing_is_being_processed() {
         });
 
         tracing::info!("Waiting for first job to be picked up");
-        // Ensure the first job is picked up by waiting for a small delay
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        // Wait for the first job to be picked up
+        let start_time = Instant::now();
+        while JOB3_CALL_COUNT.get().await < 1 {
+            if start_time.elapsed().as_secs() > 5 {
+                panic!("Job3 should have been executed by now");
+            }
+            sleep(tokio::time::Duration::from_millis(100)).await;
+        }
         assert_eq!(JOB3_CALL_COUNT.get().await, 1);
 
         // Schedule a new job with the same key while the first one is being processed
@@ -858,8 +865,14 @@ async fn jobs_in_progress_cannot_be_removed() {
             worker.run_once().await.expect("Failed to run worker");
         });
 
-        // Sleep briefly to ensure the job is picked up
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        // Wait for the job to be picked up
+        let start_time = Instant::now();
+        while JOB3_CALL_COUNT.get().await < 1 {
+            if start_time.elapsed().as_secs() > 5 {
+                panic!("Job3 should have been picked up by now");
+            }
+            sleep(tokio::time::Duration::from_millis(100)).await;
+        }
         assert_eq!(JOB3_CALL_COUNT.get().await, 1, "Job should be in progress");
 
         // Attempt to remove the job
@@ -948,8 +961,14 @@ async fn runs_jobs_asynchronously() {
             worker.run_once().await.expect("Failed to run worker");
         });
 
-        // Wait a brief moment to ensure the job is picked up but not completed
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        // Wait for the job to be picked up but not completed
+        let start_time = Instant::now();
+        while JOB3_CALL_COUNT.get().await < 1 {
+            if start_time.elapsed().as_secs() > 5 {
+                panic!("Job3 should have been picked up by now");
+            }
+            sleep(tokio::time::Duration::from_millis(100)).await;
+        }
         assert_eq!(
             JOB3_CALL_COUNT.get().await,
             1,
@@ -1066,8 +1085,14 @@ async fn runs_jobs_in_parallel() {
             }));
         }
 
-        // Wait a brief moment to ensure all jobs are picked up
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        // Wait for all jobs are picked up
+        let start_time = Instant::now();
+        while JOB3_CALL_COUNT.get().await < 5 {
+            if start_time.elapsed().as_secs() > 5 {
+                panic!("Job3 should have been picked up by now");
+            }
+            sleep(tokio::time::Duration::from_millis(100)).await;
+        }
         assert_eq!(
             JOB3_CALL_COUNT.get().await,
             5,
@@ -1166,7 +1191,7 @@ async fn single_worker_runs_jobs_in_series_purges_all_before_exit() {
             tx.send(()).expect("Failed to send completion signal");
 
             // Wait a brief moment to ensure the job is picked up
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            sleep(tokio::time::Duration::from_millis(100)).await;
             assert_eq!(
                 JOB3_CALL_COUNT.get().await,
                 i,
@@ -1256,20 +1281,21 @@ async fn jobs_added_to_the_same_queue_will_be_ran_serially_even_if_multiple_work
         // Sequentially complete each job and verify progress
         for i in 1..=5 {
             // Give other workers a chance to interfere
-            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            sleep(tokio::time::Duration::from_millis(50)).await;
 
             // Complete the current job
             txs.remove(0)
                 .send(())
                 .expect("Failed to send completion signal");
 
-            // Wait a brief moment to ensure the job is processed
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            assert_eq!(
-                JOB3_CALL_COUNT.get().await,
-                i,
-                "Jobs should be processed serially"
-            );
+            // Wait for the job to be picked up
+            let start_time = Instant::now();
+            while JOB3_CALL_COUNT.get().await < i {
+                if start_time.elapsed().as_secs() > 5 {
+                    panic!("Job3 should have been picked up by now");
+                }
+                sleep(tokio::time::Duration::from_millis(100)).await;
+            }
         }
 
         // Wait for all worker instances to finish
