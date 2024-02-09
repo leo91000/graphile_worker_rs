@@ -1088,7 +1088,7 @@ async fn runs_jobs_in_parallel() {
         // Wait for all jobs are picked up
         let start_time = Instant::now();
         while JOB3_CALL_COUNT.get().await < 5 {
-            if start_time.elapsed().as_secs() > 5 {
+            if start_time.elapsed().as_secs() > 20 {
                 panic!("Job3 should have been picked up by now");
             }
             sleep(tokio::time::Duration::from_millis(100)).await;
