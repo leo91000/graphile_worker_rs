@@ -1,3 +1,4 @@
+use graphile_worker_migrations::{migrate, MigrateError};
 use graphile_worker_task_handler::TaskDefinition;
 use indoc::formatdoc;
 use serde::Serialize;
@@ -237,6 +238,11 @@ impl WorkerUtils {
         for task in tasks {
             task.execute(&self.pg_pool, &self.escaped_schema).await?;
         }
+        Ok(())
+    }
+
+    pub async fn migrate(&self) -> Result<(), MigrateError> {
+        migrate(&self.pg_pool, &self.escaped_schema).await?;
         Ok(())
     }
 }

@@ -1015,9 +1015,15 @@ async fn runs_jobs_in_parallel() {
 
     #[graphile_worker::task]
     async fn job3(_args: Job3Args, _: WorkerContext) -> Result<(), ()> {
-        let rx = RXS.get().unwrap().lock().await.remove(0); // Obtain the receiver for this job
+        let rx = RXS
+            .get()
+            .expect("OnceCell should be set globally at the beginning of the test")
+            .lock()
+            .await
+            .remove(0); // Obtain the receiver for this job
         JOB3_CALL_COUNT.increment().await;
-        rx.await.unwrap(); // Wait for the signal to complete the job
+        rx.await
+            .expect("The receiver should not be dropped before the job completes");
         Ok(())
     }
 
