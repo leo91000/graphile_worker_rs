@@ -1,0 +1,44 @@
+name: Tarpaulin
+permissions: "write-all"
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+jobs:
+  tarpaulin:
+    timeout-minutes: 20
+    runs-on: ubuntu-22.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin
+      - name: Run cargo-tarpaulin
+        run: cargo tarpaulin --out Xml
+        env:
+          DATABASE_URL: postgres://testuser:testpassword@localhost:5432/testdb
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./target/tarpaulin-report.xml
+          fail_ci_if_error: true
+          verbose: true

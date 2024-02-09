@@ -29,29 +29,8 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
-          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-        with:
-          key: v1 # increment this to bust the cache if needed
-      - name: Rustfmt
-        run: cargo fmt --all -- --check
-      - name: Clippy
-        uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Test
         run: cargo test --all
         env:
           DATABASE_URL: postgres://testuser:testpassword@localhost:5432/testdb
-      - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
-      - name: Run cargo-tarpaulin
-        run: cargo tarpaulin --out Xml
-        env:
-          DATABASE_URL: postgres://testuser:testpassword@localhost:5432/testdb
-      - name: Upload to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./target/tarpaulin-report.xml
-          fail_ci_if_error: true
-          verbose: true
