@@ -33,12 +33,12 @@ jobs:
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin
       - name: Run cargo-tarpaulin
-        run: cargo tarpaulin --out Xml
+        run: cargo tarpaulin --out Xml --skip-clean
         env:
           DATABASE_URL: postgres://testuser:testpassword@localhost:5432/testdb
       - name: Upload to Codecov
         uses: codecov/codecov-action@v3
         with:
-          file: ./target/tarpaulin-report.xml
+          file: ./cobertura.xml
           fail_ci_if_error: true
           verbose: true
