@@ -140,6 +140,7 @@ impl Worker {
         )
         .await?;
 
+        debug!("Listening for jobs...");
         job_signal
             .map(Ok::<_, ProcessJobError>)
             .try_for_each_concurrent(self.concurrency, |source| async move {
@@ -198,10 +199,7 @@ async fn process_one_job(
         worker.forbidden_flags(),
     )
     .await
-    .map_err(|e| {
-        error!("Could not get job : {:?}", e);
-        e
-    })?;
+    .inspect_err(|e| error!("Could not get job : {:?}", e))?;
 
     match job {
         Some(job) => {

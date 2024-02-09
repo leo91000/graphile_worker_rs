@@ -13,7 +13,6 @@ jobs:
     runs-on: ubuntu-22.04
     services:
       postgres:
-        # Minimum is 13
         image: postgres:16
         env:
           POSTGRES_USER: testuser
@@ -44,3 +43,15 @@ jobs:
         run: cargo test --all
         env:
           DATABASE_URL: postgres://testuser:testpassword@localhost:5432/testdb
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin
+      - name: Run cargo-tarpaulin
+        run: cargo tarpaulin --out Xml
+        env:
+          DATABASE_URL: postgres://testuser:testpassword@localhost:5432/testdb
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./target/tarpaulin-report.xml
+          fail_ci_if_error: true
+          verbose: true

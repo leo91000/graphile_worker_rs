@@ -58,7 +58,7 @@ pub struct Migration {
     pub breaking: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TestDatabase {
     pub source_pool: PgPool,
     pub test_pool: PgPool,
@@ -267,12 +267,14 @@ impl TestDatabase {
     }
 }
 
-async fn create_test_database() -> TestDatabase {
+pub async fn create_test_database() -> TestDatabase {
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let pg_conn_options: PgConnectOptions = db_url.parse().expect("Failed to parse DATABASE_URL");
+    let mut pg_conn_options: PgConnectOptions =
+        db_url.parse().expect("Failed to parse DATABASE_URL");
+    pg_conn_options = pg_conn_options.application_name("__test_graphile_worker");
 
     let pg_pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(1)
+        .max_connections(4)
         .connect_with(pg_conn_options.clone())
         .await
         .expect("Failed to connect to database");
@@ -293,7 +295,7 @@ async fn create_test_database() -> TestDatabase {
     let test_options = pg_conn_options.database(&db_name);
 
     let test_pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(1)
+        .max_connections(4)
         .connect_with(test_options)
         .await
         .expect("Failed to connect to test database");
@@ -360,8 +362,7 @@ pub async fn enable_logs() {
     ONCE.get_or_init(|| async {
         let fmt_layer = tracing_subscriber::fmt::layer();
         // Log level set to debug except for sqlx set at warn (to not show all sql requests)
-        let filter_layer =
-            EnvFilter::try_new("debug,sqlx=warn,graphile_worker_migrations=info").unwrap();
+        let filter_layer = EnvFilter::try_new("debug,sqlx=warn").unwrap();
 
         tracing_subscriber::registry()
             .with(filter_layer)

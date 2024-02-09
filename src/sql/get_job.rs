@@ -57,7 +57,7 @@ pub async fn get_job<'e>(
     }))
 }
 
-fn get_flag_clause(flags_to_skip: &Vec<String>, param_ord: u8) -> String {
+fn get_flag_clause(flags_to_skip: &[String], param_ord: u8) -> String {
     if !flags_to_skip.is_empty() {
         return format!("and ((flags ?| ${param_ord}::text[]) is not true)");
     }
