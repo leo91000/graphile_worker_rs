@@ -1,4 +1,4 @@
-name: Tarpaulin
+name: Coverage
 permissions: "write-all"
 on:
   push:
