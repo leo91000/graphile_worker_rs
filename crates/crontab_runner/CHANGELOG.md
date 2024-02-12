@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.5.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.5.1...graphile_worker_crontab_runner-v0.5.2) - 2024-02-12
+
+### Other
+- Add cron test
+
 ## [0.5.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.5.0...graphile_worker_crontab_runner-v0.5.1) - 2024-02-04
 
 ### Other

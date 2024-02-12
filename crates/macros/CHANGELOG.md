@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_macros-v0.2.1...graphile_worker_macros-v0.2.2) - 2024-02-12
+
+### Other
+- updated the following local packages: graphile_worker_task_handler
+
 ## [0.2.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_macros-v0.2.0...graphile_worker_macros-v0.2.1) - 2024-02-04
 
 ### Other
