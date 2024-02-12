@@ -12,9 +12,9 @@ categories = []
 readme = "README.md"
 
 [features]
-default = ["runtime-tokio-native-tls"]
-runtime-tokio-rustls = ["sqlx/runtime-tokio-rustls", "tokio"]
-runtime-tokio-native-tls = ["sqlx/runtime-tokio-native-tls", "tokio"]
+default = ["tls-rustls"]
+tls-rustls = ["sqlx/tls-rustls"]
+tls-native-tls = ["sqlx/tls-native-tls"]
 
 [dependencies]
 graphile_worker_crontab_types = { path = "../crontab_types", version = "0.5.0" }
@@ -27,4 +27,4 @@ serde_json = { workspace = true }
 getset = { workspace = true }
 tracing = { workspace = true }
 once_cell = { workspace = true }
-tokio = { workspace = true, features = ["time"], optional = true }
+tokio = { workspace = true, features = ["time"] }

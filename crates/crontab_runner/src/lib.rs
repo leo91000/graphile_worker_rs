@@ -7,6 +7,7 @@ use graphile_worker_shutdown_signal::ShutdownSignal;
 use sqlx::PgExecutor;
 use tracing::{debug, warn};
 
+pub use crate::sql::KnownCrontab;
 pub use crate::sql::ScheduleCronJobError;
 use crate::{
     sql::{schedule_cron_jobs, CrontabJob},

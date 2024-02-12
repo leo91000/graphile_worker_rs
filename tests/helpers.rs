@@ -7,6 +7,7 @@ use graphile_worker::Job;
 use graphile_worker::JobSpec;
 use graphile_worker::WorkerOptions;
 use graphile_worker::WorkerUtils;
+use graphile_worker_crontab_runner::KnownCrontab;
 use serde_json::Value;
 use sqlx::postgres::PgConnectOptions;
 use sqlx::query_as;
@@ -40,6 +41,7 @@ pub struct JobWithQueueName {
     pub locked_by: Option<String>,
     pub flags: Option<Value>,
     pub task_id: i32,
+    pub is_available: bool,
 }
 
 #[derive(FromRow, Debug)]
@@ -264,6 +266,13 @@ impl TestDatabase {
             regular_job_2,
             untouched_job,
         }
+    }
+
+    pub async fn get_known_crontabs(&self) -> Vec<KnownCrontab> {
+        sqlx::query_as("select * from graphile_worker._private_known_crontabs")
+            .fetch_all(&self.test_pool)
+            .await
+            .expect("Failed to get known crontabs")
     }
 }
 

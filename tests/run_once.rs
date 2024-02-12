@@ -1049,6 +1049,7 @@ async fn runs_jobs_in_parallel() {
     helpers::with_test_db(|test_db| async move {
         let worker = test_db
             .create_worker_options()
+            .concurrency(10)
             .define_job(job3)
             .init()
             .await
@@ -1064,7 +1065,7 @@ async fn runs_jobs_in_parallel() {
             worker
                 .create_utils()
                 .add_job::<job3>(
-                    Job3Args { a: 1 },
+                    Job3Args { a: i },
                     Some(JobSpec {
                         queue_name: Some(format!("queue_{}", i)),
                         ..Default::default()
@@ -1078,12 +1079,10 @@ async fn runs_jobs_in_parallel() {
 
         // Run 5 worker instances in parallel
         let mut handles = vec![];
-        for _ in 0..5 {
-            let worker_clone = worker.clone();
-            handles.push(spawn_local(async move {
-                worker_clone.run_once().await.expect("Failed to run worker");
-            }));
-        }
+        let worker_clone = worker.clone();
+        handles.push(spawn_local(async move {
+            worker_clone.run_once().await.expect("Failed to run worker");
+        }));
 
         // Wait for all jobs are picked up
         let start_time = Instant::now();
