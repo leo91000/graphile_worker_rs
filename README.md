@@ -2,7 +2,7 @@
 
 [![Codecov](https://codecov.io/github/leo91000/graphile_worker_rs/coverage.svg?branch=main)](https://codecov.io/gh/leo91000/graphile_worker_rs)
 [![Crates.io](https://img.shields.io/crates/v/graphile-worker.svg)](https://crates.io/crates/graphile-worker)
-[![Documentation](https://docs.rs/graphile-worker/badge.svg)](https://docs.rs/graphile-worker/)
+[![Documentation](https://img.shields.io/docsrs/graphile_worker)](https://docs.rs/graphile_worker/)
 
 **NOT PRODUCTION READY**
 
