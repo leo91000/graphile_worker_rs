@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.5.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_parser-v0.5.0...graphile_worker_crontab_parser-v0.5.1) - 2024-02-12
+
+### Other
+- updated the following local packages: graphile_worker_crontab_types
+
 ## [0.4.2](https://github.com/leo91000/archimedes/releases/tag/archimedes_crontab_parser@0.4.2)
 
 

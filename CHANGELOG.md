@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.6.0...graphile_worker-v0.6.1) - 2024-02-12
+
+### Other
+- Update badge
+- Include badge in README
+- remove unused file
+- Add cron test
+- Verbose tarpaulin
+- Add codecov token
+- Fix coverage path
+- Add more time for runs_jobs_in_parallel to process job
+- Rename tarpaulin job to coverage
+- Split check into multiple files
+- Wait more time for jobs to be processed for tarpaulin
+- Add `.run()` test
+- *(deps)* update rust crate chrono to 0.4.34
+
 ## [0.6.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.5.0...graphile_worker-v0.6.0) - 2024-02-07
 
 ### Added
