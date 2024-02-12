@@ -1,5 +1,9 @@
 # Graphile Worker RS
 
+[![Codecov](https://codecov.io/github/leo91000/graphile_worker_rs/coverage.svg?branch=main)](https://codecov.io/gh/leo91000/graphile_worker_rs)
+[![Crates.io](https://img.shields.io/crates/v/graphile-worker.svg)](https://crates.io/crates/graphile-worker)
+[![Documentation](https://docs.rs/graphile-worker/badge.svg)](https://docs.rs/graphile-worker/)
+
 **NOT PRODUCTION READY**
 
 Rewrite of [Graphile Worker](https://github.com/graphile/worker) in Rust. If you like this library go sponsor [Benjie](https://github.com/benjie) project, all research has been done by him, this library is only a rewrite in Rust 🦀.
