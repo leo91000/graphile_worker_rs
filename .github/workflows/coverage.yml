@@ -37,7 +37,7 @@ jobs:
         env:
           DATABASE_URL: postgres://testuser:testpassword@localhost:5432/testdb
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           file: ./cobertura.xml
           fail_ci_if_error: true
