@@ -4,8 +4,6 @@
 [![Crates.io](https://img.shields.io/crates/v/graphile-worker.svg)](https://crates.io/crates/graphile-worker)
 [![Documentation](https://img.shields.io/docsrs/graphile_worker)](https://docs.rs/graphile_worker/)
 
-**NOT PRODUCTION READY**
-
 Rewrite of [Graphile Worker](https://github.com/graphile/worker) in Rust. If you like this library go sponsor [Benjie](https://github.com/benjie) project, all research has been done by him, this library is only a rewrite in Rust 🦀.
 The port should mostly be compatible with `graphile-worker` (meaning you can run it side by side with Node.JS).
 
@@ -119,7 +117,7 @@ You should see the worker output `Hello Bobby Tables !`. Gosh, that was fast!
 
 ## Status
 
-**NOT** production ready (use it at your own risk).
+Production ready but the API may be rough around the edges and might change.
 
 ## Requirements
 
