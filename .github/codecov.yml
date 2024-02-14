@@ -9,6 +9,8 @@ coverage:
       default:
         # Avoid false negatives
         threshold: 1%
+  ignore:
+    - "crates/macros/*"
 # Test files aren't important for coverage
 ignore:
   - "tests"
