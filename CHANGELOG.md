@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.6.1...graphile_worker-v0.6.2) - 2024-02-14
+
+### Other
+- Include README in rust docs
+- Update README
+- *(deps)* update rust crate thiserror to 1.0.57
+- *(deps)* update codecov/codecov-action action to v4
+
 ## [0.6.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.6.0...graphile_worker-v0.6.1) - 2024-02-12
 
 ### Other
