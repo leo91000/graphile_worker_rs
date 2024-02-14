@@ -18,7 +18,7 @@ used with any PostgreSQL-backed application.
 
 ### Add the worker to your project:
 
-```
+```bash,ignore
 cargo add graphile_worker
 ```
 
@@ -26,7 +26,7 @@ cargo add graphile_worker
 
 The definition of a task consist simply of an async function and a task identifier
 
-```rust
+```rust,ignore
 use serde::{Deserialize, Serialize};
 use graphile_worker::{task, WorkerContext};
 
@@ -61,13 +61,13 @@ async fn main() -> Result<(), ()> {
 
 Connect to your database and run the following SQL:
 
-```sql
+```sql,ignore
 SELECT graphile_worker.add_job('say_hello', json_build_object('name', 'Bobby Tables'));
 ```
 
 ### Schedule a job via RUST
 
-```rust
+```rust,ignore
 #[tokio::main]
 async fn main() -> Result<(), ()> {
     // ...
@@ -128,7 +128,7 @@ Note: Postgres 12 is required for the `generated always as (expression)` feature
 
 ## Installation
 
-```
+```bash,ignore
 cargo add graphile_worker
 ```
 
