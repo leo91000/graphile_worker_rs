@@ -1,6 +1,7 @@
 use crate::{errors::GraphileWorkerError, Job};
 use chrono::Utc;
 use getset::Getters;
+use indoc::formatdoc;
 use sqlx::{query_as, PgExecutor};
 use tracing::info;
 
@@ -60,7 +61,7 @@ pub async fn add_job(
     payload: serde_json::Value,
     spec: JobSpec,
 ) -> Result<Job, GraphileWorkerError> {
-    let sql = format!(
+    let sql = formatdoc!(
         r#"
             select * from {escaped_schema}.add_job(
                 identifier => $1::text,

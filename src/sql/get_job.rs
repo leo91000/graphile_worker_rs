@@ -1,3 +1,4 @@
+use indoc::formatdoc;
 use sqlx::{query_as, PgExecutor};
 
 use crate::DbJob;
@@ -16,7 +17,7 @@ pub async fn get_job<'e>(
     let queue_clause = get_queue_clause(escaped_schema);
     let update_queue_clause = get_update_queue_clause(escaped_schema, 1);
 
-    let sql = format!(
+    let sql = formatdoc!(
         r#"
             with j as (
                 select jobs.job_queue_id, jobs.priority, jobs.run_at, jobs.id

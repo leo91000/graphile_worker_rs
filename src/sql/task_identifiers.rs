@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use indoc::formatdoc;
 use sqlx::{query, query_as, FromRow, PgExecutor};
 
 use crate::errors::Result;
@@ -44,7 +45,7 @@ pub async fn get_tasks_details<'e>(
         .execute(executor.clone())
         .await?;
 
-    let select_tasks_query = format!(
+    let select_tasks_query = formatdoc!(
         "select id, identifier from {escaped_schema}._private_tasks as tasks where identifier = any($1::text[])"
     );
     let tasks: Vec<TaskRow> = query_as(&select_tasks_query)

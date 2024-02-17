@@ -1,3 +1,4 @@
+use indoc::formatdoc;
 use sqlx::{query, PgExecutor};
 
 use crate::errors::GraphileWorkerError;
@@ -11,7 +12,7 @@ pub async fn complete_job(
     escaped_schema: &str,
 ) -> Result<(), GraphileWorkerError> {
     if job.job_queue_id().is_some() {
-        let sql = format!(
+        let sql = formatdoc!(
             r#"
                 with j as (
                     delete from {escaped_schema}._private_jobs as jobs

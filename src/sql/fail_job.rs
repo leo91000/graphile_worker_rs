@@ -1,3 +1,4 @@
+use indoc::formatdoc;
 use sqlx::{query, PgExecutor};
 
 use crate::errors::GraphileWorkerError;
@@ -15,7 +16,7 @@ pub async fn fail_job(
     let replacement_payload = replacement_payload.and_then(|v| serde_json::to_string(&v).ok());
 
     if job.job_queue_id().is_some() {
-        let sql = format!(
+        let sql = formatdoc!(
             r#"
                 with j as (
                     update {escaped_schema}._private_jobs as jobs
