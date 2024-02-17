@@ -22,10 +22,10 @@ async fn it_supports_the_flags_api() {
                 .add_raw_job(
                     "job3",
                     json!({ "a": 1 }),
-                    Some(JobSpec {
+                    JobSpec {
                         flags: Some(vec!["a".to_string(), "b".to_string()]),
                         ..Default::default()
-                    }),
+                    },
                 )
                 .await
                 .expect("Failed to add job");
@@ -69,10 +69,10 @@ async fn it_should_skip_jobs_with_forbidden_flags() {
                 .add_raw_job(
                     "job3",
                     json!({ "a": 1 }),
-                    Some(JobSpec {
+                    JobSpec {
                         flags: Some(vec!["a".to_string(), "b".to_string()]),
                         ..Default::default()
-                    }),
+                    },
                 )
                 .await
                 .expect("Failed to add job");
@@ -81,10 +81,10 @@ async fn it_should_skip_jobs_with_forbidden_flags() {
                 .add_raw_job(
                     "job3",
                     json!({ "a": 1 }),
-                    Some(JobSpec {
+                    JobSpec {
                         flags: Some(vec!["c".to_string(), bad_flag.to_string()]),
                         ..Default::default()
-                    }),
+                    },
                 )
                 .await
                 .expect("Failed to add job");
@@ -128,10 +128,10 @@ async fn it_should_run_all_jobs_if_no_forbidden_flags() {
                 .add_raw_job(
                     "job3",
                     json!({ "a": 1 }),
-                    Some(JobSpec {
+                    JobSpec {
                         flags: Some(vec!["a".to_string(), "b".to_string()]),
                         ..Default::default()
-                    }),
+                    },
                 )
                 .await
                 .expect("Failed to add job");
@@ -140,10 +140,10 @@ async fn it_should_run_all_jobs_if_no_forbidden_flags() {
                 .add_raw_job(
                     "job3",
                     json!({ "a": 1 }),
-                    Some(JobSpec {
+                    JobSpec {
                         flags: Some(vec!["c".to_string(), "d".to_string()]),
                         ..Default::default()
-                    }),
+                    },
                 )
                 .await
                 .expect("Failed to add job");

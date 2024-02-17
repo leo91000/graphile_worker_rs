@@ -2,7 +2,7 @@ use std::{collections::VecDeque, ops::Add, rc::Rc};
 
 use crate::helpers::StaticCounter;
 use chrono::{Duration, Timelike, Utc};
-use graphile_worker::{JobSpec, WorkerContext};
+use graphile_worker::{JobSpec, JobSpecBuilder, WorkerContext};
 use serde_json::json;
 use tokio::{
     sync::{oneshot, Mutex, OnceCell},
@@ -40,10 +40,10 @@ async fn it_should_run_jobs() {
                 .add_raw_job(
                     "job3",
                     json!({ "a": 1 }),
-                    Some(JobSpec {
+                    JobSpec {
                         queue_name: Some("myqueue".to_string()),
                         ..Default::default()
-                    }),
+                    },
                 )
                 .await
                 .expect("Failed to add job");
@@ -94,10 +94,10 @@ async fn it_should_schedule_errors_for_retry() {
                 .add_raw_job(
                     "job3",
                     json!({ "a": 1 }),
-                    Some(JobSpec {
+                    JobSpec {
                         queue_name: Some("myqueue".to_string()),
                         ..Default::default()
-                    }),
+                    },
                 )
                 .await
                 .expect("Failed to add job");
@@ -173,10 +173,10 @@ async fn it_should_retry_jobs() {
                 .add_raw_job(
                     "job3",
                     json!({ "a": 1 }),
-                    Some(JobSpec {
+                    JobSpec {
                         queue_name: Some("myqueue".to_string()),
                         ..Default::default()
-                    }),
+                    },
                 )
                 .await
                 .expect("Failed to add job");
@@ -246,10 +246,10 @@ async fn it_should_supports_future_scheduled_jobs() {
                 .add_raw_job(
                     "job3",
                     json!({ "a": 1 }),
-                    Some(JobSpec {
+                    JobSpec {
                         run_at: Some(Utc::now() + chrono::Duration::seconds(3)),
                         ..Default::default()
-                    }),
+                    },
                 )
                 .await
                 .expect("Failed to add job");
@@ -306,11 +306,11 @@ async fn it_shoud_allow_update_of_pending_jobs() {
             .add_raw_job(
                 "job3",
                 json!({ "a": "wrong" }),
-                Some(JobSpec {
+                JobSpec {
                     run_at: Some(run_at),
                     job_key: Some("abc".into()),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add job");
@@ -331,11 +331,11 @@ async fn it_shoud_allow_update_of_pending_jobs() {
             .add_raw_job(
                 "job3",
                 json!({ "a": "right" }),
-                Some(JobSpec {
+                JobSpec {
                     run_at: Some(now),
                     job_key: Some("abc".into()),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add job");
@@ -375,10 +375,10 @@ async fn it_schedules_a_new_job_if_existing_is_completed() {
             .add_raw_job(
                 "job3",
                 json!({ "a": "first" }),
-                Some(JobSpec {
+                JobSpec {
                     job_key: Some("abc".into()),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add job");
@@ -394,10 +394,10 @@ async fn it_schedules_a_new_job_if_existing_is_completed() {
             .add_raw_job(
                 "job3",
                 json!({ "a": "second" }),
-                Some(JobSpec {
+                JobSpec {
                     job_key: Some("abc".into()),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add job");
@@ -454,10 +454,10 @@ async fn schedules_a_new_job_if_existing_is_being_processed() {
             .add_raw_job(
                 "job3",
                 json!({ "a": "first" }),
-                Some(JobSpec {
+                JobSpec {
                     job_key: Some("abc".into()),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add first job");
@@ -490,10 +490,10 @@ async fn schedules_a_new_job_if_existing_is_being_processed() {
             .add_raw_job(
                 "job3",
                 json!({ "a": "second" }),
-                Some(JobSpec {
+                JobSpec {
                     job_key: Some("abc".into()),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add second job");
@@ -554,10 +554,10 @@ async fn schedules_a_new_job_if_the_existing_is_pending_retry() {
             .create_utils()
             .add_job::<job5>(
                 Job5Args { succeed: false },
-                Some(JobSpec {
+                JobSpec {
                     job_key: Some("abc".into()),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add job");
@@ -597,11 +597,11 @@ async fn schedules_a_new_job_if_the_existing_is_pending_retry() {
             .create_utils()
             .add_job::<job5>(
                 Job5Args { succeed: true },
-                Some(JobSpec {
+                JobSpec {
                     job_key: Some("abc".into()),
                     run_at: Some(Utc::now()),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to update job");
@@ -668,13 +668,13 @@ async fn job_details_are_reset_if_not_specified_in_update() {
             .create_utils()
             .add_job::<job3>(
                 Job3Args { a: 1 },
-                Some(JobSpec {
+                JobSpec {
                     queue_name: Some("queue1".into()),
                     run_at: Some(run_at),
                     max_attempts: Some(10),
                     job_key: Some("abc".into()),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add job");
@@ -696,10 +696,10 @@ async fn job_details_are_reset_if_not_specified_in_update() {
             .create_utils()
             .add_job::<job3>(
                 Job3Args { a: 1 }, // maintaining payload for comparison
-                Some(JobSpec {
+                JobSpec {
                     job_key: Some("abc".into()),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to update job");
@@ -725,13 +725,13 @@ async fn job_details_are_reset_if_not_specified_in_update() {
             .create_utils()
             .add_job::<job3>(
                 Job3Args { a: 2 },
-                Some(JobSpec {
+                JobSpec {
                     queue_name: Some("queue2".into()),
                     run_at: Some(run_at2),
                     max_attempts: Some(100),
                     job_key: Some("abc".into()),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to update job with new details");
@@ -777,10 +777,10 @@ async fn pending_jobs_can_be_removed() {
             .create_utils()
             .add_job::<job3>(
                 Job3Args { a: "1".into() },
-                Some(JobSpec {
+                JobSpec {
                     job_key: Some("abc".into()),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add job");
@@ -848,10 +848,10 @@ async fn jobs_in_progress_cannot_be_removed() {
         utils
             .add_job::<job3>(
                 Job3Args { a: 123 },
-                Some(JobSpec {
+                JobSpec {
                     job_key: Some("abc".into()),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add job");
@@ -946,10 +946,10 @@ async fn runs_jobs_asynchronously() {
             .create_utils()
             .add_job::<job3>(
                 Job3Args { a: 1 },
-                Some(JobSpec {
+                JobSpec {
                     queue_name: Some("myqueue".into()),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add job");
@@ -1066,10 +1066,10 @@ async fn runs_jobs_in_parallel() {
                 .create_utils()
                 .add_job::<job3>(
                     Job3Args { a: i },
-                    Some(JobSpec {
+                    JobSpec {
                         queue_name: Some(format!("queue_{}", i)),
                         ..Default::default()
-                    }),
+                    },
                 )
                 .await
                 .expect("Failed to add job");
@@ -1172,7 +1172,7 @@ async fn single_worker_runs_jobs_in_series_purges_all_before_exit() {
 
             worker
                 .create_utils()
-                .add_job::<job3>(Job3Args { a: 1 }, None)
+                .add_job::<job3>(Job3Args { a: 1 }, JobSpec::default())
                 .await
                 .expect("Failed to add job");
         }
@@ -1259,10 +1259,7 @@ async fn jobs_added_to_the_same_queue_will_be_ran_serially_even_if_multiple_work
                 .create_utils()
                 .add_job::<job3>(
                     Job3Args { a: 1 },
-                    Some(JobSpec {
-                        queue_name: Some("serial".into()),
-                        ..Default::default()
-                    }),
+                    JobSpecBuilder::new().queue_name("serial").build(),
                 )
                 .await
                 .expect("Failed to add job");

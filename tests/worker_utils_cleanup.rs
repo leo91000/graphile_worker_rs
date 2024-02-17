@@ -82,10 +82,10 @@ async fn cleanup_with_gc_job_queues() {
                 .add_raw_job(
                     task_identifier,
                     serde_json::json!({ "a": a }),
-                    Some(JobSpec {
+                    JobSpec {
                         queue_name: Some(queue_name.to_string()),
                         ..Default::default()
-                    }),
+                    },
                 )
                 .await
                 .expect("Failed to add job");
@@ -168,11 +168,7 @@ async fn cleanup_with_gc_task_identifiers() {
 
         for task_identifier in task_identifiers.iter() {
             let job = worker_utils
-                .add_raw_job(
-                    task_identifier,
-                    serde_json::json!({}),
-                    None, // Default JobSpec
-                )
+                .add_raw_job(task_identifier, serde_json::json!({}), JobSpec::default())
                 .await
                 .expect("Failed to add job");
 

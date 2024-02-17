@@ -187,10 +187,10 @@ impl TestDatabase {
             .add_raw_job(
                 "job3",
                 serde_json::json!({ "a": 1 }),
-                Some(JobSpec {
+                JobSpec {
                     run_at: Some(in_one_hour),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add job");
@@ -198,10 +198,10 @@ impl TestDatabase {
             .add_raw_job(
                 "job3",
                 serde_json::json!({ "a": 2 }),
-                Some(JobSpec {
+                JobSpec {
                     run_at: Some(in_one_hour),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add job");
@@ -209,10 +209,10 @@ impl TestDatabase {
             .add_raw_job(
                 "job3",
                 serde_json::json!({ "a": 3 }),
-                Some(JobSpec {
+                JobSpec {
                     run_at: Some(in_one_hour),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add job");
@@ -220,10 +220,10 @@ impl TestDatabase {
             .add_raw_job(
                 "job3",
                 serde_json::json!({ "a": 4 }),
-                Some(JobSpec {
+                JobSpec {
                     run_at: Some(in_one_hour),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add job");
@@ -231,10 +231,10 @@ impl TestDatabase {
             .add_raw_job(
                 "job3",
                 serde_json::json!({ "a": 5 }),
-                Some(JobSpec {
+                JobSpec {
                     run_at: Some(in_one_hour),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add job");

@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use graphile_worker::{task, WorkerContext, WorkerOptions};
+use graphile_worker::{task, JobSpec, WorkerContext, WorkerOptions};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgConnectOptions;
 use tracing_subscriber::{
@@ -59,7 +59,7 @@ async fn main() {
                 HelloPayload {
                     message: format!("world {}", i),
                 },
-                None,
+                JobSpec::default(),
             )
             .await
             .unwrap();

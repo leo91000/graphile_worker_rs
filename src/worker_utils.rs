@@ -96,7 +96,7 @@ impl WorkerUtils {
     pub async fn add_job<T: TaskDefinition<WorkerContext>>(
         &self,
         payload: T::Payload,
-        spec: Option<JobSpec>,
+        spec: JobSpec,
     ) -> Result<Job, GraphileWorkerError> {
         let identifier = T::identifier();
         let payload = serde_json::to_value(payload)?;
@@ -105,7 +105,7 @@ impl WorkerUtils {
             &self.escaped_schema,
             identifier,
             payload,
-            spec.unwrap_or_default(),
+            spec,
         )
         .await
     }
@@ -116,7 +116,7 @@ impl WorkerUtils {
         &self,
         identifier: &str,
         payload: P,
-        spec: Option<JobSpec>,
+        spec: JobSpec,
     ) -> Result<Job, GraphileWorkerError>
     where
         P: Serialize,
@@ -127,7 +127,7 @@ impl WorkerUtils {
             &self.escaped_schema,
             identifier,
             payload,
-            spec.unwrap_or_default(),
+            spec,
         )
         .await
     }

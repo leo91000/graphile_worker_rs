@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use chrono::{offset::Utc, Duration};
-use graphile_worker::{task, JobSpec, WorkerContext, WorkerOptions};
+use graphile_worker::{task, JobSpecBuilder, WorkerContext, WorkerOptions};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgConnectOptions;
@@ -64,11 +64,9 @@ async fn main() {
             HelloPayload {
                 message: "world".to_string(),
             },
-            Some(JobSpec {
-                // Now + 10 seconds
-                run_at: Some(Utc::now() + Duration::seconds(10)),
-                ..Default::default()
-            }),
+            JobSpecBuilder::new()
+                .run_at(Utc::now() + Duration::seconds(10))
+                .build(),
         )
         .await
         .unwrap();

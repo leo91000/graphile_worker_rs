@@ -38,10 +38,10 @@ async fn unlocks_jobs_for_given_workers_leaves_others_unaffected() {
                 .add_raw_job(
                     "job3",
                     serde_json::json!({ "a": jobs.len() + 1 }),
-                    Some(JobSpec {
+                    JobSpec {
                         queue_name: queue_name.map(|qn| qn.to_string()),
                         ..Default::default()
-                    }),
+                    },
                 )
                 .await
                 .expect("Failed to add job");

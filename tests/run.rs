@@ -1,4 +1,4 @@
-use graphile_worker::Worker;
+use graphile_worker::{JobSpec, Worker};
 use tokio::{
     task::spawn_local,
     time::{sleep, Duration, Instant},
@@ -47,7 +47,7 @@ async fn it_will_execute_jobs_as_they_come_up_and_exits_cleanly() {
         // Schedule 5 jobs and wait for them to be processed
         for i in 1..=5 {
             utils
-                .add_job::<job3>(Job3Args { a: i }, None)
+                .add_job::<job3>(Job3Args { a: i }, JobSpec::default())
                 .await
                 .expect("Failed to add job");
 

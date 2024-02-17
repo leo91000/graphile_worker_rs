@@ -30,7 +30,7 @@ async fn runs_a_job_added_through_the_worker_utils() {
         // Schedule a job using worker utilities
         worker
             .create_utils()
-            .add_job::<job3>(Job3Args { a: 1 }, None)
+            .add_job::<job3>(Job3Args { a: 1 }, JobSpec::default())
             .await
             .expect("Failed to add job through worker utils");
 
@@ -89,10 +89,10 @@ async fn supports_the_job_key_api() {
                 .create_utils()
                 .add_job::<job3>(
                     Job3Args { a: i },
-                    Some(JobSpec {
+                    JobSpec {
                         job_key: Some("UNIQUE".into()),
                         ..Default::default()
-                    }),
+                    },
                 )
                 .await
                 .expect("Failed to add job through worker utils");
@@ -169,12 +169,12 @@ async fn supports_the_job_key_api_with_job_key_mode() {
             .create_utils()
             .add_job::<job3>(
                 Job3Args { a: 1 },
-                Some(JobSpec {
+                JobSpec {
                     job_key: Some("UNIQUE".into()),
                     run_at: Some(run_at1),
                     job_key_mode: Some(JobKeyMode::Replace),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add job in replace mode");
@@ -190,12 +190,12 @@ async fn supports_the_job_key_api_with_job_key_mode() {
             .create_utils()
             .add_job::<job3>(
                 Job3Args { a: 2 },
-                Some(JobSpec {
+                JobSpec {
                     job_key: Some("UNIQUE".into()),
                     run_at: Some(run_at2),
                     job_key_mode: Some(JobKeyMode::PreserveRunAt),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add job in preserve_run_at mode");
@@ -211,12 +211,12 @@ async fn supports_the_job_key_api_with_job_key_mode() {
             .create_utils()
             .add_job::<job3>(
                 Job3Args { a: 3 },
-                Some(JobSpec {
+                JobSpec {
                     job_key: Some("UNIQUE".into()),
                     run_at: Some(run_at3),
                     job_key_mode: Some(JobKeyMode::UnsafeDedupe),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to add job in unsafe_dedupe mode");
@@ -232,12 +232,12 @@ async fn supports_the_job_key_api_with_job_key_mode() {
             .create_utils()
             .add_job::<job3>(
                 Job3Args { a: 4 },
-                Some(JobSpec {
+                JobSpec {
                     job_key: Some("UNIQUE".into()),
                     run_at: Some(run_at4),
                     job_key_mode: Some(JobKeyMode::Replace),
                     ..Default::default()
-                }),
+                },
             )
             .await
             .expect("Failed to replace job");
