@@ -1,4 +1,5 @@
-use crate::{errors::GraphileWorkerError, Job, JobSpec};
+use crate::{errors::GraphileWorkerError, JobSpec};
+use graphile_worker_job::Job;
 use indoc::formatdoc;
 use sqlx::{query_as, PgExecutor};
 use tracing::info;

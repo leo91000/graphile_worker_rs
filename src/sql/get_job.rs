@@ -1,8 +1,8 @@
 use indoc::formatdoc;
 use sqlx::{query_as, PgExecutor};
 
-use crate::DbJob;
-use crate::{errors::Result, Job};
+use crate::errors::Result;
+use graphile_worker_job::{DbJob, Job};
 
 use super::task_identifiers::TaskDetails;
 

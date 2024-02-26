@@ -55,6 +55,7 @@ tls-rustls = [
 graphile_worker_crontab_runner = { path = "./crates/crontab_runner", version = "0.5.3", default-features = false }
 graphile_worker_crontab_types = { path = "./crates/crontab_types", version = "0.5.1" }
 graphile_worker_crontab_parser = { path = "./crates/crontab_parser", version = "0.5.2" }
+graphile_worker_job = { path = "./crates/job", version = "0.1.0" }
 graphile_worker_migrations = { path = "./crates/migrations", version = "0.4.2", default-features = false }
 graphile_worker_macros = { path = "./crates/macros", version = "0.2.2" }
 graphile_worker_task_handler = { path = "./crates/task_handler", version = "0.3.0" }
