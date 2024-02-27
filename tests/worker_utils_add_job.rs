@@ -1,6 +1,7 @@
 use chrono::{TimeZone, Utc};
-use graphile_worker::{JobKeyMode, JobSpec, WorkerContext};
+use graphile_worker::{JobKeyMode, JobSpec, TaskHandler, WorkerContext};
 use helpers::{with_test_db, StaticCounter};
+use serde::{Deserialize, Serialize};
 
 mod helpers;
 
@@ -9,20 +10,23 @@ async fn runs_a_job_added_through_the_worker_utils() {
     with_test_db(|test_db| async move {
         static JOB3_CALL_COUNT: StaticCounter = StaticCounter::new();
 
-        #[derive(serde::Deserialize, serde::Serialize)]
-        struct Job3Args {
+        #[derive(Serialize, Deserialize)]
+        struct Job3 {
             a: i32,
         }
 
-        #[graphile_worker::task]
-        async fn job3(_args: Job3Args, _: WorkerContext) -> Result<(), ()> {
-            JOB3_CALL_COUNT.increment().await;
-            Ok(())
+        impl TaskHandler for Job3 {
+            const IDENTIFIER: &'static str = "job3";
+
+            async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+                JOB3_CALL_COUNT.increment().await;
+                Ok(())
+            }
         }
 
         let worker = test_db
             .create_worker_options()
-            .define_job(job3)
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -30,7 +34,7 @@ async fn runs_a_job_added_through_the_worker_utils() {
         // Schedule a job using worker utilities
         worker
             .create_utils()
-            .add_job::<job3>(Job3Args { a: 1 }, JobSpec::default())
+            .add_job(Job3 { a: 1 }, JobSpec::default())
             .await
             .expect("Failed to add job through worker utils");
 
@@ -64,21 +68,23 @@ async fn supports_the_job_key_api() {
     with_test_db(|test_db| async move {
         static JOB3_CALL_COUNT: StaticCounter = StaticCounter::new();
 
-        #[derive(serde::Deserialize, serde::Serialize)]
-        struct Job3Args {
+        #[derive(Serialize, Deserialize)]
+        struct Job3 {
             a: i32,
         }
 
-        #[graphile_worker::task]
-        async fn job3(args: Job3Args, _: WorkerContext) -> Result<(), ()> {
-            assert_eq!(args.a, 4, "The job payload should have 'a' set to 4");
-            JOB3_CALL_COUNT.increment().await;
-            Ok(())
+        impl TaskHandler for Job3 {
+            const IDENTIFIER: &'static str = "job3";
+
+            async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+                JOB3_CALL_COUNT.increment().await;
+                Ok(())
+            }
         }
 
         let worker = test_db
             .create_worker_options()
-            .define_job(job3)
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -87,8 +93,8 @@ async fn supports_the_job_key_api() {
         for i in 1..=4 {
             worker
                 .create_utils()
-                .add_job::<job3>(
-                    Job3Args { a: i },
+                .add_job(
+                    Job3 { a: i },
                     JobSpec {
                         job_key: Some("UNIQUE".into()),
                         ..Default::default()
@@ -141,20 +147,23 @@ async fn supports_the_job_key_api_with_job_key_mode() {
     with_test_db(|test_db| async move {
         static JOB3_CALL_COUNT: StaticCounter = StaticCounter::new();
 
-        #[derive(serde::Deserialize, serde::Serialize, Debug)]
-        struct Job3Args {
+        #[derive(Serialize, Deserialize)]
+        struct Job3 {
             a: i32,
         }
 
-        #[graphile_worker::task]
-        async fn job3(_args: Job3Args, _: WorkerContext) -> Result<(), ()> {
-            JOB3_CALL_COUNT.increment().await;
-            Ok(())
+        impl TaskHandler for Job3 {
+            const IDENTIFIER: &'static str = "job3";
+
+            async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+                JOB3_CALL_COUNT.increment().await;
+                Ok(())
+            }
         }
 
         let worker = test_db
             .create_worker_options()
-            .define_job(job3)
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -167,8 +176,8 @@ async fn supports_the_job_key_api_with_job_key_mode() {
         // Job first added in replace mode
         let j1 = worker
             .create_utils()
-            .add_job::<job3>(
-                Job3Args { a: 1 },
+            .add_job(
+                Job3 { a: 1 },
                 JobSpec {
                     job_key: Some("UNIQUE".into()),
                     run_at: Some(run_at1),
@@ -188,8 +197,8 @@ async fn supports_the_job_key_api_with_job_key_mode() {
         // Now updated, but preserve run_at
         let j2 = worker
             .create_utils()
-            .add_job::<job3>(
-                Job3Args { a: 2 },
+            .add_job(
+                Job3 { a: 2 },
                 JobSpec {
                     job_key: Some("UNIQUE".into()),
                     run_at: Some(run_at2),
@@ -209,8 +218,8 @@ async fn supports_the_job_key_api_with_job_key_mode() {
         // Unsafe dedupe should take no action other than to bump the revision number
         let j3 = worker
             .create_utils()
-            .add_job::<job3>(
-                Job3Args { a: 3 },
+            .add_job(
+                Job3 { a: 3 },
                 JobSpec {
                     job_key: Some("UNIQUE".into()),
                     run_at: Some(run_at3),
@@ -230,8 +239,8 @@ async fn supports_the_job_key_api_with_job_key_mode() {
         // Replace the job one final time
         let j4 = worker
             .create_utils()
-            .add_job::<job3>(
-                Job3Args { a: 4 },
+            .add_job(
+                Job3 { a: 4 },
                 JobSpec {
                     job_key: Some("UNIQUE".into()),
                     run_at: Some(run_at4),

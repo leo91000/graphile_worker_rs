@@ -2,7 +2,8 @@ use std::{collections::VecDeque, ops::Add, rc::Rc};
 
 use crate::helpers::StaticCounter;
 use chrono::{Duration, Timelike, Utc};
-use graphile_worker::{JobSpec, JobSpecBuilder, WorkerContext};
+use graphile_worker::{JobSpec, JobSpecBuilder, TaskHandler, WorkerContext};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::{
     sync::{oneshot, Mutex, OnceCell},
@@ -17,17 +18,39 @@ async fn it_should_run_jobs() {
     static JOB2_CALL_COUNT: StaticCounter = StaticCounter::new();
     static JOB3_CALL_COUNT: StaticCounter = StaticCounter::new();
 
+    #[derive(Serialize, Deserialize)]
+    struct Job2 {
+        a: u32,
+    }
+
+    impl TaskHandler for Job2 {
+        const IDENTIFIER: &'static str = "job2";
+
+        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+            JOB2_CALL_COUNT.increment().await;
+            Ok(())
+        }
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct Job3 {
+        a: u32,
+    }
+
+    impl TaskHandler for Job3 {
+        const IDENTIFIER: &'static str = "job3";
+
+        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+            JOB3_CALL_COUNT.increment().await;
+            Ok(())
+        }
+    }
+
     helpers::with_test_db(|test_db| async move {
         let worker = test_db
             .create_worker_options()
-            .define_raw_job("job3", |_, _: serde_json::Value| async move {
-                JOB3_CALL_COUNT.increment().await;
-                Ok(()) as Result<(), ()>
-            })
-            .define_raw_job("job2", |_, _: serde_json::Value| async move {
-                JOB2_CALL_COUNT.increment().await;
-                Ok(()) as Result<(), ()>
-            })
+            .define_job::<Job2>()
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -75,13 +98,24 @@ async fn it_should_run_jobs() {
 async fn it_should_schedule_errors_for_retry() {
     static JOB3_CALL_COUNT: StaticCounter = StaticCounter::new();
 
+    #[derive(Serialize, Deserialize)]
+    struct Job3 {
+        a: u32,
+    }
+
+    impl TaskHandler for Job3 {
+        const IDENTIFIER: &'static str = "job3";
+
+        async fn run(self, _ctx: WorkerContext) -> Result<(), String> {
+            JOB3_CALL_COUNT.increment().await;
+            Err("fail".to_string())
+        }
+    }
+
     helpers::with_test_db(|test_db| async move {
         let worker = test_db
             .create_worker_options()
-            .define_raw_job("job3", |_, _: serde_json::Value| async move {
-                JOB3_CALL_COUNT.increment().await;
-                Err("fail".to_string()) as Result<(), String>
-            })
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -155,13 +189,24 @@ async fn it_should_schedule_errors_for_retry() {
 async fn it_should_retry_jobs() {
     static JOB3_CALL_COUNT: StaticCounter = StaticCounter::new();
 
+    #[derive(Serialize, Deserialize)]
+    struct Job3 {
+        a: u32,
+    }
+
+    impl TaskHandler for Job3 {
+        const IDENTIFIER: &'static str = "job3";
+
+        async fn run(self, _ctx: WorkerContext) -> Result<(), String> {
+            JOB3_CALL_COUNT.increment().await;
+            Err("fail 2".to_string())
+        }
+    }
+
     helpers::with_test_db(|test_db| async move {
         let worker = test_db
             .create_worker_options()
-            .define_raw_job("job3", |_, _: serde_json::Value| async move {
-                JOB3_CALL_COUNT.increment().await;
-                Err("fail 2".to_string()) as Result<(), String>
-            })
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -228,13 +273,24 @@ async fn it_should_retry_jobs() {
 async fn it_should_supports_future_scheduled_jobs() {
     static JOB3_CALL_COUNT: StaticCounter = StaticCounter::new();
 
+    #[derive(Serialize, Deserialize)]
+    struct Job3 {
+        a: u32,
+    }
+
+    impl TaskHandler for Job3 {
+        const IDENTIFIER: &'static str = "job3";
+
+        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+            JOB3_CALL_COUNT.increment().await;
+            Ok(())
+        }
+    }
+
     helpers::with_test_db(|test_db| async move {
         let worker = test_db
             .create_worker_options()
-            .define_raw_job("job3", |_, _: serde_json::Value| async move {
-                JOB3_CALL_COUNT.increment().await;
-                Ok(()) as Result<(), ()>
-            })
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -283,14 +339,24 @@ async fn it_should_supports_future_scheduled_jobs() {
 async fn it_shoud_allow_update_of_pending_jobs() {
     static JOB3_CALL_COUNT: StaticCounter = StaticCounter::new();
 
+    #[derive(Serialize, Deserialize)]
+    struct Job3 {
+        a: String,
+    }
+
+    impl TaskHandler for Job3 {
+        const IDENTIFIER: &'static str = "job3";
+
+        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+            JOB3_CALL_COUNT.increment().await;
+            Ok(())
+        }
+    }
+
     helpers::with_test_db(|test_db| async move {
         let worker = test_db
             .create_worker_options()
-            .define_raw_job("job3", |_, payload: serde_json::Value| async move {
-                JOB3_CALL_COUNT.increment().await;
-                assert_eq!(payload, json!({ "a": "right" }));
-                Ok(()) as Result<(), ()>
-            })
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -358,13 +424,24 @@ async fn it_shoud_allow_update_of_pending_jobs() {
 async fn it_schedules_a_new_job_if_existing_is_completed() {
     static JOB3_CALL_COUNT: StaticCounter = StaticCounter::new();
 
+    #[derive(Serialize, Deserialize)]
+    struct Job3 {
+        a: String,
+    }
+
+    impl TaskHandler for Job3 {
+        const IDENTIFIER: &'static str = "job3";
+
+        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+            JOB3_CALL_COUNT.increment().await;
+            Ok(())
+        }
+    }
+
     helpers::with_test_db(|test_db| async move {
         let worker = test_db
             .create_worker_options()
-            .define_raw_job("job3", |_, _: serde_json::Value| async move {
-                JOB3_CALL_COUNT.increment().await;
-                Ok(()) as Result<(), ()>
-            })
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -417,6 +494,36 @@ async fn schedules_a_new_job_if_existing_is_being_processed() {
     static RX1: OnceCell<Mutex<Option<oneshot::Receiver<()>>>> = OnceCell::const_new();
     static RX2: OnceCell<Mutex<Option<oneshot::Receiver<()>>>> = OnceCell::const_new();
 
+    #[derive(Deserialize, Serialize)]
+    struct Job3 {
+        a: String,
+    }
+
+    impl TaskHandler for Job3 {
+        const IDENTIFIER: &'static str = "job3";
+
+        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+            let n = JOB3_CALL_COUNT.increment().await;
+            match n {
+                1 => {
+                    let mut rx_opt = RX1.get().unwrap().lock().await;
+                    if let Some(rx) = rx_opt.take() {
+                        rx.await.unwrap();
+                    }
+                }
+                2 => {
+                    let mut rx_opt = RX2.get().unwrap().lock().await;
+                    if let Some(rx) = rx_opt.take() {
+                        rx.await.unwrap();
+                    }
+                }
+                _ => unreachable!("Job3 should only be called twice"),
+            };
+
+            Ok(())
+        }
+    }
+
     helpers::with_test_db(|test_db| async move {
         let (tx1, rx1) = oneshot::channel::<()>();
         let (tx2, rx2) = oneshot::channel::<()>();
@@ -425,25 +532,7 @@ async fn schedules_a_new_job_if_existing_is_being_processed() {
 
         let worker = test_db
             .create_worker_options()
-            .define_raw_job("job3", move |_, _: serde_json::Value| async move {
-                let n = JOB3_CALL_COUNT.increment().await;
-                match n {
-                    1 => {
-                        let mut rx_opt = RX1.get().unwrap().lock().await;
-                        if let Some(rx) = rx_opt.take() {
-                            rx.await.unwrap();
-                        }
-                    }
-                    2 => {
-                        let mut rx_opt = RX2.get().unwrap().lock().await;
-                        if let Some(rx) = rx_opt.take() {
-                            rx.await.unwrap();
-                        }
-                    }
-                    _ => unreachable!("Job3 should only be called twice"),
-                };
-                Ok(()) as Result<(), ()>
-            })
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -526,25 +615,28 @@ async fn schedules_a_new_job_if_existing_is_being_processed() {
 async fn schedules_a_new_job_if_the_existing_is_pending_retry() {
     static JOB5_CALL_COUNT: StaticCounter = StaticCounter::new();
 
-    #[derive(serde::Deserialize, serde::Serialize)]
-    struct Job5Args {
+    #[derive(Deserialize, Serialize)]
+    struct Job5 {
         succeed: bool,
     }
 
-    #[graphile_worker::task]
-    async fn job5(args: Job5Args, _: WorkerContext) -> Result<(), String> {
-        JOB5_CALL_COUNT.increment().await;
-        if !args.succeed {
-            return Err("fail".to_string());
-        }
+    impl TaskHandler for Job5 {
+        const IDENTIFIER: &'static str = "job5";
 
-        Ok(())
+        async fn run(self, _ctx: WorkerContext) -> Result<(), String> {
+            JOB5_CALL_COUNT.increment().await;
+            if !self.succeed {
+                return Err("fail".to_string());
+            }
+
+            Ok(())
+        }
     }
 
     helpers::with_test_db(|test_db| async move {
         let worker = test_db
             .create_worker_options()
-            .define_job(job5)
+            .define_job::<Job5>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -552,8 +644,8 @@ async fn schedules_a_new_job_if_the_existing_is_pending_retry() {
         // Schedule a job that is initially set to fail
         worker
             .create_utils()
-            .add_job::<job5>(
-                Job5Args { succeed: false },
+            .add_job(
+                Job5 { succeed: false },
                 JobSpec {
                     job_key: Some("abc".into()),
                     ..Default::default()
@@ -595,8 +687,8 @@ async fn schedules_a_new_job_if_the_existing_is_pending_retry() {
         // Update the job to succeed
         worker
             .create_utils()
-            .add_job::<job5>(
-                Job5Args { succeed: true },
+            .add_job(
+                Job5 { succeed: true },
                 JobSpec {
                     job_key: Some("abc".into()),
                     run_at: Some(Utc::now()),
@@ -638,22 +730,24 @@ async fn schedules_a_new_job_if_the_existing_is_pending_retry() {
 async fn job_details_are_reset_if_not_specified_in_update() {
     static JOB3_CALL_COUNT: StaticCounter = StaticCounter::new();
 
-    #[derive(serde::Deserialize, serde::Serialize)]
-    struct Job3Args {
-        a: i32,
+    #[derive(Serialize, Deserialize)]
+    struct Job3 {
+        a: u32,
     }
 
-    #[graphile_worker::task]
-    async fn job3(_args: Job3Args, _: WorkerContext) -> Result<(), ()> {
-        JOB3_CALL_COUNT.increment().await;
+    impl TaskHandler for Job3 {
+        const IDENTIFIER: &'static str = "job3";
 
-        Ok(())
+        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+            JOB3_CALL_COUNT.increment().await;
+            Ok(())
+        }
     }
 
     helpers::with_test_db(|test_db| async move {
         let worker = test_db
             .create_worker_options()
-            .define_job(job3)
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -666,8 +760,8 @@ async fn job_details_are_reset_if_not_specified_in_update() {
         // Schedule a future job
         worker
             .create_utils()
-            .add_job::<job3>(
-                Job3Args { a: 1 },
+            .add_job(
+                Job3 { a: 1 },
                 JobSpec {
                     queue_name: Some("queue1".into()),
                     run_at: Some(run_at),
@@ -694,8 +788,8 @@ async fn job_details_are_reset_if_not_specified_in_update() {
         // Update job without specifying new details
         worker
             .create_utils()
-            .add_job::<job3>(
-                Job3Args { a: 1 }, // maintaining payload for comparison
+            .add_job(
+                Job3 { a: 1 }, // maintaining payload for comparison
                 JobSpec {
                     job_key: Some("abc".into()),
                     ..Default::default()
@@ -723,8 +817,8 @@ async fn job_details_are_reset_if_not_specified_in_update() {
 
         worker
             .create_utils()
-            .add_job::<job3>(
-                Job3Args { a: 2 },
+            .add_job(
+                Job3 { a: 2 },
                 JobSpec {
                     queue_name: Some("queue2".into()),
                     run_at: Some(run_at2),
@@ -753,21 +847,23 @@ async fn job_details_are_reset_if_not_specified_in_update() {
 
 #[tokio::test]
 async fn pending_jobs_can_be_removed() {
-    #[derive(serde::Deserialize, serde::Serialize)]
-    struct Job3Args {
-        a: String,
+    #[derive(Serialize, Deserialize)]
+    struct Job3 {
+        a: u32,
     }
 
-    #[graphile_worker::task]
-    async fn job3(_args: Job3Args, _: WorkerContext) -> Result<(), ()> {
-        // Job logic here
-        Ok(())
+    impl TaskHandler for Job3 {
+        const IDENTIFIER: &'static str = "job3";
+
+        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+            Ok(())
+        }
     }
 
     helpers::with_test_db(|test_db| async move {
         let worker = test_db
             .create_worker_options()
-            .define_job(job3)
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -775,8 +871,8 @@ async fn pending_jobs_can_be_removed() {
         // Schedule a job
         worker
             .create_utils()
-            .add_job::<job3>(
-                Job3Args { a: "1".into() },
+            .add_job(
+                Job3 { a: 1 },
                 JobSpec {
                     job_key: Some("abc".into()),
                     ..Default::default()
@@ -816,20 +912,23 @@ async fn jobs_in_progress_cannot_be_removed() {
     static JOB3_CALL_COUNT: StaticCounter = StaticCounter::new();
     static RX: OnceCell<Mutex<Option<oneshot::Receiver<()>>>> = OnceCell::const_new();
 
-    #[derive(serde::Deserialize, serde::Serialize)]
-    struct Job3Args {
+    #[derive(Deserialize, Serialize)]
+    struct Job3 {
         a: i32,
     }
 
-    #[graphile_worker::task]
-    async fn job3(_args: Job3Args, _: WorkerContext) -> Result<(), ()> {
-        JOB3_CALL_COUNT.increment().await;
-        // Wait on the receiver, simulating a deferred operation
-        let mut rx_mutex_guard = RX.get().unwrap().lock().await;
-        if let Some(rx) = rx_mutex_guard.take() {
-            rx.await.unwrap();
+    impl TaskHandler for Job3 {
+        const IDENTIFIER: &'static str = "job3";
+
+        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+            JOB3_CALL_COUNT.increment().await;
+            // Wait on the receiver, simulating a deferred operation
+            let mut rx_mutex_guard = RX.get().unwrap().lock().await;
+            if let Some(rx) = rx_mutex_guard.take() {
+                rx.await.unwrap();
+            }
+            Ok(())
         }
-        Ok(())
     }
 
     helpers::with_test_db(|test_db| async move {
@@ -838,7 +937,7 @@ async fn jobs_in_progress_cannot_be_removed() {
 
         let worker = test_db
             .create_worker_options()
-            .define_job(job3)
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -846,8 +945,8 @@ async fn jobs_in_progress_cannot_be_removed() {
         // Schedule a job
         let utils = worker.create_utils();
         utils
-            .add_job::<job3>(
-                Job3Args { a: 123 },
+            .add_job(
+                Job3 { a: 123 },
                 JobSpec {
                     job_key: Some("abc".into()),
                     ..Default::default()
@@ -914,19 +1013,22 @@ async fn runs_jobs_asynchronously() {
     static JOB3_CALL_COUNT: StaticCounter = StaticCounter::new();
     static JOB_RX: OnceCell<Mutex<Option<oneshot::Receiver<()>>>> = OnceCell::const_new();
 
-    #[derive(serde::Deserialize, serde::Serialize)]
-    struct Job3Args {
+    #[derive(Deserialize, Serialize)]
+    struct Job3 {
         a: i32,
     }
 
-    #[graphile_worker::task]
-    async fn job3(_args: Job3Args, _: WorkerContext) -> Result<(), ()> {
-        JOB3_CALL_COUNT.increment().await;
-        let mut rx = JOB_RX.get().unwrap().lock().await;
-        if let Some(receiver) = rx.take() {
-            receiver.await.unwrap();
+    impl TaskHandler for Job3 {
+        const IDENTIFIER: &'static str = "job3";
+
+        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+            JOB3_CALL_COUNT.increment().await;
+            let mut rx = JOB_RX.get().unwrap().lock().await;
+            if let Some(receiver) = rx.take() {
+                receiver.await.unwrap();
+            }
+            Ok(())
         }
-        Ok(())
     }
 
     helpers::with_test_db(|test_db| async move {
@@ -935,7 +1037,7 @@ async fn runs_jobs_asynchronously() {
 
         let worker = test_db
             .create_worker_options()
-            .define_job(job3)
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -944,8 +1046,8 @@ async fn runs_jobs_asynchronously() {
         let start = Utc::now();
         worker
             .create_utils()
-            .add_job::<job3>(
-                Job3Args { a: 1 },
+            .add_job(
+                Job3 { a: 1 },
                 JobSpec {
                     queue_name: Some("myqueue".into()),
                     ..Default::default()
@@ -1027,30 +1129,33 @@ async fn runs_jobs_in_parallel() {
     RXS.set(Mutex::new(vec![])).unwrap();
     let mut txs = vec![];
 
-    #[derive(serde::Deserialize, serde::Serialize)]
-    struct Job3Args {
+    #[derive(Deserialize, Serialize)]
+    struct Job3 {
         a: i32,
     }
 
-    #[graphile_worker::task]
-    async fn job3(_args: Job3Args, _: WorkerContext) -> Result<(), ()> {
-        let rx = RXS
-            .get()
-            .expect("OnceCell should be set globally at the beginning of the test")
-            .lock()
-            .await
-            .remove(0); // Obtain the receiver for this job
-        JOB3_CALL_COUNT.increment().await;
-        rx.await
-            .expect("The receiver should not be dropped before the job completes");
-        Ok(())
+    impl TaskHandler for Job3 {
+        const IDENTIFIER: &'static str = "job3";
+
+        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+            let rx = RXS
+                .get()
+                .expect("OnceCell should be set globally at the beginning of the test")
+                .lock()
+                .await
+                .remove(0); // Obtain the receiver for this job
+            JOB3_CALL_COUNT.increment().await;
+            rx.await
+                .expect("The receiver should not be dropped before the job completes");
+            Ok(())
+        }
     }
 
     helpers::with_test_db(|test_db| async move {
         let worker = test_db
             .create_worker_options()
             .concurrency(10)
-            .define_job(job3)
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -1064,8 +1169,8 @@ async fn runs_jobs_in_parallel() {
 
             worker
                 .create_utils()
-                .add_job::<job3>(
-                    Job3Args { a: i },
+                .add_job(
+                    Job3 { a: i },
                     JobSpec {
                         queue_name: Some(format!("queue_{}", i)),
                         ..Default::default()
@@ -1143,23 +1248,26 @@ async fn single_worker_runs_jobs_in_series_purges_all_before_exit() {
     RXS.set(Mutex::new(VecDeque::new())).unwrap();
     let mut txs = vec![];
 
-    #[derive(serde::Deserialize, serde::Serialize)]
-    struct Job3Args {
+    #[derive(Deserialize, Serialize)]
+    struct Job3 {
         a: i32,
     }
 
-    #[graphile_worker::task]
-    async fn job3(_args: Job3Args, _: WorkerContext) -> Result<(), ()> {
-        let rx = RXS.get().unwrap().lock().await.pop_front().unwrap(); // Obtain the receiver for the current job
-        rx.await.unwrap(); // Wait for the signal to complete the job
-        JOB3_CALL_COUNT.increment().await;
-        Ok(())
+    impl TaskHandler for Job3 {
+        const IDENTIFIER: &'static str = "job3";
+
+        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+            let rx = RXS.get().unwrap().lock().await.pop_front().unwrap(); // Obtain the receiver for the current job
+            rx.await.unwrap(); // Wait for the signal to complete the job
+            JOB3_CALL_COUNT.increment().await;
+            Ok(())
+        }
     }
 
     helpers::with_test_db(|test_db| async move {
         let worker = test_db
             .create_worker_options()
-            .define_job(job3)
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -1172,7 +1280,7 @@ async fn single_worker_runs_jobs_in_series_purges_all_before_exit() {
 
             worker
                 .create_utils()
-                .add_job::<job3>(Job3Args { a: 1 }, JobSpec::default())
+                .add_job(Job3 { a: 1 }, JobSpec::default())
                 .await
                 .expect("Failed to add job");
         }
@@ -1227,23 +1335,26 @@ async fn jobs_added_to_the_same_queue_will_be_ran_serially_even_if_multiple_work
     RXS.set(Mutex::new(VecDeque::new())).unwrap();
     let mut txs = vec![];
 
-    #[derive(serde::Deserialize, serde::Serialize)]
-    struct Job3Args {
+    #[derive(Deserialize, Serialize)]
+    struct Job3 {
         a: i32,
     }
 
-    #[graphile_worker::task]
-    async fn job3(_args: Job3Args, _: WorkerContext) -> Result<(), ()> {
-        let rx = RXS.get().unwrap().lock().await.pop_front().unwrap(); // Obtain the receiver for the current job
-        rx.await.unwrap(); // Wait for the signal to complete the job
-        JOB3_CALL_COUNT.increment().await;
-        Ok(())
+    impl TaskHandler for Job3 {
+        const IDENTIFIER: &'static str = "job3";
+
+        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+            let rx = RXS.get().unwrap().lock().await.pop_front().unwrap(); // Obtain the receiver for the current job
+            rx.await.unwrap(); // Wait for the signal to complete the job
+            JOB3_CALL_COUNT.increment().await;
+            Ok(())
+        }
     }
 
     helpers::with_test_db(|test_db| async move {
         let worker = test_db
             .create_worker_options()
-            .define_job(job3)
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -1257,8 +1368,8 @@ async fn jobs_added_to_the_same_queue_will_be_ran_serially_even_if_multiple_work
 
             worker
                 .create_utils()
-                .add_job::<job3>(
-                    Job3Args { a: 1 },
+                .add_job(
+                    Job3 { a: 1 },
                     JobSpecBuilder::new().queue_name("serial").build(),
                 )
                 .await

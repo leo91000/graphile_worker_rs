@@ -59,7 +59,6 @@ graphile_worker_crontab_parser = { path = "./crates/crontab_parser", version = "
 graphile_worker_job = { path = "./crates/job", version = "0.1.0" }
 graphile_worker_ctx = { path = "./crates/ctx", version = "0.1.0" }
 graphile_worker_migrations = { path = "./crates/migrations", version = "0.4.2", default-features = false }
-graphile_worker_macros = { path = "./crates/macros", version = "0.2.2" }
 graphile_worker_task_handler = { path = "./crates/task_handler", version = "0.3.0" }
 graphile_worker_shutdown_signal = { path = "./crates/shutdown_signal", version = "0.3.1" }
 chrono = { version = "0.4.34", features = ["serde"] }

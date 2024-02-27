@@ -1,40 +1,27 @@
-use graphile_worker_ctx::{FromWorkerContext, WorkerContext};
+use graphile_worker_ctx::WorkerContext;
+use serde::Deserialize;
+use serde::Serialize;
+use std::fmt::Debug;
 use std::future::Future;
 
-pub trait TaskHandler<T>: Send {
-    fn run(
-        &self,
-        worker_context: WorkerContext,
-    ) -> impl Future<Output = Result<(), String>> + Send + 'static;
-}
+pub trait TaskHandler: Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static {
+    const IDENTIFIER: &'static str;
 
-impl<F, Fut, Error> TaskHandler<()> for F
-where
-    Error: std::fmt::Debug + Send + 'static,
-    Fut: Future<Output = Result<(), Error>> + Send + 'static,
-    F: Fn() -> Fut + Send,
-{
     fn run(
-        &self,
-        _worker_context: WorkerContext,
-    ) -> impl Future<Output = Result<(), String>> + Send + 'static {
-        let fut = self();
-        async move { fut.await.map_err(|e| format!("{:?}", e)) }
-    }
-}
+        self,
+        ctx: WorkerContext,
+    ) -> impl Future<Output = Result<(), impl Debug>> + Send + 'static;
 
-impl<F, C1, Fut, Error> TaskHandler<(C1,)> for F
-where
-    Error: std::fmt::Debug + Send + 'static,
-    Fut: Future<Output = Result<(), Error>> + Send + 'static,
-    F: Fn(C1) -> Fut + Send + Sync + 'static,
-    C1: FromWorkerContext + Send + Sync + 'static,
-{
-    fn run(
-        &self,
+    fn run_from_ctx(
         worker_context: WorkerContext,
     ) -> impl Future<Output = Result<(), String>> + Send + 'static {
-        let fut = self(C1::from_worker_context(worker_context.clone()));
-        async move { fut.await.map_err(|e| format!("{:?}", e)) }
+        let job = serde_json::from_value::<Self>(worker_context.payload().clone());
+        async move {
+            let Ok(job) = job else {
+                let e = job.err().unwrap();
+                return Err(format!("{e:?}"));
+            };
+            job.run(worker_context).await.map_err(|e| format!("{e:?}"))
+        }
     }
 }
