@@ -1,16 +1,26 @@
-use graphile_worker::JobSpec;
+use graphile_worker::{JobSpec, TaskHandler, WorkerContext};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 mod helpers;
+
+#[derive(Serialize, Deserialize)]
+struct Job3(serde_json::Value);
+
+impl TaskHandler for Job3 {
+    const IDENTIFIER: &'static str = "job3";
+
+    async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        Ok(())
+    }
+}
 
 #[tokio::test]
 async fn it_supports_the_flags_api() {
     helpers::with_test_db(|test_db| async move {
         let worker = test_db
             .create_worker_options()
-            .define_raw_job("job3" as &str, |_, _: serde_json::Value| async move {
-                Ok(()) as Result<(), ()>
-            })
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -55,9 +65,7 @@ async fn it_should_skip_jobs_with_forbidden_flags() {
         let worker = test_db
             .create_worker_options()
             .add_forbidden_flag(bad_flag)
-            .define_raw_job("job3" as &str, |_, _: serde_json::Value| async move {
-                Ok(()) as Result<(), ()>
-            })
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");
@@ -114,9 +122,7 @@ async fn it_should_run_all_jobs_if_no_forbidden_flags() {
         let worker = test_db
             .create_worker_options()
             .add_forbidden_flag(bad_flag)
-            .define_raw_job("job3" as &str, |_, _: serde_json::Value| async move {
-                Ok(()) as Result<(), ()>
-            })
+            .define_job::<Job3>()
             .init()
             .await
             .expect("Failed to create worker");

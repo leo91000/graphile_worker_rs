@@ -1,23 +1,11 @@
 use std::str::FromStr;
 
-use graphile_worker::{WorkerContext, WorkerOptions};
-use serde::Deserialize;
+use graphile_worker::{TaskHandler, WorkerContext, WorkerOptions};
+use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgConnectOptions;
 use tracing_subscriber::{
     filter::EnvFilter, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt,
 };
-
-#[derive(Deserialize)]
-struct HelloPayload {
-    message: String,
-}
-
-async fn say_hello(_ctx: WorkerContext, payload: HelloPayload) -> Result<(), ()> {
-    println!("Waiting 20 seconds");
-    tokio::time::sleep(std::time::Duration::from_secs(20)).await;
-    println!("Hello {} !", payload.message);
-    Ok(())
-}
 
 fn enable_logs() {
     let fmt_layer = tracing_subscriber::fmt::layer();
@@ -28,6 +16,38 @@ fn enable_logs() {
         .with(filter_layer)
         .with(fmt_layer)
         .init();
+}
+
+#[derive(Deserialize, Serialize)]
+struct SayHello {
+    message: String,
+}
+
+impl TaskHandler for SayHello {
+    const IDENTIFIER: &'static str = "say_hello";
+
+    async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        println!("Waiting 20 seconds");
+        tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+        println!("Hello {} !", self.message);
+        Ok::<(), ()>(())
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+struct SayHello2 {
+    message: String,
+}
+
+impl TaskHandler for SayHello2 {
+    const IDENTIFIER: &'static str = "say_hello_2";
+
+    async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        println!("Waiting 20 seconds");
+        tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+        println!("Hello {} !", self.message);
+        Ok::<(), ()>(())
+    }
 }
 
 #[tokio::main]
@@ -45,8 +65,8 @@ async fn main() {
     WorkerOptions::default()
         .concurrency(10)
         .schema("example_simple_worker")
-        .define_raw_job("say_hello", say_hello)
-        .define_raw_job("say_hello_2", say_hello)
+        .define_job::<SayHello>()
+        .define_job::<SayHello2>()
         .pg_pool(pg_pool)
         // Run say_hello every two minutes with a backfill of 10 minutes
         .with_crontab(

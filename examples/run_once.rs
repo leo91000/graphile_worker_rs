@@ -1,22 +1,12 @@
 use std::str::FromStr;
 
-use graphile_worker::{task, JobSpec, WorkerContext, WorkerOptions};
+use graphile_worker::TaskHandler;
+use graphile_worker::{JobSpec, WorkerContext, WorkerOptions};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgConnectOptions;
 use tracing_subscriber::{
     filter::EnvFilter, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt,
 };
-
-#[derive(Deserialize, Serialize)]
-struct HelloPayload {
-    message: String,
-}
-
-#[task]
-async fn say_hello(payload: HelloPayload, _ctx: WorkerContext) -> Result<(), ()> {
-    println!("Hello {} !", payload.message);
-    Ok(())
-}
 
 fn enable_logs() {
     let fmt_layer = tracing_subscriber::fmt::layer();
@@ -27,6 +17,22 @@ fn enable_logs() {
         .with(filter_layer)
         .with(fmt_layer)
         .init();
+}
+
+#[derive(Deserialize, Serialize)]
+struct SayHello {
+    message: String,
+}
+
+impl TaskHandler for SayHello {
+    const IDENTIFIER: &'static str = "say_hello";
+
+    async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        println!("Waiting 20 seconds");
+        tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+        println!("Hello {} !", self.message);
+        Ok(())
+    }
 }
 
 #[tokio::main]
@@ -44,7 +50,7 @@ async fn main() {
     let worker = WorkerOptions::default()
         .concurrency(2)
         .schema("example_simple_worker")
-        .define_job(say_hello)
+        .define_job::<SayHello>()
         .pg_pool(pg_pool)
         .init()
         .await
@@ -55,8 +61,8 @@ async fn main() {
     // Schedule 10 jobs
     for i in 0..10 {
         helpers
-            .add_job::<say_hello>(
-                HelloPayload {
+            .add_job(
+                SayHello {
                     message: format!("world {}", i),
                 },
                 JobSpec::default(),

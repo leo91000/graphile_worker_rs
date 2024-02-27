@@ -28,17 +28,20 @@ The definition of a task consist simply of an async function and a task identifi
 
 ```rust,ignore
 use serde::{Deserialize, Serialize};
-use graphile_worker::{task, WorkerContext};
+use graphile_worker::{task, WorkerContext, TaskHandler};
 
 #[derive(Deserialize, Serialize)]
-struct HelloPayload {
-    name: String,
+struct SayHello {
+    message: String,
 }
 
-#[task]
-async fn say_hello(payload: HelloPayload, _ctx: WorkerContext) -> Result<(), ()> {
-    println!("Hello {} !", payload.name);
-    Ok(())
+impl TaskHandler for SayHello {
+    const IDENTIFIER: &'static str = "say_hello";
+
+    async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        println!("Waiting 20 seconds");
+        Ok(())
+    }
 }
 
 #[tokio::main]
@@ -73,9 +76,9 @@ async fn main() -> Result<(), ()> {
     // ...
     let utils = worker.create_utils();
 
-    // Using add_job forces the payload to be same struct defined in our type
-    utils.add_job::<say_hello>(
-        HelloPayload { name: "Bobby Tables".to_string() },
+    // Using add_job
+    utils.add_job(
+        SayHello { name: "Bobby Tables".to_string() },
         Default::default(),
     ).await.unwrap();
 

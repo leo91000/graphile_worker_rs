@@ -1,8 +1,10 @@
-use graphile_worker::{JobSpec, Worker};
+use graphile_worker::{JobSpec, TaskHandler, Worker, WorkerContext};
 use tokio::{
     task::spawn_local,
     time::{sleep, Duration, Instant},
 };
+
+use serde::{Deserialize, Serialize};
 
 use crate::helpers::{with_test_db, StaticCounter};
 
@@ -12,15 +14,18 @@ mod helpers;
 async fn it_will_execute_jobs_as_they_come_up_and_exits_cleanly() {
     static JOB3_CALL_COUNT: StaticCounter = StaticCounter::new();
 
-    #[derive(serde::Deserialize, serde::Serialize)]
-    struct Job3Args {
+    #[derive(Serialize, Deserialize)]
+    struct Job3 {
         a: u32,
     }
 
-    #[graphile_worker::task]
-    async fn job3(_args: Job3Args, _: graphile_worker::WorkerContext) -> Result<(), ()> {
-        JOB3_CALL_COUNT.increment().await;
-        Ok(())
+    impl TaskHandler for Job3 {
+        const IDENTIFIER: &'static str = "job3";
+
+        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+            JOB3_CALL_COUNT.increment().await;
+            Ok(())
+        }
     }
 
     with_test_db(|test_db| async move {
@@ -34,7 +39,7 @@ async fn it_will_execute_jobs_as_they_come_up_and_exits_cleanly() {
                 Worker::options()
                     .pg_pool(test_pool)
                     .concurrency(3)
-                    .define_job(job3)
+                    .define_job::<Job3>()
                     .init()
                     .await
                     .expect("Failed to create worker")
@@ -47,7 +52,7 @@ async fn it_will_execute_jobs_as_they_come_up_and_exits_cleanly() {
         // Schedule 5 jobs and wait for them to be processed
         for i in 1..=5 {
             utils
-                .add_job::<job3>(Job3Args { a: i }, JobSpec::default())
+                .add_job(Job3 { a: i }, JobSpec::default())
                 .await
                 .expect("Failed to add job");
 
