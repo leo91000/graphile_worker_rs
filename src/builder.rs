@@ -8,13 +8,12 @@ use graphile_worker_crontab_types::Crontab;
 use graphile_worker_ctx::WorkerContext;
 use graphile_worker_migrations::migrate;
 use graphile_worker_shutdown_signal::shutdown_signal;
-use graphile_worker_task_handler::{TaskDefinition, TaskHandler};
+use graphile_worker_task_handler::TaskHandler;
 use rand::RngCore;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 
@@ -124,51 +123,12 @@ impl WorkerOptions {
         self
     }
 
-    pub fn define_raw_job<T, F>(mut self, identifier: &str, job_fn: F) -> Self
-    where
-        F: TaskHandler<T> + Sync + 'static,
-    {
-        let job_fn = Arc::new(job_fn);
-        let worker_fn = move |ctx: WorkerContext| {
-            let job_fn = job_fn.clone();
-
-            let ctx = ctx.clone();
-            async move {
-                let job_result = job_fn.run(ctx).await;
-                match job_result {
-                    Err(e) => Err(format!("{e:?}")),
-                    Ok(v) => Ok(v),
-                }
-            }
-            .boxed()
-        };
-
-        self.jobs
-            .insert(identifier.to_string(), Box::new(worker_fn));
-        self
-    }
-
-    pub fn define_job<T>(mut self, task: T) -> Self
-    where
-        T: TaskDefinition<WorkerContext>,
-    {
-        let task_runner = task.get_task_runner();
-
-        let identifier = T::identifier();
+    pub fn define_job<T: TaskHandler>(mut self) -> Self {
+        let identifier = T::IDENTIFIER;
 
         let worker_fn = move |ctx: WorkerContext| {
-            let task_runner = task_runner.clone();
-
             let ctx = ctx.clone();
-            async move {
-                let job_result = task_runner.run(ctx).await;
-
-                match job_result {
-                    Err(e) => Err(format!("{e:?}")),
-                    Ok(v) => Ok(v),
-                }
-            }
-            .boxed()
+            T::run_from_ctx(ctx).boxed()
         };
 
         self.jobs

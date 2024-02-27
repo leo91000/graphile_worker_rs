@@ -1,12 +1,10 @@
 use graphile_worker_migrations::{migrate, MigrateError};
-use graphile_worker_task_handler::TaskDefinition;
+use graphile_worker_task_handler::TaskHandler;
 use indoc::formatdoc;
 use serde::Serialize;
 use sqlx::{PgExecutor, PgPool};
 
-use crate::{
-    errors::GraphileWorkerError, sql::add_job::add_job, DbJob, Job, JobSpec, WorkerContext,
-};
+use crate::{errors::GraphileWorkerError, sql::add_job::add_job, DbJob, Job, JobSpec};
 
 pub enum CleanupTask {
     GcTaskIdentifiers,
@@ -93,12 +91,12 @@ impl WorkerUtils {
 
     /// Add a job to the queue
     /// The payload must be exactly the same type as the one defined in the task definition
-    pub async fn add_job<T: TaskDefinition<WorkerContext>>(
+    pub async fn add_job<T: TaskHandler>(
         &self,
-        payload: T::Payload,
+        payload: T,
         spec: JobSpec,
     ) -> Result<Job, GraphileWorkerError> {
-        let identifier = T::identifier();
+        let identifier = T::IDENTIFIER;
         let payload = serde_json::to_value(payload)?;
         add_job(
             &self.pg_pool,

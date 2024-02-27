@@ -1,9 +1,12 @@
 use chrono::{Duration, DurationRound, Local};
 use graphile_worker::Worker;
+use serde::{Deserialize, Serialize};
 use sqlx::query;
+use std::fmt::Debug;
 use tokio::{task::spawn_local, time::Instant};
 
 use crate::helpers::{with_test_db, StaticCounter};
+use graphile_worker::{TaskHandler, WorkerContext};
 
 mod helpers;
 
@@ -11,15 +14,18 @@ mod helpers;
 async fn register_identifiers() {
     static JOB3_CALL_COUNT: StaticCounter = StaticCounter::new();
 
-    #[derive(serde::Deserialize, serde::Serialize)]
-    struct Job3Args {
+    #[derive(Serialize, Deserialize)]
+    struct Job3 {
         a: u32,
     }
 
-    #[graphile_worker::task]
-    async fn job3(_args: Job3Args, _: graphile_worker::WorkerContext) -> Result<(), ()> {
-        JOB3_CALL_COUNT.increment().await;
-        Ok(())
+    impl TaskHandler for Job3 {
+        const IDENTIFIER: &'static str = "job3";
+
+        async fn run(self, _ctx: WorkerContext) -> Result<(), impl Debug> {
+            JOB3_CALL_COUNT.increment().await;
+            Ok::<_, ()>(())
+        }
     }
 
     with_test_db(|test_db| async move {
@@ -34,7 +40,7 @@ async fn register_identifiers() {
             Worker::options()
                 .pg_pool(test_pool)
                 .concurrency(3)
-                .define_job(job3)
+                .define_job::<Job3>()
                 .with_crontab(
                     r#"
                         0 */4 * * * do_it ?fill=1d
