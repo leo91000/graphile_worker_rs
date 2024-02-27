@@ -1,20 +1,19 @@
 use crate::runner::WorkerFn;
 use crate::sql::task_identifiers::get_tasks_details;
 use crate::utils::escape_identifier;
-use crate::{Worker, WorkerContext};
+use crate::Worker;
 use futures::FutureExt;
 use graphile_worker_crontab_parser::{parse_crontab, CrontabParseError};
 use graphile_worker_crontab_types::Crontab;
+use graphile_worker_ctx::WorkerContext;
 use graphile_worker_migrations::migrate;
 use graphile_worker_shutdown_signal::shutdown_signal;
 use graphile_worker_task_handler::{TaskDefinition, TaskHandler};
 use rand::RngCore;
-use serde::Deserialize;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
@@ -125,28 +124,20 @@ impl WorkerOptions {
         self
     }
 
-    pub fn define_raw_job<T, E, Fut, F>(mut self, identifier: &str, job_fn: F) -> Self
+    pub fn define_raw_job<T, F>(mut self, identifier: &str, job_fn: F) -> Self
     where
-        T: for<'de> Deserialize<'de> + Send,
-        E: Debug,
-        Fut: Future<Output = Result<(), E>> + Send,
-        F: Fn(WorkerContext, T) -> Fut + Send + Sync + 'static,
+        F: TaskHandler<T> + Sync + 'static,
     {
         let job_fn = Arc::new(job_fn);
-        let worker_fn = move |ctx: WorkerContext, payload: String| {
+        let worker_fn = move |ctx: WorkerContext| {
             let job_fn = job_fn.clone();
-            async move {
-                let de_payload = serde_json::from_str(&payload);
 
-                match de_payload {
+            let ctx = ctx.clone();
+            async move {
+                let job_result = job_fn.run(ctx).await;
+                match job_result {
                     Err(e) => Err(format!("{e:?}")),
-                    Ok(p) => {
-                        let job_result = job_fn(ctx, p).await;
-                        match job_result {
-                            Err(e) => Err(format!("{e:?}")),
-                            Ok(v) => Ok(v),
-                        }
-                    }
+                    Ok(v) => Ok(v),
                 }
             }
             .boxed()
@@ -165,20 +156,16 @@ impl WorkerOptions {
 
         let identifier = T::identifier();
 
-        let worker_fn = move |ctx: WorkerContext, payload: String| {
-            let payload = serde_json::from_str(&payload);
+        let worker_fn = move |ctx: WorkerContext| {
             let task_runner = task_runner.clone();
 
+            let ctx = ctx.clone();
             async move {
-                match payload {
+                let job_result = task_runner.run(ctx).await;
+
+                match job_result {
                     Err(e) => Err(format!("{e:?}")),
-                    Ok(p) => {
-                        let job_result = task_runner.run(p, ctx).await;
-                        match job_result {
-                            Err(e) => Err(format!("{e:?}")),
-                            Ok(v) => Ok(v),
-                        }
-                    }
+                    Ok(v) => Ok(v),
                 }
             }
             .boxed()

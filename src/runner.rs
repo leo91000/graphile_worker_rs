@@ -12,6 +12,7 @@ use futures::{try_join, StreamExt, TryStreamExt};
 use getset::Getters;
 use graphile_worker_crontab_runner::{cron_main, ScheduleCronJobError};
 use graphile_worker_crontab_types::Crontab;
+use graphile_worker_ctx::WorkerContext;
 use graphile_worker_job::Job;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
@@ -21,22 +22,8 @@ use crate::builder::WorkerOptions;
 use crate::sql::complete_job::complete_job;
 use crate::{sql::fail_job::fail_job, streams::StreamSource};
 
-#[derive(Clone, Getters)]
-#[getset(get = "pub")]
-pub struct WorkerContext {
-    pg_pool: sqlx::PgPool,
-}
-
-impl From<&Worker> for WorkerContext {
-    fn from(value: &Worker) -> Self {
-        WorkerContext {
-            pg_pool: value.pg_pool().clone(),
-        }
-    }
-}
-
 pub type WorkerFn =
-    Box<dyn Fn(WorkerContext, String) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>>>;
+    Box<dyn Fn(WorkerContext) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>>>;
 
 #[derive(Getters)]
 #[getset(get = "pub")]
@@ -199,7 +186,10 @@ async fn process_one_job(
         worker.forbidden_flags(),
     )
     .await
-    .inspect_err(|e| error!("Could not get job : {:?}", e))?;
+    .map_err(|e| {
+        error!("Could not get job : {:?}", e);
+        e
+    })?;
 
     match job {
         Some(job) => {
@@ -256,7 +246,13 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
 
     debug!(source = ?source, job_id = job.id(), task_identifier, task_id, "Found task");
     let payload = job.payload().to_string();
-    let task_fut = task_fn(worker.into(), payload.clone());
+    let worker_ctx = WorkerContext::new(
+        job.payload().clone(),
+        worker.pg_pool().clone(),
+        job.clone(),
+        worker.worker_id().clone(),
+    );
+    let task_fut = task_fn(worker_ctx);
 
     let start = Instant::now();
     let job_task = tokio::spawn(task_fut);
