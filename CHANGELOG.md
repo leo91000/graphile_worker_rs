@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.7.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.6.2...graphile_worker-v0.7.0) - 2024-02-28
+
+### Added
+- Try simplifying TaskHandler trait
+- Add more metadata field to job crate
+- Extract Job struct into its own crate
+- Add JobSpec builder
+
+### Other
+- fix README invalid code
+- Refactor from macro based to trait based
+- *(deps)* update rust crate syn to 2.0.51
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate anyhow to 1.0.80
+- Remove unecessary whitespace on queries
+- *(deps)* update rust crate syn to 2.0.49
+- Exclude macros crate from coverage since coverage can't be
+
 ## [0.6.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.6.1...graphile_worker-v0.6.2) - 2024-02-14
 
 ### Other

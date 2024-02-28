@@ -1,6 +1,6 @@
 [package]
 name = "graphile_worker_job"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license-file = "LICENSE.md"
 description = "Job package for graphile_worker, a high performance Rust/PostgreSQL job queue"
