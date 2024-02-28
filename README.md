@@ -28,7 +28,7 @@ The definition of a task consist simply of an async function and a task identifi
 
 ```rust,ignore
 use serde::{Deserialize, Serialize};
-use graphile_worker::{task, WorkerContext, TaskHandler};
+use graphile_worker::{WorkerContext, TaskHandler};
 
 #[derive(Deserialize, Serialize)]
 struct SayHello {
@@ -39,7 +39,7 @@ impl TaskHandler for SayHello {
     const IDENTIFIER: &'static str = "say_hello";
 
     async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
-        println!("Waiting 20 seconds");
+        println!("Hello {} !", self.message);
         Ok(())
     }
 }
