@@ -12,7 +12,7 @@ use futures::{try_join, StreamExt, TryStreamExt};
 use getset::Getters;
 use graphile_worker_crontab_runner::{cron_main, ScheduleCronJobError};
 use graphile_worker_crontab_types::Crontab;
-use graphile_worker_ctx::WorkerContext;
+use graphile_worker_ctx::{AppState, WorkerContext};
 use graphile_worker_job::Job;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
@@ -22,16 +22,16 @@ use crate::builder::WorkerOptions;
 use crate::sql::complete_job::complete_job;
 use crate::{sql::fail_job::fail_job, streams::StreamSource};
 
-pub type WorkerFn =
-    Box<dyn Fn(WorkerContext) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>>>;
+pub type WorkerFn<AS> =
+    Box<dyn Fn(WorkerContext<AS>) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>>>;
 
 #[derive(Getters)]
 #[getset(get = "pub")]
-pub struct Worker {
+pub struct Worker<AS = ()> {
     pub(crate) worker_id: String,
     pub(crate) concurrency: usize,
     pub(crate) poll_interval: Duration,
-    pub(crate) jobs: HashMap<String, WorkerFn>,
+    pub(crate) jobs: HashMap<String, WorkerFn<AS>>,
     pub(crate) pg_pool: sqlx::PgPool,
     pub(crate) escaped_schema: String,
     pub(crate) task_details: TaskDetails,
@@ -39,6 +39,7 @@ pub struct Worker {
     pub(crate) crontabs: Vec<Crontab>,
     pub(crate) use_local_time: bool,
     pub(crate) shutdown_signal: ShutdownSignal,
+    pub(crate) app_state: AppState<AS>,
 }
 
 #[derive(Error, Debug)]
@@ -231,7 +232,11 @@ enum RunJobError {
     TaskAborted,
 }
 
-async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<(), RunJobError> {
+async fn run_job<AS>(
+    job: &Job,
+    worker: &Worker<AS>,
+    source: &StreamSource,
+) -> Result<(), RunJobError> {
     let task_id = job.task_id();
 
     let task_identifier = worker
@@ -246,11 +251,11 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
 
     debug!(source = ?source, job_id = job.id(), task_identifier, task_id, "Found task");
     let payload = job.payload().to_string();
-    let worker_ctx = WorkerContext::new(
-        job.payload().clone(),
+    let worker_ctx = WorkerContext::<AS>::new(
         worker.pg_pool().clone(),
         job.clone(),
         worker.worker_id().clone(),
+        AppState(worker.app_state.0.clone()),
     );
     let task_fut = task_fn(worker_ctx);
 

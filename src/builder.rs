@@ -5,7 +5,7 @@ use crate::Worker;
 use futures::FutureExt;
 use graphile_worker_crontab_parser::{parse_crontab, CrontabParseError};
 use graphile_worker_crontab_types::Crontab;
-use graphile_worker_ctx::WorkerContext;
+use graphile_worker_ctx::{AppState, WorkerContext};
 use graphile_worker_migrations::migrate;
 use graphile_worker_shutdown_signal::shutdown_signal;
 use graphile_worker_task_handler::TaskHandler;
@@ -18,10 +18,10 @@ use std::time::Duration;
 use thiserror::Error;
 
 #[derive(Default)]
-pub struct WorkerOptions {
+pub struct WorkerOptions<AS: Default = ()> {
     concurrency: Option<usize>,
     poll_interval: Option<Duration>,
-    jobs: HashMap<String, WorkerFn>,
+    jobs: HashMap<String, WorkerFn<AS>>,
     pg_pool: Option<PgPool>,
     database_url: Option<String>,
     max_pg_conn: Option<u32>,
@@ -29,6 +29,7 @@ pub struct WorkerOptions {
     forbidden_flags: Vec<String>,
     crontabs: Option<Vec<Crontab>>,
     use_local_time: bool,
+    app_state: Option<AS>,
 }
 
 #[derive(Error, Debug)]
@@ -43,8 +44,8 @@ pub enum WorkerBuildError {
     MigrationError(#[from] graphile_worker_migrations::MigrateError),
 }
 
-impl WorkerOptions {
-    pub async fn init(self) -> Result<Worker, WorkerBuildError> {
+impl<AS: Default + Send + Sync> WorkerOptions<AS> {
+    pub async fn init(self) -> Result<Worker<AS>, WorkerBuildError> {
         let pg_pool = match self.pg_pool {
             Some(pg_pool) => pg_pool,
             None => {
@@ -88,6 +89,7 @@ impl WorkerOptions {
             crontabs: self.crontabs.unwrap_or_default(),
             use_local_time: self.use_local_time,
             shutdown_signal: shutdown_signal(),
+            app_state: AppState::new(self.app_state.unwrap_or_default()),
         };
 
         Ok(worker)
@@ -123,10 +125,15 @@ impl WorkerOptions {
         self
     }
 
-    pub fn define_job<T: TaskHandler>(mut self) -> Self {
+    pub fn app_state(mut self, app_state: AS) -> Self {
+        self.app_state = Some(app_state);
+        self
+    }
+
+    pub fn define_job<T: TaskHandler<AS>>(mut self) -> Self {
         let identifier = T::IDENTIFIER;
 
-        let worker_fn = move |ctx: WorkerContext| {
+        let worker_fn = move |ctx: WorkerContext<AS>| {
             let ctx = ctx.clone();
             T::run_from_ctx(ctx).boxed()
         };
