@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.7.0...graphile_worker-v0.7.1) - 2024-03-27
+
+### Other
+- *(deps)* update rust crate chrono to 0.4.37
+- *(deps)* update rust crate serde_json to 1.0.115
+- *(deps)* update rust crate syn to 2.0.55
+- *(deps)* update rust crate indoc to 2.0.5
+- *(deps)* update rust crate uuid to 1.8.0
+- *(deps)* update rust crate syn to 2.0.53
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate chrono to 0.4.35
+- *(deps)* update rust crate syn to 2.0.52
+
 ## [0.7.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.6.2...graphile_worker-v0.7.0) - 2024-02-28
 
 ### Added
