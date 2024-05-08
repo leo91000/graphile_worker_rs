@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.4.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_handler-v0.4.0...graphile_worker_task_handler-v0.4.1) - 2024-05-08
+
+### Other
+- update Cargo.toml dependencies
+
 ## [0.4.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_handler-v0.3.0...graphile_worker_task_handler-v0.4.0) - 2024-02-28
 
 ### Added
