@@ -13,6 +13,7 @@ use getset::Getters;
 use graphile_worker_crontab_runner::{cron_main, ScheduleCronJobError};
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_ctx::WorkerContext;
+use graphile_worker_extensions::ReadOnlyExtensions;
 use graphile_worker_job::Job;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
@@ -39,6 +40,7 @@ pub struct Worker {
     pub(crate) crontabs: Vec<Crontab>,
     pub(crate) use_local_time: bool,
     pub(crate) shutdown_signal: ShutdownSignal,
+    pub(crate) extensions: ReadOnlyExtensions,
 }
 
 #[derive(Error, Debug)]
@@ -251,6 +253,7 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
         worker.pg_pool().clone(),
         job.clone(),
         worker.worker_id().clone(),
+        worker.extensions().clone(),
     );
     let task_fut = task_fn(worker_ctx);
 

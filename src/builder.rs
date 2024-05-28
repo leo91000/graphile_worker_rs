@@ -6,6 +6,7 @@ use futures::FutureExt;
 use graphile_worker_crontab_parser::{parse_crontab, CrontabParseError};
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_ctx::WorkerContext;
+use graphile_worker_extensions::Extensions;
 use graphile_worker_migrations::migrate;
 use graphile_worker_shutdown_signal::shutdown_signal;
 use graphile_worker_task_handler::TaskHandler;
@@ -29,6 +30,7 @@ pub struct WorkerOptions {
     forbidden_flags: Vec<String>,
     crontabs: Option<Vec<Crontab>>,
     use_local_time: bool,
+    extensions: Extensions,
 }
 
 #[derive(Error, Debug)]
@@ -88,6 +90,7 @@ impl WorkerOptions {
             crontabs: self.crontabs.unwrap_or_default(),
             use_local_time: self.use_local_time,
             shutdown_signal: shutdown_signal(),
+            extensions: self.extensions.into(),
         };
 
         Ok(worker)
@@ -154,6 +157,11 @@ impl WorkerOptions {
 
     pub fn use_local_time(mut self, value: bool) -> Self {
         self.use_local_time = value;
+        self
+    }
+
+    pub fn add_extension<T: Clone + Send + Sync + Debug + 'static>(mut self, value: T) -> Self {
+        self.extensions.insert(value);
         self
     }
 }
