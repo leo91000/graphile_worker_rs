@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.7.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.7.1...graphile_worker-v0.7.2) - 2024-05-28
+
+### Added
+- Add extensions supports
+
+### Other
+- *(deps)* update rust crate serde to 1.0.203
+- *(deps)* update rust crate syn to 2.0.66
+- *(deps)* update rust crate syn to 2.0.65
+- *(deps)* update rust crate anyhow to 1.0.86
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate syn to 2.0.64
+- *(deps)* update rust crate serde to 1.0.202
+- *(deps)* update rust crate syn to 2.0.63
+- *(deps)* update rust crate syn to 2.0.62
+
 ## [0.7.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.7.0...graphile_worker-v0.7.1) - 2024-05-08
 
 ### Other
