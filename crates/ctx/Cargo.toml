@@ -1,6 +1,6 @@
 [package]
 name = "graphile_worker_ctx"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 license-file = "LICENSE.md"
 description = "Worker Context package for graphile_worker, a high performance Rust/PostgreSQL job queue"
