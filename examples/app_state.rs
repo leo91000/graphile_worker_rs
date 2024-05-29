@@ -34,11 +34,10 @@ struct ShowRunCount;
 impl TaskHandler for ShowRunCount {
     const IDENTIFIER: &'static str = "show_run_count";
 
-    async fn run(self, ctx: WorkerContext) -> Result<(), String> {
+    async fn run(self, ctx: WorkerContext) {
         let app_state = ctx.extensions().get::<AppState>().unwrap();
         let run_count = app_state.run_count.fetch_add(1, SeqCst);
         println!("Run count: {run_count}");
-        Ok(())
     }
 }
 
