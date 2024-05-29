@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.5.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_handler-v0.4.2...graphile_worker_task_handler-v0.5.0) - 2024-05-29
+
+### Added
+- Introduce IntoTaskHandlerResult trait
+
 ## [0.4.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_handler-v0.4.1...graphile_worker_task_handler-v0.4.2) - 2024-05-28
 
 ### Other

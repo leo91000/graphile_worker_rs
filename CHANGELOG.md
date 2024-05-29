@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.7.2...graphile_worker-v0.8.0) - 2024-05-29
+
+### Added
+- Introduce IntoTaskHandlerResult trait
+- Job stream now yield as much job as the concurrency option defines
+- Add get_ext() helper method on WorkerContext
+
+### Other
+- Add app state documentation in README
+
 ## [0.7.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.7.1...graphile_worker-v0.7.2) - 2024-05-28
 
 ### Added
