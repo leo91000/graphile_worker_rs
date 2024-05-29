@@ -89,6 +89,55 @@ async fn main() -> Result<(), ()> {
 }
 ```
 
+### App state
+
+You can provide app state through `extension` :
+
+```rust,ignore
+use serde::{Deserialize, Serialize};
+use graphile_worker::{WorkerContext, TaskHandler};
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::SeqCst;
+use std::sync::Arc;
+
+#[derive(Clone, Debug)]
+struct AppState {
+    run_count: Arc<AtomicUsize>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct CounterTask;
+
+impl TaskHandler for CounterTask {
+    const IDENTIFIER: &'static str = "counter_task";
+
+    async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        let app_state = ctx.extensions().get::<AppState>().unwrap();
+        let run_count = app_state.run_count.fetch_add(1, SeqCst);
+        println!("Run count: {run_count}");
+        Ok(())
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), ()> {
+    graphile_worker::WorkerOptions::default()
+        .concurrency(2)
+        .schema("example_simple_worker")
+        .add_extension(AppState {
+            run_count: Arc::new(AtomicUsize::new(0)),
+        })
+        .define_job::<CounterTask>()
+        .pg_pool(pg_pool)
+        .init()
+        .await?
+        .run()
+        .await?;
+
+    Ok(())
+}
+```
+
 ### Success!
 
 You should see the worker output `Hello Bobby Tables !`. Gosh, that was fast!
