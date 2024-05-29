@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_ctx-v0.2.0...graphile_worker_ctx-v0.2.1) - 2024-05-29
+
+### Added
+- Add get_ext() helper method on WorkerContext
+
 ## [0.2.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_ctx-v0.1.2...graphile_worker_ctx-v0.2.0) - 2024-05-28
 
 ### Added
