@@ -17,7 +17,7 @@ use graphile_worker_extensions::ReadOnlyExtensions;
 use graphile_worker_job::Job;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::builder::WorkerOptions;
 use crate::sql::complete_job::complete_job;
@@ -126,6 +126,7 @@ impl Worker {
             self.pg_pool.clone(),
             self.poll_interval,
             self.shutdown_signal.clone(),
+            self.concurrency,
         )
         .await?;
 
@@ -200,7 +201,7 @@ async fn process_one_job(
         }
         None => {
             // TODO: Retry one time because maybe synchronization issue
-            debug!(source = ?source, "No job found");
+            trace!(source = ?source, "No job found");
             Ok(None)
         }
     }

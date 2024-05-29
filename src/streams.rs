@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{num::NonZeroUsize, time::Duration};
 
 use futures::{stream, Stream};
 use graphile_worker_shutdown_signal::ShutdownSignal;
@@ -11,11 +11,36 @@ use crate::{
     Job,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum StreamSource {
     Polling,
     PgListener,
     RunOnce,
+}
+
+struct JobSignalStreamData {
+    interval: tokio::time::Interval,
+    pg_listener: PgListener,
+    shutdown_signal: ShutdownSignal,
+    concurrency: usize,
+    yield_n: Option<(NonZeroUsize, StreamSource)>,
+}
+
+impl JobSignalStreamData {
+    fn new(
+        interval: tokio::time::Interval,
+        pg_listener: PgListener,
+        shutdown_signal: ShutdownSignal,
+        concurrency: usize,
+    ) -> Self {
+        JobSignalStreamData {
+            interval,
+            pg_listener,
+            shutdown_signal,
+            concurrency,
+            yield_n: None,
+        }
+    }
 }
 
 /// Returns a stream that yield on postgres `NOTIFY 'jobs:insert'` and on interval specified by the
@@ -24,17 +49,35 @@ pub async fn job_signal_stream(
     pg_pool: PgPool,
     poll_interval: Duration,
     shutdown_signal: ShutdownSignal,
+    concurrency: usize,
 ) -> Result<impl Stream<Item = StreamSource>> {
     let interval = tokio::time::interval(poll_interval);
 
     let mut pg_listener = PgListener::connect_with(&pg_pool).await?;
     pg_listener.listen("jobs:insert").await?;
+    let stream_data = JobSignalStreamData::new(interval, pg_listener, shutdown_signal, concurrency);
+    let stream = stream::unfold(stream_data, |mut f| async {
+        if let Some((n, source)) = f.yield_n.take() {
+            let source = source.clone();
+            if n.get() > 1 {
+                let remaining_yields = n.get() - 1;
+                f.yield_n = Some((NonZeroUsize::new(remaining_yields).unwrap(), source));
+            } else {
+                f.yield_n = None;
+            }
+            return Some((source, f));
+        }
 
-    let stream = stream::unfold((interval, pg_listener, shutdown_signal), |mut f| async {
         tokio::select! {
-            _ = (f.0).tick() => Some((StreamSource::Polling, f)),
-            _ = (f.1).recv() => Some((StreamSource::PgListener, f)),
-            _ = &mut f.2 => None,
+            _ = (f.interval).tick() => {
+                f.yield_n = Some((NonZeroUsize::new(f.concurrency).unwrap(), StreamSource::Polling));
+                Some((StreamSource::Polling, f))
+            },
+            _ = (f.pg_listener).recv() => {
+                f.yield_n = Some((NonZeroUsize::new(f.concurrency).unwrap(), StreamSource::PgListener));
+                Some((StreamSource::PgListener, f))
+            },
+            _ = &mut f.shutdown_signal => None,
         }
     });
 

@@ -46,6 +46,8 @@ pub enum WorkerBuildError {
 }
 
 impl WorkerOptions {
+    /// Build a new worker with the given options.
+    /// It migrate the database and fetch the tasks details.
     pub async fn init(self) -> Result<Worker, WorkerBuildError> {
         let pg_pool = match self.pg_pool {
             Some(pg_pool) => pg_pool,
@@ -96,36 +98,52 @@ impl WorkerOptions {
         Ok(worker)
     }
 
+    /// Set the postgresql schema to use for the worker.
     pub fn schema(mut self, value: &str) -> Self {
         self.schema = Some(value.into());
         self
     }
 
+    /// Set the number of concurrent jobs that can be run at the same time.
+    /// Default is the number of logical CPUs in the system.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the value is 0.
     pub fn concurrency(mut self, value: usize) -> Self {
+        if value == 0 {
+            panic!("Concurrency must be greater than 0");
+        }
+
         self.concurrency = Some(value);
         self
     }
 
+    /// Set the interval at which the worker should poll the database for new jobs.
     pub fn poll_interval(mut self, value: Duration) -> Self {
         self.poll_interval = Some(value);
         self
     }
 
+    /// Set the postgresql pool to use for the worker.
     pub fn pg_pool(mut self, value: PgPool) -> Self {
         self.pg_pool = Some(value);
         self
     }
 
+    /// Set the postgresql database url to use for the worker.
     pub fn database_url(mut self, value: &str) -> Self {
         self.database_url = Some(value.into());
         self
     }
 
+    /// Set the maximum number of postgresql connections to use for the worker.
     pub fn max_pg_conn(mut self, value: u32) -> Self {
         self.max_pg_conn = Some(value);
         self
     }
 
+    /// Define a job to be run by the worker.
     pub fn define_job<T: TaskHandler>(mut self) -> Self {
         let identifier = T::IDENTIFIER;
 
@@ -139,11 +157,13 @@ impl WorkerOptions {
         self
     }
 
+    /// Adds a forbidden flag to the worker.
     pub fn add_forbidden_flag(mut self, flag: &str) -> Self {
         self.forbidden_flags.push(flag.into());
         self
     }
 
+    /// Adds a crontab to the worker.
     pub fn with_crontab(mut self, input: &str) -> Result<Self, CrontabParseError> {
         let mut crontabs = parse_crontab(input)?;
         match self.crontabs.as_mut() {
@@ -155,11 +175,14 @@ impl WorkerOptions {
         Ok(self)
     }
 
+    /// Set whether the worker should use local time or postgresql time.
     pub fn use_local_time(mut self, value: bool) -> Self {
         self.use_local_time = value;
         self
     }
 
+    /// Add an extension to the worker.
+    /// Usefull for providing custom app state.
     pub fn add_extension<T: Clone + Send + Sync + Debug + 'static>(mut self, value: T) -> Self {
         self.extensions.insert(value);
         self
