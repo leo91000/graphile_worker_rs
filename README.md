@@ -111,11 +111,10 @@ pub struct CounterTask;
 impl TaskHandler for CounterTask {
     const IDENTIFIER: &'static str = "counter_task";
 
-    async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+    async fn run(self, ctx: WorkerContext) {
         let app_state = ctx.extensions().get::<AppState>().unwrap();
         let run_count = app_state.run_count.fetch_add(1, SeqCst);
         println!("Run count: {run_count}");
-        Ok(())
     }
 }
 
@@ -137,10 +136,6 @@ async fn main() -> Result<(), ()> {
     Ok(())
 }
 ```
-
-### Success!
-
-You should see the worker output `Hello Bobby Tables !`. Gosh, that was fast!
 
 ## Features
 

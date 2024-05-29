@@ -9,7 +9,7 @@ use graphile_worker_ctx::WorkerContext;
 use graphile_worker_extensions::Extensions;
 use graphile_worker_migrations::migrate;
 use graphile_worker_shutdown_signal::shutdown_signal;
-use graphile_worker_task_handler::TaskHandler;
+use graphile_worker_task_handler::{run_task_from_worker_ctx, TaskHandler};
 use rand::RngCore;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
@@ -149,7 +149,7 @@ impl WorkerOptions {
 
         let worker_fn = move |ctx: WorkerContext| {
             let ctx = ctx.clone();
-            T::run_from_ctx(ctx).boxed()
+            run_task_from_worker_ctx::<T>(ctx).boxed()
         };
 
         self.jobs
