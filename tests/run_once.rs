@@ -2,7 +2,7 @@ use std::{collections::VecDeque, ops::Add, rc::Rc};
 
 use crate::helpers::StaticCounter;
 use chrono::{Duration, Timelike, Utc};
-use graphile_worker::{JobSpec, JobSpecBuilder, TaskHandler, WorkerContext};
+use graphile_worker::{IntoTaskHandlerResult, JobSpec, JobSpecBuilder, TaskHandler, WorkerContext};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::{
@@ -26,9 +26,8 @@ async fn it_should_run_jobs() {
     impl TaskHandler for Job2 {
         const IDENTIFIER: &'static str = "job2";
 
-        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             JOB2_CALL_COUNT.increment().await;
-            Ok(())
         }
     }
 
@@ -40,9 +39,8 @@ async fn it_should_run_jobs() {
     impl TaskHandler for Job3 {
         const IDENTIFIER: &'static str = "job3";
 
-        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             JOB3_CALL_COUNT.increment().await;
-            Ok(())
         }
     }
 
@@ -106,7 +104,7 @@ async fn it_should_schedule_errors_for_retry() {
     impl TaskHandler for Job3 {
         const IDENTIFIER: &'static str = "job3";
 
-        async fn run(self, _ctx: WorkerContext) -> Result<(), String> {
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             JOB3_CALL_COUNT.increment().await;
             Err("fail".to_string())
         }
@@ -197,7 +195,7 @@ async fn it_should_retry_jobs() {
     impl TaskHandler for Job3 {
         const IDENTIFIER: &'static str = "job3";
 
-        async fn run(self, _ctx: WorkerContext) -> Result<(), String> {
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             JOB3_CALL_COUNT.increment().await;
             Err("fail 2".to_string())
         }
@@ -281,9 +279,8 @@ async fn it_should_supports_future_scheduled_jobs() {
     impl TaskHandler for Job3 {
         const IDENTIFIER: &'static str = "job3";
 
-        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             JOB3_CALL_COUNT.increment().await;
-            Ok(())
         }
     }
 
@@ -347,9 +344,8 @@ async fn it_shoud_allow_update_of_pending_jobs() {
     impl TaskHandler for Job3 {
         const IDENTIFIER: &'static str = "job3";
 
-        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             JOB3_CALL_COUNT.increment().await;
-            Ok(())
         }
     }
 
@@ -432,9 +428,8 @@ async fn it_schedules_a_new_job_if_existing_is_completed() {
     impl TaskHandler for Job3 {
         const IDENTIFIER: &'static str = "job3";
 
-        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             JOB3_CALL_COUNT.increment().await;
-            Ok(())
         }
     }
 
@@ -502,7 +497,7 @@ async fn schedules_a_new_job_if_existing_is_being_processed() {
     impl TaskHandler for Job3 {
         const IDENTIFIER: &'static str = "job3";
 
-        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             let n = JOB3_CALL_COUNT.increment().await;
             match n {
                 1 => {
@@ -520,7 +515,7 @@ async fn schedules_a_new_job_if_existing_is_being_processed() {
                 _ => unreachable!("Job3 should only be called twice"),
             };
 
-            Ok(())
+            Ok::<_, ()>(())
         }
     }
 
@@ -623,7 +618,7 @@ async fn schedules_a_new_job_if_the_existing_is_pending_retry() {
     impl TaskHandler for Job5 {
         const IDENTIFIER: &'static str = "job5";
 
-        async fn run(self, _ctx: WorkerContext) -> Result<(), String> {
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             JOB5_CALL_COUNT.increment().await;
             if !self.succeed {
                 return Err("fail".to_string());
@@ -738,9 +733,8 @@ async fn job_details_are_reset_if_not_specified_in_update() {
     impl TaskHandler for Job3 {
         const IDENTIFIER: &'static str = "job3";
 
-        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             JOB3_CALL_COUNT.increment().await;
-            Ok(())
         }
     }
 
@@ -855,9 +849,7 @@ async fn pending_jobs_can_be_removed() {
     impl TaskHandler for Job3 {
         const IDENTIFIER: &'static str = "job3";
 
-        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
-            Ok(())
-        }
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {}
     }
 
     helpers::with_test_db(|test_db| async move {
@@ -920,14 +912,13 @@ async fn jobs_in_progress_cannot_be_removed() {
     impl TaskHandler for Job3 {
         const IDENTIFIER: &'static str = "job3";
 
-        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             JOB3_CALL_COUNT.increment().await;
             // Wait on the receiver, simulating a deferred operation
             let mut rx_mutex_guard = RX.get().unwrap().lock().await;
             if let Some(rx) = rx_mutex_guard.take() {
                 rx.await.unwrap();
             }
-            Ok(())
         }
     }
 
@@ -1021,13 +1012,12 @@ async fn runs_jobs_asynchronously() {
     impl TaskHandler for Job3 {
         const IDENTIFIER: &'static str = "job3";
 
-        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             JOB3_CALL_COUNT.increment().await;
             let mut rx = JOB_RX.get().unwrap().lock().await;
             if let Some(receiver) = rx.take() {
                 receiver.await.unwrap();
             }
-            Ok(())
         }
     }
 
@@ -1137,7 +1127,7 @@ async fn runs_jobs_in_parallel() {
     impl TaskHandler for Job3 {
         const IDENTIFIER: &'static str = "job3";
 
-        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             let rx = RXS
                 .get()
                 .expect("OnceCell should be set globally at the beginning of the test")
@@ -1147,7 +1137,6 @@ async fn runs_jobs_in_parallel() {
             JOB3_CALL_COUNT.increment().await;
             rx.await
                 .expect("The receiver should not be dropped before the job completes");
-            Ok(())
         }
     }
 
@@ -1256,11 +1245,10 @@ async fn single_worker_runs_jobs_in_series_purges_all_before_exit() {
     impl TaskHandler for Job3 {
         const IDENTIFIER: &'static str = "job3";
 
-        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             let rx = RXS.get().unwrap().lock().await.pop_front().unwrap(); // Obtain the receiver for the current job
             rx.await.unwrap(); // Wait for the signal to complete the job
             JOB3_CALL_COUNT.increment().await;
-            Ok(())
         }
     }
 
@@ -1343,11 +1331,10 @@ async fn jobs_added_to_the_same_queue_will_be_ran_serially_even_if_multiple_work
     impl TaskHandler for Job3 {
         const IDENTIFIER: &'static str = "job3";
 
-        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             let rx = RXS.get().unwrap().lock().await.pop_front().unwrap(); // Obtain the receiver for the current job
             rx.await.unwrap(); // Wait for the signal to complete the job
             JOB3_CALL_COUNT.increment().await;
-            Ok(())
         }
     }
 

@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use chrono::{offset::Utc, Duration};
-use graphile_worker::{JobSpecBuilder, WorkerContext, WorkerOptions};
+use graphile_worker::{IntoTaskHandlerResult, JobSpecBuilder, WorkerContext, WorkerOptions};
 use graphile_worker_task_handler::TaskHandler;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -29,7 +29,7 @@ struct SayHello {
 impl TaskHandler for SayHello {
     const IDENTIFIER: &'static str = "say_hello";
 
-    async fn run(self, _ctx: WorkerContext) -> Result<(), String> {
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
         println!("Hello {} !", self.message);
         // 30% chance to succeed to test retry
         let mut rng = rand::thread_rng();

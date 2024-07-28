@@ -1,8 +1,8 @@
 use chrono::{Duration, DurationRound, Local};
+use graphile_worker::IntoTaskHandlerResult;
 use graphile_worker::Worker;
 use serde::{Deserialize, Serialize};
 use sqlx::query;
-use std::fmt::Debug;
 use tokio::{task::spawn_local, time::Instant};
 
 use crate::helpers::{with_test_db, StaticCounter};
@@ -22,9 +22,8 @@ async fn register_identifiers() {
     impl TaskHandler for Job3 {
         const IDENTIFIER: &'static str = "job3";
 
-        async fn run(self, _ctx: WorkerContext) -> Result<(), impl Debug> {
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             JOB3_CALL_COUNT.increment().await;
-            Ok::<_, ()>(())
         }
     }
 

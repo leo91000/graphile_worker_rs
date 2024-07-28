@@ -1,3 +1,4 @@
+use graphile_worker::IntoTaskHandlerResult;
 use graphile_worker::WorkerContext;
 use graphile_worker::WorkerOptions;
 use std::str::FromStr;
@@ -28,15 +29,27 @@ struct AppState {
     run_count: Arc<AtomicUsize>,
 }
 
+impl AppState {
+    fn new() -> Self {
+        Self {
+            run_count: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    fn increment_run_count(&self) -> usize {
+        self.run_count.fetch_add(1, SeqCst)
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 struct ShowRunCount;
 
 impl TaskHandler for ShowRunCount {
     const IDENTIFIER: &'static str = "show_run_count";
 
-    async fn run(self, ctx: WorkerContext) {
-        let app_state = ctx.extensions().get::<AppState>().unwrap();
-        let run_count = app_state.run_count.fetch_add(1, SeqCst);
+    async fn run(self, ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        let app_state = ctx.get_ext::<AppState>().unwrap();
+        let run_count = app_state.increment_run_count();
         println!("Run count: {run_count}");
     }
 }
@@ -58,9 +71,7 @@ async fn main() {
         .schema("example_simple_worker")
         .define_job::<ShowRunCount>()
         .pg_pool(pg_pool)
-        .add_extension(AppState {
-            run_count: Arc::new(AtomicUsize::new(0)),
-        })
+        .add_extension(AppState::new())
         .with_crontab(
             r#"
                 * * * * * show_run_count ?fill=1h

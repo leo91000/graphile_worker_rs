@@ -1,4 +1,4 @@
-use graphile_worker::{JobSpec, TaskHandler, WorkerContext};
+use graphile_worker::{IntoTaskHandlerResult, JobSpec, TaskHandler, WorkerContext};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -10,9 +10,7 @@ struct Job3(serde_json::Value);
 impl TaskHandler for Job3 {
     const IDENTIFIER: &'static str = "job3";
 
-    async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
-        Ok(())
-    }
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {}
 }
 
 #[tokio::test]

@@ -1,12 +1,10 @@
 use std::str::FromStr;
 
-use graphile_worker::TaskHandler;
+use graphile_worker::{IntoTaskHandlerResult, TaskHandler};
 use graphile_worker::{JobSpec, WorkerContext, WorkerOptions};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgConnectOptions;
-use tracing_subscriber::{
-    filter::EnvFilter, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt,
-};
+use tracing_subscriber::{filter::EnvFilter, prelude::*, util::SubscriberInitExt};
 
 fn enable_logs() {
     let fmt_layer = tracing_subscriber::fmt::layer();
@@ -27,11 +25,10 @@ struct SayHello {
 impl TaskHandler for SayHello {
     const IDENTIFIER: &'static str = "say_hello";
 
-    async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
         println!("Waiting 20 seconds");
         tokio::time::sleep(std::time::Duration::from_secs(20)).await;
         println!("Hello {} !", self.message);
-        Ok(())
     }
 }
 

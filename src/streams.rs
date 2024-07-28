@@ -58,7 +58,6 @@ pub async fn job_signal_stream(
     let stream_data = JobSignalStreamData::new(interval, pg_listener, shutdown_signal, concurrency);
     let stream = stream::unfold(stream_data, |mut f| async {
         if let Some((n, source)) = f.yield_n.take() {
-            let source = source.clone();
             if n.get() > 1 {
                 let remaining_yields = n.get() - 1;
                 f.yield_n = Some((NonZeroUsize::new(remaining_yields).unwrap(), source));

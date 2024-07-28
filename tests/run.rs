@@ -1,4 +1,4 @@
-use graphile_worker::{JobSpec, TaskHandler, Worker, WorkerContext};
+use graphile_worker::{IntoTaskHandlerResult, JobSpec, TaskHandler, Worker, WorkerContext};
 use tokio::{
     task::spawn_local,
     time::{sleep, Duration, Instant},
@@ -22,9 +22,8 @@ async fn it_will_execute_jobs_as_they_come_up_and_exits_cleanly() {
     impl TaskHandler for Job3 {
         const IDENTIFIER: &'static str = "job3";
 
-        async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             JOB3_CALL_COUNT.increment().await;
-            Ok(())
         }
     }
 

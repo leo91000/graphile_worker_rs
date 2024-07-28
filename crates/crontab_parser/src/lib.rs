@@ -118,8 +118,7 @@ impl<'a> From<nom::Err<nom::error::Error<&'a str>>> for CrontabParseError {
 /// the value being an object with the following entries:
 ///
 /// - `ts` - ISO8601 timestamp representing when this job was due to execute
-/// - `backfilled` - true if the task was "backfilled" (i.e. it wasn't scheduled on
-/// time), false otherwise
+/// - `backfilled` - true if the task was "backfilled" (i.e. it wasn't scheduled on time), false otherwise
 pub fn parse_crontab(crontab: &str) -> Result<Vec<Crontab>, CrontabParseError> {
     let (_, result) = nom_crontab(crontab)?;
     Ok(result)

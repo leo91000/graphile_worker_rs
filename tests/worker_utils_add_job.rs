@@ -1,5 +1,5 @@
 use chrono::{TimeZone, Utc};
-use graphile_worker::{JobKeyMode, JobSpec, TaskHandler, WorkerContext};
+use graphile_worker::{IntoTaskHandlerResult, JobKeyMode, JobSpec, TaskHandler, WorkerContext};
 use helpers::{with_test_db, StaticCounter};
 use serde::{Deserialize, Serialize};
 
@@ -18,9 +18,8 @@ async fn runs_a_job_added_through_the_worker_utils() {
         impl TaskHandler for Job3 {
             const IDENTIFIER: &'static str = "job3";
 
-            async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+            async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
                 JOB3_CALL_COUNT.increment().await;
-                Ok(())
             }
         }
 
@@ -76,9 +75,8 @@ async fn supports_the_job_key_api() {
         impl TaskHandler for Job3 {
             const IDENTIFIER: &'static str = "job3";
 
-            async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+            async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
                 JOB3_CALL_COUNT.increment().await;
-                Ok(())
             }
         }
 
@@ -155,9 +153,8 @@ async fn supports_the_job_key_api_with_job_key_mode() {
         impl TaskHandler for Job3 {
             const IDENTIFIER: &'static str = "job3";
 
-            async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+            async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
                 JOB3_CALL_COUNT.increment().await;
-                Ok(())
             }
         }
 

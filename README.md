@@ -28,7 +28,7 @@ The definition of a task consist simply of an async function and a task identifi
 
 ```rust,ignore
 use serde::{Deserialize, Serialize};
-use graphile_worker::{WorkerContext, TaskHandler};
+use graphile_worker::{WorkerContext, TaskHandler, IntoTaskHandlerResult};
 
 #[derive(Deserialize, Serialize)]
 struct SayHello {
@@ -38,9 +38,8 @@ struct SayHello {
 impl TaskHandler for SayHello {
     const IDENTIFIER: &'static str = "say_hello";
 
-    async fn run(self, _ctx: WorkerContext) -> Result<(), ()> {
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
         println!("Hello {} !", self.message);
-        Ok(())
     }
 }
 
@@ -95,7 +94,7 @@ You can provide app state through `extension` :
 
 ```rust,ignore
 use serde::{Deserialize, Serialize};
-use graphile_worker::{WorkerContext, TaskHandler};
+use graphile_worker::{WorkerContext, TaskHandler, IntoTaskHandlerResult};
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::Arc;
@@ -105,16 +104,28 @@ struct AppState {
     run_count: Arc<AtomicUsize>,
 }
 
+impl AppState {
+    fn new() -> Self {
+        Self {
+            run_count: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    fn increment_run_count(&self) -> usize {
+        self.run_count.fetch_add(1, SeqCst)
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 pub struct CounterTask;
 
 impl TaskHandler for CounterTask {
     const IDENTIFIER: &'static str = "counter_task";
 
-    async fn run(self, ctx: WorkerContext) {
-        let app_state = ctx.extensions().get::<AppState>().unwrap();
-        let run_count = app_state.run_count.fetch_add(1, SeqCst);
-        println!("Run count: {run_count}");
+    async fn run(self, ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        let app_state = ctx.get_ext::<AppState>().unwrap();
+        let run_count = app_state.increment_run_count();
+        println!("Run count since start: {run_count}");
     }
 }
 
@@ -123,9 +134,7 @@ async fn main() -> Result<(), ()> {
     graphile_worker::WorkerOptions::default()
         .concurrency(2)
         .schema("example_simple_worker")
-        .add_extension(AppState {
-            run_count: Arc::new(AtomicUsize::new(0)),
-        })
+        .add_extension(AppState::new())
         .define_job::<CounterTask>()
         .pg_pool(pg_pool)
         .init()
