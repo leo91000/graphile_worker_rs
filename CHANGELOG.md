@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.8.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.0...graphile_worker-v0.8.1) - 2024-08-08
+
+### Other
+- *(deps)* update rust crate serde to 1.0.205
+- *(deps)* update rust crate serde_json to 1.0.122
+- *(deps)* update rust crate serde_json to 1.0.121
+- Fix new `refining_impl_trait` lint in example
+- *(deps)* update rust crate tokio to 1.39.2
+- *(deps)* update rust crate tokio to 1.39.1
+- *(deps)* update rust crate sqlx to 0.8.0
+- *(deps)* update rust crate syn to 2.0.72
+- *(deps)* update rust crate thiserror to 1.0.63
+- *(deps)* update rust crate tokio to 1.38.1
+- *(deps)* update rust crate syn to 2.0.71
+- *(deps)* update rust crate thiserror to 1.0.62
+- *(deps)* update rust crate uuid to 1.10.0
+- *(deps)* update rust crate syn to 2.0.70
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate serde_json to 1.0.119
+- *(deps)* update rust crate serde_json to 1.0.118
+- *(deps)* update rust crate uuid to 1.9.1
+- *(deps)* update rust crate uuid to 1.9.0
+- *(deps)* update rust crate syn to 2.0.68
+- *(deps)* update rust crate syn to 2.0.67
+- *(deps)* update rust crate tokio to 1.38.0
+
 ## [0.8.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.7.2...graphile_worker-v0.8.0) - 2024-05-29
 
 ### Added
