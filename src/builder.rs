@@ -111,10 +111,7 @@ impl WorkerOptions {
     ///
     /// Panics if the value is 0.
     pub fn concurrency(mut self, value: usize) -> Self {
-        if value == 0 {
-            panic!("Concurrency must be greater than 0");
-        }
-
+        assert!(value > 0, "Concurrency must be greater than 0");
         self.concurrency = Some(value);
         self
     }
