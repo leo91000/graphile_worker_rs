@@ -38,7 +38,7 @@ anyhow = "1.0.86"
 cfg-if = "1.0.0"
 futures = "0.3.30"
 syn = "2.0.75"
-quote = "1.0.36"
+quote = "1.0.37"
 indoc = "2.0.5"
 derive_builder = "0.20.0"
 
