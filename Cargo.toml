@@ -40,7 +40,7 @@ futures = "0.3.30"
 syn = "2.0.76"
 quote = "1.0.37"
 indoc = "2.0.5"
-derive_builder = "0.20.0"
+derive_builder = "0.20.1"
 
 [features]
 default = ["tls-rustls"]
@@ -88,7 +88,7 @@ rand = "0.8.5"
 hex = "0.4.3"
 cfg-if = "1.0.0"
 indoc = "2.0.5"
-derive_builder = "0.20.0"
+derive_builder = "0.20.1"
 
 [dev-dependencies]
 tokio = { version = "1.39.3", features = ["macros", "rt-multi-thread"] }
