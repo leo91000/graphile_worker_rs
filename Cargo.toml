@@ -17,7 +17,7 @@ members = ["crates/*"]
 [workspace.dependencies]
 tokio = { version = "1.40.0" }
 tokio-util = { version = "0.7.12" }
-serde = { version = "1.0.209", features = ["derive"] }
+serde = { version = "1.0.210", features = ["derive"] }
 json5 = "0.4.1"
 nom = "7.1.3"
 serde_json = "1.0.128"
@@ -34,7 +34,7 @@ sqlx = { version = "0.8.2", features = [
 getset = "0.1.2"
 tracing = "0.1.40"
 once_cell = "1.19.0"
-anyhow = "1.0.86"
+anyhow = "1.0.87"
 cfg-if = "1.0.0"
 futures = "0.3.30"
 syn = "2.0.77"
@@ -72,7 +72,7 @@ chrono = { version = "0.4.38", features = ["serde"] }
 futures = "0.3.30"
 getset = "0.1.2"
 num_cpus = "1.16.0"
-serde = { version = "1.0.209", features = ["derive"] }
+serde = { version = "1.0.210", features = ["derive"] }
 serde_json = "1.0.128"
 sqlx = { version = "0.8.2", features = [
   "postgres",
