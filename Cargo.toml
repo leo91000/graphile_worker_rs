@@ -17,12 +17,12 @@ members = ["crates/*"]
 [workspace.dependencies]
 tokio = { version = "1.41.0" }
 tokio-util = { version = "0.7.12" }
-serde = { version = "1.0.211", features = ["derive"] }
+serde = { version = "1.0.213", features = ["derive"] }
 json5 = "0.4.1"
 nom = "7.1.3"
 serde_json = "1.0.132"
 serde_qs = "0.13.0"
-thiserror = "1.0.64"
+thiserror = "1.0.65"
 chrono = { version = "0.4.38", features = ["serde"] }
 sqlx = { version = "0.8.2", features = [
   "chrono",
@@ -34,7 +34,7 @@ sqlx = { version = "0.8.2", features = [
 getset = "0.1.3"
 tracing = "0.1.40"
 once_cell = "1.20.2"
-anyhow = "1.0.90"
+anyhow = "1.0.91"
 cfg-if = "1.0.0"
 futures = "0.3.31"
 syn = "2.0.82"
@@ -72,7 +72,7 @@ chrono = { version = "0.4.38", features = ["serde"] }
 futures = "0.3.31"
 getset = "0.1.3"
 num_cpus = "1.16.0"
-serde = { version = "1.0.211", features = ["derive"] }
+serde = { version = "1.0.213", features = ["derive"] }
 serde_json = "1.0.132"
 sqlx = { version = "0.8.2", features = [
   "postgres",
@@ -81,7 +81,7 @@ sqlx = { version = "0.8.2", features = [
   "macros",
   "runtime-tokio",
 ], default-features = false }
-thiserror = "1.0.64"
+thiserror = "1.0.65"
 tracing = "0.1.40"
 tokio = { version = "1.41.0", features = ["macros", "signal"] }
 rand = "0.8.5"
