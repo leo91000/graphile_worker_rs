@@ -34,7 +34,7 @@ sqlx = { version = "0.8.2", features = [
 getset = "0.1.3"
 tracing = "0.1.40"
 once_cell = "1.20.2"
-anyhow = "1.0.91"
+anyhow = "1.0.92"
 cfg-if = "1.0.0"
 futures = "0.3.31"
 syn = "2.0.86"
