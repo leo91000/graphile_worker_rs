@@ -268,7 +268,11 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
     };
     tokio::select! {
         res = job_task => {
-            res.map_err(RunJobError::TaskPanic).and_then(|res| res.map_err(RunJobError::TaskError))
+            match res {
+                Err(e) => Err(RunJobError::TaskPanic(e)),
+                Ok(Err(e)) => Err(RunJobError::TaskError(e)),
+                Ok(Ok(_)) => Ok(()),
+            }
         }
         _ = shutdown_timeout => {
             abort_handle.abort();
