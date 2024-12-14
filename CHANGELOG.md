@@ -1,5 +1,81 @@
 # Changelog
 
+## [0.8.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.0...graphile_worker-v0.8.1) - 2024-12-14
+
+### Other
+
+- *(deps)* update codecov/codecov-action action to v5
+- *(deps)* update rust crate thiserror to v2
+- *(deps)* update rust crate tracing to 0.1.41 (#205)
+- *(deps)* update rust crate syn to 2.0.89 (#204)
+- *(deps)* update all non-major dependencies (#202)
+- *(deps)* update rust crate thiserror to 1.0.69 (#201)
+- *(deps)* update rust crate tokio to 1.41.1 (#200)
+- *(deps)* update rust crate anyhow to 1.0.93
+- *(deps)* update rust crate thiserror to 1.0.68
+- *(deps)* update rust crate thiserror to 1.0.67
+- Improve readability of RunJobError
+- *(deps)* update rust crate syn to 2.0.87
+- *(deps)* update rust crate anyhow to 1.0.92
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate serde to 1.0.214
+- *(deps)* update postgres docker tag to v17
+- *(deps)* update rust crate syn to 2.0.85
+- *(deps)* update all non-major dependencies
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate syn to 2.0.82
+- *(deps)* update rust crate syn to 2.0.81
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate serde_json to 1.0.131
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate serde_json to 1.0.129
+- *(deps)* update rust crate uuid to 1.11.0
+- *(deps)* update rust crate derive_builder to 0.20.2
+- *(deps)* update rust crate once_cell to 1.20.2
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate anyhow to 1.0.89
+- *(deps)* update rust crate once_cell to 1.20.0
+- *(deps)* update rust crate anyhow to 1.0.88
+- *(deps)* update rust crate getset to 0.1.3
+- *(deps)* update all non-major dependencies
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate sqlx to 0.8.2
+- *(deps)* update rust crate syn to 2.0.77
+- *(deps)* update rust crate tokio to 1.40.0
+- *(deps)* update rust crate derive_builder to 0.20.1
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate serde_json to 1.0.127
+- *(deps)* update rust crate quote to 1.0.37
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate serde to 1.0.208
+- *(deps)* update rust crate serde_json to 1.0.125
+- *(deps)* update rust crate serde to 1.0.207
+- *(deps)* update all non-major dependencies
+- chore: Use assert instead of if + panic in case in concurrency equals to
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate serde to 1.0.205
+- *(deps)* update rust crate serde_json to 1.0.122
+- *(deps)* update rust crate serde_json to 1.0.121
+- Fix new `refining_impl_trait` lint in example
+- *(deps)* update rust crate tokio to 1.39.2
+- *(deps)* update rust crate tokio to 1.39.1
+- *(deps)* update rust crate sqlx to 0.8.0
+- *(deps)* update rust crate syn to 2.0.72
+- *(deps)* update rust crate thiserror to 1.0.63
+- *(deps)* update rust crate tokio to 1.38.1
+- *(deps)* update rust crate syn to 2.0.71
+- *(deps)* update rust crate thiserror to 1.0.62
+- *(deps)* update rust crate uuid to 1.10.0
+- *(deps)* update rust crate syn to 2.0.70
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate serde_json to 1.0.119
+- *(deps)* update rust crate serde_json to 1.0.118
+- *(deps)* update rust crate uuid to 1.9.1
+- *(deps)* update rust crate uuid to 1.9.0
+- *(deps)* update rust crate syn to 2.0.68
+- *(deps)* update rust crate syn to 2.0.67
+- *(deps)* update rust crate tokio to 1.38.0
+
 ## [0.8.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.7.2...graphile_worker-v0.8.0) - 2024-05-29
 
 ### Added

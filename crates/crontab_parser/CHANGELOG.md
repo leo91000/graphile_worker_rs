@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.6](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_parser-v0.5.5...graphile_worker_crontab_parser-v0.5.6) - 2024-12-14
+
+### Other
+
+- Fix new `refining_impl_trait` lint in example
+
 ## [0.5.5](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_parser-v0.5.4...graphile_worker_crontab_parser-v0.5.5) - 2024-05-28
 
 ### Other
