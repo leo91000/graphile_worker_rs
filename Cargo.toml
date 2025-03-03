@@ -20,9 +20,9 @@ tokio-util = { version = "0.7.13" }
 serde = { version = "1.0.218", features = ["derive"] }
 json5 = "0.4.1"
 nom = "7.1.3"
-serde_json = "1.0.139"
+serde_json = "1.0.140"
 serde_qs = "0.13.0"
-thiserror = "2.0.11"
+thiserror = "2.0.12"
 chrono = { version = "0.4.40", features = ["serde"] }
 sqlx = { version = "0.8.3", features = [
   "chrono",
@@ -34,11 +34,11 @@ sqlx = { version = "0.8.3", features = [
 getset = "0.1.5"
 tracing = "0.1.41"
 once_cell = "1.20.3"
-anyhow = "1.0.96"
+anyhow = "1.0.97"
 cfg-if = "1.0.0"
 futures = "0.3.31"
-syn = "2.0.98"
-quote = "1.0.38"
+syn = "2.0.99"
+quote = "1.0.39"
 indoc = "2.0.5"
 derive_builder = "0.20.2"
 
@@ -73,7 +73,7 @@ futures = "0.3.31"
 getset = "0.1.5"
 num_cpus = "1.16.0"
 serde = { version = "1.0.218", features = ["derive"] }
-serde_json = "1.0.139"
+serde_json = "1.0.140"
 sqlx = { version = "0.8.3", features = [
   "postgres",
   "json",
@@ -81,7 +81,7 @@ sqlx = { version = "0.8.3", features = [
   "macros",
   "runtime-tokio",
 ], default-features = false }
-thiserror = "2.0.11"
+thiserror = "2.0.12"
 tracing = "0.1.41"
 tokio = { version = "1.43.0", features = ["macros", "signal"] }
 rand = "0.9.0"
