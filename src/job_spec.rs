@@ -105,7 +105,7 @@ mod tests {
         let now = Utc::now();
         let job_spec = JobSpecBuilder::new()
             .queue_name("default")
-            .run_at(now.clone())
+            .run_at(now)
             .max_attempts(3)
             .job_key("job_key")
             .job_key_mode(JobKeyMode::Replace)

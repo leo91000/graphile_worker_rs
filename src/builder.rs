@@ -78,7 +78,7 @@ impl WorkerOptions {
         .await?;
 
         let mut random_bytes = [0u8; 9];
-        rand::thread_rng().fill_bytes(&mut random_bytes);
+        rand::rng().fill_bytes(&mut random_bytes);
 
         let worker = Worker {
             worker_id: format!("graphile_worker_{}", hex::encode(random_bytes)),

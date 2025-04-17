@@ -4,7 +4,7 @@ use nom::{
     combinator::{map, opt, verify},
     multi::separated_list1,
     sequence::{preceded, separated_pair, terminated},
-    IResult,
+    IResult, Parser,
 };
 
 use graphile_worker_crontab_types::{CrontabTimer, CrontabValue};
@@ -33,7 +33,7 @@ impl CrontabPart {
 /// Attempts to parse a number with crontab part boundaries
 fn crontab_number<'a>(part: &CrontabPart) -> impl Fn(&'a str) -> IResult<&'a str, u32> {
     let (min, max) = part.boundaries();
-    move |input| verify(complete::u32, |v| v >= &min && v <= &max)(input)
+    move |input| verify(complete::u32, |v| v >= &min && v <= &max).parse(input)
 }
 
 /// Attempts to parse a range with crontab part boundaries
@@ -44,7 +44,8 @@ fn crontab_range<'a, 'p>(
         verify(
             separated_pair(crontab_number(part), char('-'), crontab_number(part)),
             |(left, right)| left < right,
-        )(input)
+        )
+        .parse(input)
     }
 }
 
@@ -52,7 +53,7 @@ fn crontab_range<'a, 'p>(
 fn crontab_wildcard<'a, 'p>(
     part: &'p CrontabPart,
 ) -> impl Fn(&'a str) -> IResult<&'a str, Option<u32>> + 'p {
-    |input| preceded(char('*'), opt(preceded(char('/'), crontab_number(part))))(input)
+    |input| preceded(char('*'), opt(preceded(char('/'), crontab_number(part)))).parse(input)
 }
 
 /// Attempts to parse a crontab part
@@ -69,7 +70,8 @@ fn crontab_value<'a, 'p>(
                 None => CrontabValue::Any,
             }),
             map(crontab_number(part), CrontabValue::Number),
-        ))(input)
+        ))
+        .parse(input)
     }
 }
 
@@ -77,16 +79,18 @@ fn crontab_value<'a, 'p>(
 fn crontab_values<'a, 'p>(
     part: &'p CrontabPart,
 ) -> impl Fn(&'a str) -> IResult<&'a str, Vec<CrontabValue>> + 'p {
-    |input| separated_list1(char(','), crontab_value(part))(input)
+    |input| separated_list1(char(','), crontab_value(part)).parse(input)
 }
 
 /// Parse all 5 crontab values
 pub(crate) fn nom_crontab_timer(input: &str) -> IResult<&str, CrontabTimer> {
-    let (input, minutes) = terminated(crontab_values(&CrontabPart::Minute), char(' '))(input)?;
-    let (input, hours) = terminated(crontab_values(&CrontabPart::Hours), char(' '))(input)?;
-    let (input, days) = terminated(crontab_values(&CrontabPart::Days), char(' '))(input)?;
-    let (input, months) = terminated(crontab_values(&CrontabPart::Months), char(' '))(input)?;
-    let (input, dows) = crontab_values(&CrontabPart::DaysOfWeek)(input)?;
+    let (input, minutes) =
+        terminated(crontab_values(&CrontabPart::Minute), char(' ')).parse(input)?;
+    let (input, hours) = terminated(crontab_values(&CrontabPart::Hours), char(' ')).parse(input)?;
+    let (input, days) = terminated(crontab_values(&CrontabPart::Days), char(' ')).parse(input)?;
+    let (input, months) =
+        terminated(crontab_values(&CrontabPart::Months), char(' ')).parse(input)?;
+    let (input, dows) = crontab_values(&CrontabPart::DaysOfWeek).parse(input)?;
 
     Ok((
         input,

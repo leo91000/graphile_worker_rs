@@ -147,7 +147,7 @@ impl Worker {
         Ok(())
     }
 
-    async fn crontab_scheduler<'e>(&self) -> Result<(), WorkerRuntimeError> {
+    async fn crontab_scheduler(&self) -> Result<(), WorkerRuntimeError> {
         if self.crontabs().is_empty() {
             return Ok(());
         }

@@ -53,9 +53,9 @@ impl GraphileWorkerMigration {
         self.name[1..7].parse().expect("Invalid migration name")
     }
 
-    pub async fn execute<'e>(
+    pub async fn execute(
         &self,
-        tx: &mut Transaction<'e, Postgres>,
+        tx: &mut Transaction<'_, Postgres>,
         escaped_schema: &str,
     ) -> Result<(), sqlx::Error> {
         for stmt in self.stmts {

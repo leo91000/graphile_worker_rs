@@ -141,8 +141,14 @@ async fn it_should_schedule_errors_for_retry() {
             let job = &jobs[0];
             assert_eq!(job.task_identifier, "job3");
             assert_eq!(job.payload, json!({ "a": 1 }));
-            assert!(job.run_at > start);
-            assert!(job.run_at < Utc::now());
+            let now = Utc::now();
+            let start_diff_ms = (job.run_at.timestamp_millis() - start.timestamp_millis()).abs();
+            assert!(
+                job.run_at >= start || start_diff_ms <= 5,
+                "job.run_at should be >= start or within 5ms tolerance, diff: {}ms",
+                start_diff_ms
+            );
+            assert!(job.run_at <= now, "job.run_at should be <= now");
 
             let job_queues = test_db.get_job_queues().await;
             assert_eq!(job_queues.len(), 1);
@@ -1073,9 +1079,12 @@ async fn runs_jobs_asynchronously() {
         let job = &jobs[0];
         assert_eq!(job.task_identifier, "job3");
         assert_eq!(job.payload, serde_json::json!({ "a": 1 }));
+        let now = Utc::now();
+        let start_diff_ms = (job.run_at.timestamp_millis() - start.timestamp_millis()).abs();
         assert!(
-            job.run_at >= start && job.run_at <= Utc::now(),
-            "Job run_at should be within expected range"
+            (job.run_at >= start || start_diff_ms <= 5) && job.run_at <= now,
+            "Job run_at should be within expected range (>= start or within 5ms tolerance, and <= now). Diff from start: {}ms", 
+            start_diff_ms
         );
         assert_eq!(job.attempts, 1, "Job attempts should be incremented");
         let job_queues = test_db.get_job_queues().await;

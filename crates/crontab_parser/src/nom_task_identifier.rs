@@ -1,10 +1,11 @@
-use nom::{character::complete::satisfy, multi::many0, IResult};
+use nom::{character::complete::satisfy, multi::many0, IResult, Parser};
 
 pub(crate) fn nom_task_identifier(input: &str) -> IResult<&str, String> {
-    let (input, first_char) = satisfy(|c| c.is_ascii_alphabetic())(input)?;
+    let (input, first_char) = satisfy(|c| c.is_ascii_alphabetic()).parse(input)?;
     let (input, mut task_identifier) = many0(satisfy(|c| {
         c.is_ascii_alphanumeric() || c == ':' || c == '_' || c == '-'
-    }))(input)?;
+    }))
+    .parse(input)?;
 
     task_identifier.insert(0, first_char);
     Ok((input, task_identifier.iter().collect()))

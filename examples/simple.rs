@@ -32,8 +32,8 @@ impl TaskHandler for SayHello {
     async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
         println!("Hello {} !", self.message);
         // 30% chance to succeed to test retry
-        let mut rng = rand::thread_rng();
-        if rng.gen_range(0..100) < 70 {
+        let mut rng = rand::rng();
+        if rng.random_range(0..100) < 70 {
             return Err("Failed".to_string());
         }
         Ok(())

@@ -4,7 +4,7 @@ use nom::{
     combinator::opt,
     multi::separated_list0,
     sequence::{delimited, preceded},
-    IResult,
+    IResult, Parser,
 };
 
 use crate::{
@@ -13,11 +13,11 @@ use crate::{
 };
 
 fn crontab_line(input: &str) -> IResult<&str, Option<Crontab>> {
-    let (input, timer) = preceded(space0, nom_crontab_timer)(input)?;
+    let (input, timer) = preceded(space0, nom_crontab_timer).parse(input)?;
 
-    let (input, task_identifier) = preceded(space1, nom_task_identifier)(input)?;
-    let (input, options) = opt(preceded(space1, nom_crontab_opts))(input)?;
-    let (input, payload) = opt(preceded(space1, nom_crontab_payload))(input)?;
+    let (input, task_identifier) = preceded(space1, nom_task_identifier).parse(input)?;
+    let (input, options) = opt(preceded(space1, nom_crontab_opts)).parse(input)?;
+    let (input, payload) = opt(preceded(space1, nom_crontab_payload)).parse(input)?;
 
     Ok((
         input,
@@ -34,7 +34,8 @@ fn crontab_comment(input: &str) -> IResult<&str, Option<Crontab>> {
     let (input, _) = preceded(
         preceded(space0, complete::char('#')),
         take_while(|c: char| c != '\n' && c != '\r'),
-    )(input)?;
+    )
+    .parse(input)?;
 
     Ok((input, None))
 }
@@ -47,7 +48,8 @@ pub(crate) fn nom_crontab(input: &str) -> IResult<&str, Vec<Crontab>> {
             nom::branch::alt((crontab_comment, crontab_line)),
         ),
         multispace0,
-    )(input)?;
+    )
+    .parse(input)?;
 
     Ok((input, crontabs.into_iter().flatten().collect()))
 }
@@ -131,7 +133,7 @@ mod tests {
                     },
                 ]
             )),
-            nom_crontab(input)
+            nom_crontab.parse(input)
         );
     }
 }

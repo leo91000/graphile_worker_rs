@@ -2,8 +2,8 @@ use nom::{
     bytes::complete::take_while1,
     character::complete,
     combinator::{eof, opt},
-    sequence::{preceded, terminated, tuple},
-    IResult,
+    sequence::{preceded, terminated},
+    IResult, Parser,
 };
 use serde::Deserialize;
 
@@ -27,7 +27,8 @@ fn crontab_query(input: &str) -> IResult<&str, QueryOption<'_>> {
     let (input, qs) = preceded(
         complete::char('?'),
         take_while1(|c: char| !c.is_whitespace()),
-    )(input)?;
+    )
+    .parse(input)?;
 
     Ok((
         input,
@@ -38,15 +39,16 @@ fn crontab_query(input: &str) -> IResult<&str, QueryOption<'_>> {
 }
 
 fn crontab_fill(input: &str) -> IResult<&str, CrontabFill> {
-    let (input, (w, d, h, m, s)) = tuple((
+    let (input, (w, d, h, m, s)) = (
         opt(terminated(complete::u32, complete::char('w'))),
         opt(terminated(complete::u32, complete::char('d'))),
         opt(terminated(complete::u32, complete::char('h'))),
         opt(terminated(complete::u32, complete::char('m'))),
         opt(terminated(complete::u32, complete::char('s'))),
-    ))(input)?;
+    )
+        .parse(input)?;
 
-    eof(input)?;
+    eof.parse(input)?;
 
     Ok((
         input,
@@ -61,7 +63,7 @@ fn crontab_fill(input: &str) -> IResult<&str, CrontabFill> {
 }
 
 pub(crate) fn nom_crontab_opts(input: &str) -> IResult<&str, CrontabOptions> {
-    let (input, query) = crontab_query(input)?;
+    let (input, query) = crontab_query.parse(input)?;
 
     let fill = query
         .fill
@@ -85,6 +87,8 @@ pub(crate) fn nom_crontab_opts(input: &str) -> IResult<&str, CrontabOptions> {
 
 #[cfg(test)]
 mod tests {
+    use nom::Parser;
+
     use super::*;
 
     #[test]
@@ -105,7 +109,7 @@ mod tests {
                     ..Default::default()
                 }
             )),
-            nom_crontab_opts(input)
+            nom_crontab_opts.parse(input)
         );
 
         let input = "?id=1234dfsd&max=4 bar";
@@ -118,7 +122,7 @@ mod tests {
                     ..Default::default()
                 }
             )),
-            nom_crontab_opts(input)
+            nom_crontab_opts.parse(input)
         );
     }
 
@@ -126,16 +130,16 @@ mod tests {
     fn test_query_not_preceded_by_question_mark() {
         let input = "fill=4w3d2h1m&priority=-4 foo";
 
-        assert!(nom_crontab_opts(input).is_err());
+        assert!(nom_crontab_opts.parse(input).is_err());
     }
 
     #[test]
     fn test_query_with_invalid_fill() {
         let input = "?fill=4w3d2h1m_bruh&priority=-4 foo";
-        assert!(nom_crontab_opts(input).is_err());
+        assert!(nom_crontab_opts.parse(input).is_err());
 
         let input = "?fill=4w_3d2h1m&priority=-4 foo";
-        assert!(nom_crontab_opts(input).is_err());
+        assert!(nom_crontab_opts.parse(input).is_err());
     }
 
     #[test]
@@ -149,7 +153,7 @@ mod tests {
                     ..Default::default()
                 }
             )),
-            nom_crontab_opts(input)
+            nom_crontab_opts.parse(input)
         );
     }
 
@@ -164,7 +168,7 @@ mod tests {
                     ..Default::default()
                 }
             )),
-            nom_crontab_opts(input)
+            nom_crontab_opts.parse(input)
         );
     }
 
@@ -179,7 +183,7 @@ mod tests {
                     ..Default::default()
                 }
             )),
-            nom_crontab_opts(input)
+            nom_crontab_opts.parse(input)
         );
     }
 }
