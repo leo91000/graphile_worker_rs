@@ -1,5 +1,126 @@
 # Changelog
 
+## [0.8.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.0...graphile_worker-v0.8.1) - 2025-04-17
+
+### Other
+
+- *(deps)* update rust crate rand to 0.9.1 ([#253](https://github.com/leo91000/graphile_worker_rs/pull/253))
+- *(deps)* update all non-major dependencies ([#252](https://github.com/leo91000/graphile_worker_rs/pull/252))
+- *(deps)* update rust crate tokio to 1.44.2 ([#251](https://github.com/leo91000/graphile_worker_rs/pull/251))
+- *(deps)* update rust crate once_cell to 1.21.3 ([#250](https://github.com/leo91000/graphile_worker_rs/pull/250))
+- *(deps)* update rust crate once_cell to 1.21.2 ([#249](https://github.com/leo91000/graphile_worker_rs/pull/249))
+- *(deps)* update rust crate uuid to 1.16.0 ([#248](https://github.com/leo91000/graphile_worker_rs/pull/248))
+- *(deps)* update all non-major dependencies ([#247](https://github.com/leo91000/graphile_worker_rs/pull/247))
+- *(deps)* update rust crate quote to 1.0.40 ([#246](https://github.com/leo91000/graphile_worker_rs/pull/246))
+- *(deps)* update rust crate once_cell to 1.21.0 ([#245](https://github.com/leo91000/graphile_worker_rs/pull/245))
+- *(deps)* update all non-major dependencies ([#244](https://github.com/leo91000/graphile_worker_rs/pull/244))
+- *(deps)* update rust crate tokio to 1.44.0 ([#243](https://github.com/leo91000/graphile_worker_rs/pull/243))
+- *(deps)* update rust crate serde_qs to 0.14.0 ([#242](https://github.com/leo91000/graphile_worker_rs/pull/242))
+- *(deps)* update rust crate indoc to 2.0.6 ([#241](https://github.com/leo91000/graphile_worker_rs/pull/241))
+- *(deps)* update all non-major dependencies ([#240](https://github.com/leo91000/graphile_worker_rs/pull/240))
+- *(deps)* update rust crate getset to 0.1.5 ([#239](https://github.com/leo91000/graphile_worker_rs/pull/239))
+- *(deps)* update rust crate uuid to 1.15.1 ([#238](https://github.com/leo91000/graphile_worker_rs/pull/238))
+- *(deps)* update all non-major dependencies ([#237](https://github.com/leo91000/graphile_worker_rs/pull/237))
+- *(deps)* update rust crate uuid to 1.14.0 ([#236](https://github.com/leo91000/graphile_worker_rs/pull/236))
+- *(deps)* update all non-major dependencies ([#235](https://github.com/leo91000/graphile_worker_rs/pull/235))
+- *(deps)* update rust crate uuid to 1.13.2 ([#234](https://github.com/leo91000/graphile_worker_rs/pull/234))
+- *(deps)* update rust crate once_cell to 1.20.3 ([#233](https://github.com/leo91000/graphile_worker_rs/pull/233))
+- *(deps)* update rust crate uuid to 1.13.1 ([#232](https://github.com/leo91000/graphile_worker_rs/pull/232))
+- *(deps)* update rust crate syn to 2.0.98 ([#230](https://github.com/leo91000/graphile_worker_rs/pull/230))
+- *(deps)* update rust crate syn to 2.0.97 ([#229](https://github.com/leo91000/graphile_worker_rs/pull/229))
+- *(deps)* update rust crate serde_json to 1.0.138 ([#228](https://github.com/leo91000/graphile_worker_rs/pull/228))
+- *(deps)* update rust crate rand to 0.9.0 ([#227](https://github.com/leo91000/graphile_worker_rs/pull/227))
+- *(deps)* update rust crate uuid to 1.12.1 ([#226](https://github.com/leo91000/graphile_worker_rs/pull/226))
+- *(deps)* update rust crate getset to 0.1.4 ([#225](https://github.com/leo91000/graphile_worker_rs/pull/225))
+- *(deps)* update rust crate serde_json to 1.0.137 ([#224](https://github.com/leo91000/graphile_worker_rs/pull/224))
+- *(deps)* update rust crate serde_json to 1.0.136 ([#223](https://github.com/leo91000/graphile_worker_rs/pull/223))
+- *(deps)* update all non-major dependencies ([#222](https://github.com/leo91000/graphile_worker_rs/pull/222))
+- *(deps)* update all non-major dependencies ([#221](https://github.com/leo91000/graphile_worker_rs/pull/221))
+- *(deps)* update all non-major dependencies ([#220](https://github.com/leo91000/graphile_worker_rs/pull/220))
+- *(deps)* update rust crate syn to 2.0.95 ([#219](https://github.com/leo91000/graphile_worker_rs/pull/219))
+- *(deps)* update rust crate sqlx to 0.8.3 ([#218](https://github.com/leo91000/graphile_worker_rs/pull/218))
+- *(deps)* update rust crate syn to 2.0.94 ([#217](https://github.com/leo91000/graphile_worker_rs/pull/217))
+- *(deps)* update rust crate syn to 2.0.93 ([#216](https://github.com/leo91000/graphile_worker_rs/pull/216))
+- *(deps)* update rust crate serde to 1.0.217 ([#215](https://github.com/leo91000/graphile_worker_rs/pull/215))
+- *(deps)* update rust crate syn to 2.0.92 ([#214](https://github.com/leo91000/graphile_worker_rs/pull/214))
+- *(deps)* update rust crate quote to 1.0.38 ([#213](https://github.com/leo91000/graphile_worker_rs/pull/213))
+- *(deps)* update rust crate anyhow to 1.0.95 ([#212](https://github.com/leo91000/graphile_worker_rs/pull/212))
+- *(deps)* update rust crate syn to 2.0.91 ([#211](https://github.com/leo91000/graphile_worker_rs/pull/211))
+- *(deps)* update all non-major dependencies ([#210](https://github.com/leo91000/graphile_worker_rs/pull/210))
+- *(deps)* update rust crate thiserror to 2.0.8 ([#209](https://github.com/leo91000/graphile_worker_rs/pull/209))
+- *(deps)* update all non-major dependencies ([#207](https://github.com/leo91000/graphile_worker_rs/pull/207))
+- *(deps)* update codecov/codecov-action action to v5
+- *(deps)* update rust crate thiserror to v2
+- *(deps)* update rust crate tracing to 0.1.41 ([#205](https://github.com/leo91000/graphile_worker_rs/pull/205))
+- *(deps)* update rust crate syn to 2.0.89 ([#204](https://github.com/leo91000/graphile_worker_rs/pull/204))
+- *(deps)* update all non-major dependencies ([#202](https://github.com/leo91000/graphile_worker_rs/pull/202))
+- *(deps)* update rust crate thiserror to 1.0.69 ([#201](https://github.com/leo91000/graphile_worker_rs/pull/201))
+- *(deps)* update rust crate tokio to 1.41.1 ([#200](https://github.com/leo91000/graphile_worker_rs/pull/200))
+- *(deps)* update rust crate anyhow to 1.0.93
+- *(deps)* update rust crate thiserror to 1.0.68
+- *(deps)* update rust crate thiserror to 1.0.67
+- Improve readability of RunJobError
+- *(deps)* update rust crate syn to 2.0.87
+- *(deps)* update rust crate anyhow to 1.0.92
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate serde to 1.0.214
+- *(deps)* update postgres docker tag to v17
+- *(deps)* update rust crate syn to 2.0.85
+- *(deps)* update all non-major dependencies
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate syn to 2.0.82
+- *(deps)* update rust crate syn to 2.0.81
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate serde_json to 1.0.131
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate serde_json to 1.0.129
+- *(deps)* update rust crate uuid to 1.11.0
+- *(deps)* update rust crate derive_builder to 0.20.2
+- *(deps)* update rust crate once_cell to 1.20.2
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate anyhow to 1.0.89
+- *(deps)* update rust crate once_cell to 1.20.0
+- *(deps)* update rust crate anyhow to 1.0.88
+- *(deps)* update rust crate getset to 0.1.3
+- *(deps)* update all non-major dependencies
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate sqlx to 0.8.2
+- *(deps)* update rust crate syn to 2.0.77
+- *(deps)* update rust crate tokio to 1.40.0
+- *(deps)* update rust crate derive_builder to 0.20.1
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate serde_json to 1.0.127
+- *(deps)* update rust crate quote to 1.0.37
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate serde to 1.0.208
+- *(deps)* update rust crate serde_json to 1.0.125
+- *(deps)* update rust crate serde to 1.0.207
+- *(deps)* update all non-major dependencies
+- Use assert instead of if + panic in case in concurrency equals to
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate serde to 1.0.205
+- *(deps)* update rust crate serde_json to 1.0.122
+- *(deps)* update rust crate serde_json to 1.0.121
+- Fix new `refining_impl_trait` lint in example
+- *(deps)* update rust crate tokio to 1.39.2
+- *(deps)* update rust crate tokio to 1.39.1
+- *(deps)* update rust crate sqlx to 0.8.0
+- *(deps)* update rust crate syn to 2.0.72
+- *(deps)* update rust crate thiserror to 1.0.63
+- *(deps)* update rust crate tokio to 1.38.1
+- *(deps)* update rust crate syn to 2.0.71
+- *(deps)* update rust crate thiserror to 1.0.62
+- *(deps)* update rust crate uuid to 1.10.0
+- *(deps)* update rust crate syn to 2.0.70
+- *(deps)* update all non-major dependencies
+- *(deps)* update rust crate serde_json to 1.0.119
+- *(deps)* update rust crate serde_json to 1.0.118
+- *(deps)* update rust crate uuid to 1.9.1
+- *(deps)* update rust crate uuid to 1.9.0
+- *(deps)* update rust crate syn to 2.0.68
+- *(deps)* update rust crate syn to 2.0.67
+- *(deps)* update rust crate tokio to 1.38.0
+
 ## [0.8.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.7.2...graphile_worker-v0.8.0) - 2024-05-29
 
 ### Added
