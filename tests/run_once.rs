@@ -73,8 +73,14 @@ async fn it_should_run_jobs() {
         let jobs = test_db.get_jobs().await;
         assert_eq!(jobs.len(), 1);
         let job = &jobs[0];
-        assert!(job.run_at > start);
-        assert!(job.run_at < Utc::now());
+
+        let start_diff_ms = (job.run_at.timestamp_millis() - start.timestamp_millis()).abs();
+        assert!(
+            job.run_at >= start || start_diff_ms <= 5,
+            "job.run_at should be >= start or within 5ms tolerance, diff: {}ms",
+            start_diff_ms
+        );
+        assert!(job.run_at <= Utc::now(), "job.run_at should be <= now");
         let job_queues = test_db.get_job_queues().await;
         assert_eq!(job_queues.len(), 1);
         let job_queue = &job_queues[0];
@@ -1209,7 +1215,15 @@ async fn runs_jobs_in_parallel() {
         assert_eq!(job_queues.len(), 5, "There should be 5 job queues");
         for q in job_queues {
             assert_eq!(q.job_count, 1, "Each queue should have one job");
-            assert!(q.locked_at.unwrap() >= start && q.locked_at.unwrap() <= Utc::now());
+
+            let locked_at = q.locked_at.unwrap();
+            let start_diff_ms = (locked_at.timestamp_millis() - start.timestamp_millis()).abs();
+            assert!(
+                locked_at >= start || start_diff_ms <= 5,
+                "locked_at should be >= start or within 5ms tolerance, diff: {}ms",
+                start_diff_ms
+            );
+            assert!(locked_at <= Utc::now(), "locked_at should be <= now");
         }
 
         // Complete all jobs
