@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.7](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_parser-v0.5.6...graphile_worker_crontab_parser-v0.5.7) - 2025-04-17
+
+### Other
+
+- *(deps)* update rust crate nom to v8.0.0
+
 ## [0.5.6](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_parser-v0.5.5...graphile_worker_crontab_parser-v0.5.6) - 2025-04-17
 
 ### Other
