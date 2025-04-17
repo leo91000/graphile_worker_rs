@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.1...graphile_worker-v0.8.2) - 2025-04-17
+
+### Other
+
+- Add more tests for the JobSpecBuilder
+- *(deps)* update dependency ubuntu to v24
+- *(deps)* update rust crate nom to v8.0.0
+
 ## [0.8.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.0...graphile_worker-v0.8.1) - 2025-04-17
 
 ### Other

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.6](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.5...graphile_worker_migrations-v0.4.6) - 2025-04-17
+
+### Other
+
+- *(deps)* update rust crate nom to v8.0.0
+
 ## [0.4.5](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.4...graphile_worker_migrations-v0.4.5) - 2025-04-17
 
 ### Other
