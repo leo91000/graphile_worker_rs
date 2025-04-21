@@ -6,13 +6,34 @@ use sqlx::{PgExecutor, PgPool};
 
 use crate::{errors::GraphileWorkerError, sql::add_job::add_job, DbJob, Job, JobSpec};
 
+/// Types of database cleanup tasks that can be performed on the Graphile Worker schema.
+///
+/// These tasks help maintain database performance by removing unused records and
+/// reducing database size over time.
+#[derive(Debug, Clone, Copy)]
 pub enum CleanupTask {
+    /// Removes task identifier records that are no longer referenced by any jobs.
+    /// This helps keep the `_private_tasks` table clean and smaller.
     GcTaskIdentifiers,
+
+    /// Removes job queue records that are no longer referenced by any jobs.
+    /// This helps keep the `_private_job_queues` table clean and smaller.
     GcJobQueues,
+
+    /// Removes jobs that have reached their maximum retry attempts and are no longer locked.
+    /// This helps clean up permanently failed jobs that will never be processed again.
     DeletePermenantlyFailedJobs,
 }
 
 impl CleanupTask {
+    /// Executes the cleanup task on the database.
+    ///
+    /// # Arguments
+    /// * `executor` - A PostgreSQL executor to run the query on
+    /// * `escaped_schema` - The escaped name of the schema where Graphile Worker tables are stored
+    ///
+    /// # Returns
+    /// * `Result<(), GraphileWorkerError>` - Ok if the task completed successfully
     pub async fn execute<'e>(
         &self,
         executor: impl PgExecutor<'e>,
@@ -66,22 +87,50 @@ impl CleanupTask {
     }
 }
 
+/// Options for rescheduling jobs.
+///
+/// This struct allows you to specify various parameters when rescheduling jobs,
+/// such as when the job should run, its priority, and how many retry attempts it should have.
+/// All fields are optional, and only specified fields will be updated.
 #[derive(Default, Debug)]
 pub struct RescheduleJobOptions {
+    /// When the job should be executed. If not specified, jobs will be scheduled to run immediately.
     pub run_at: Option<chrono::DateTime<chrono::Utc>>,
+
+    /// The job's priority. Higher numbers indicate higher priority (runs sooner).
+    /// Default priority is 0.
     pub priority: Option<i16>,
+
+    /// How many times the job has been attempted.
+    /// Normally this should not be manually set.
     pub attempts: Option<i16>,
+
+    /// Maximum number of retry attempts before the job is considered permanently failed.
+    /// Default is 25 attempts.
     pub max_attempts: Option<i16>,
 }
 
-/// The WorkerHelpers struct provides a set of methods to add jobs to the queue
+/// The WorkerUtils struct provides a set of utility methods for managing jobs.
+///
+/// This is the primary interface for adding jobs to the queue, managing existing jobs,
+/// performing maintenance tasks, and migrating the database schema.
 pub struct WorkerUtils {
+    /// Database connection pool
     pg_pool: PgPool,
+
+    /// SQL-escaped schema name where Graphile Worker tables are located
     escaped_schema: String,
 }
 
 impl WorkerUtils {
-    /// Create a new instance of WorkerHelpers
+    /// Creates a new instance of WorkerUtils.
+    ///
+    /// # Arguments
+    /// * `pg_pool` - PostgreSQL connection pool
+    /// * `escaped_schema` - The escaped name of the schema where Graphile Worker tables are stored
+    ///
+    /// # Returns
+    /// A new WorkerUtils instance
     pub fn new(pg_pool: PgPool, escaped_schema: String) -> Self {
         Self {
             pg_pool,
@@ -89,8 +138,37 @@ impl WorkerUtils {
         }
     }
 
-    /// Add a job to the queue
-    /// The payload must be exactly the same type as the one defined in the task definition
+    /// Adds a job to the queue with type safety.
+    ///
+    /// Uses the TaskHandler trait to ensure that the job identifier
+    /// and payload type match, providing compile-time type safety.
+    ///
+    /// # Arguments
+    /// * `payload` - The job payload, which must match the type specified in the task handler
+    /// * `spec` - Job specification (priority, queue, etc.)
+    ///
+    /// # Returns
+    /// * `Result<Job, GraphileWorkerError>` - The created job or an error
+    ///
+    /// # Example
+    /// ```
+    /// # use graphile_worker::{WorkerUtils, JobSpec, TaskHandler, WorkerContext, IntoTaskHandlerResult};
+    /// # use graphile_worker::errors::GraphileWorkerError;
+    /// # use serde::{Deserialize, Serialize};
+    /// # #[derive(Deserialize, Serialize)]
+    /// # struct MyTask { data: String }
+    /// # impl TaskHandler for MyTask {
+    /// #     const IDENTIFIER: &'static str = "my_task";
+    /// #     async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult { Ok::<(), String>(()) }
+    /// # }
+    /// # async fn example(utils: &WorkerUtils) -> Result<(), GraphileWorkerError> {
+    /// let job = utils.add_job(
+    ///     MyTask { data: "hello".to_string() },
+    ///     JobSpec::default()
+    /// ).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn add_job<T: TaskHandler>(
         &self,
         payload: T,
@@ -108,8 +186,34 @@ impl WorkerUtils {
         .await
     }
 
-    /// Add a job to the queue
-    /// Contrary to add_job, this method does not require the task definition to be known
+    /// Adds a job to the queue with a raw identifier and payload.
+    ///
+    /// Doesn't require the task handler to be defined at compile time,
+    /// allowing for dynamic job creation. However, lacks the compile-time type safety
+    /// of `add_job`.
+    ///
+    /// # Arguments
+    /// * `identifier` - The task identifier string
+    /// * `payload` - The job payload (any serializable type)
+    /// * `spec` - Job specification (priority, queue, etc.)
+    ///
+    /// # Returns
+    /// * `Result<Job, GraphileWorkerError>` - The created job or an error
+    ///
+    /// # Example
+    /// ```
+    /// # use graphile_worker::{WorkerUtils, JobSpec};
+    /// # use graphile_worker::errors::GraphileWorkerError;
+    /// # use serde_json::json;
+    /// # async fn example(utils: &WorkerUtils) -> Result<(), GraphileWorkerError> {
+    /// let job = utils.add_raw_job(
+    ///     "send_email",
+    ///     json!({ "to": "user@example.com", "subject": "Hello" }),
+    ///     JobSpec::default()
+    /// ).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn add_raw_job<P>(
         &self,
         identifier: &str,
@@ -130,6 +234,15 @@ impl WorkerUtils {
         .await
     }
 
+    /// Removes a job from the queue by its job key.
+    ///
+    /// Useful for cancelling scheduled jobs that haven't run yet.
+    ///
+    /// # Arguments
+    /// * `job_key` - The unique job key that was assigned when the job was created
+    ///
+    /// # Returns
+    /// * `Result<(), GraphileWorkerError>` - Ok if the job was removed successfully
     pub async fn remove_job(&self, job_key: &str) -> Result<(), GraphileWorkerError> {
         let sql = formatdoc!(
             r#"
@@ -146,6 +259,13 @@ impl WorkerUtils {
         Ok(())
     }
 
+    /// Marks multiple jobs as completed.
+    ///
+    /// # Arguments
+    /// * `ids` - Array of job IDs to mark as completed
+    ///
+    /// # Returns
+    /// * `Result<Vec<DbJob>, GraphileWorkerError>` - The updated job records
     pub async fn complete_jobs(&self, ids: &[i64]) -> Result<Vec<DbJob>, GraphileWorkerError> {
         let sql = formatdoc!(
             r#"
@@ -162,6 +282,14 @@ impl WorkerUtils {
         Ok(jobs)
     }
 
+    /// Marks multiple jobs as permanently failed with a reason.
+    ///
+    /// # Arguments
+    /// * `ids` - Array of job IDs to mark as permanently failed
+    /// * `reason` - The reason for the failure, which will be recorded in the error field
+    ///
+    /// # Returns
+    /// * `Result<Vec<DbJob>, GraphileWorkerError>` - The updated job records
     pub async fn permanently_fail_jobs(
         &self,
         ids: &[i64],
@@ -183,6 +311,17 @@ impl WorkerUtils {
         Ok(jobs)
     }
 
+    /// Reschedules multiple jobs with new parameters.
+    ///
+    /// This allows changing when jobs will run next, their priority,
+    /// and their retry behavior.
+    ///
+    /// # Arguments
+    /// * `ids` - Array of job IDs to reschedule
+    /// * `options` - Options for rescheduling (run_at, priority, attempts, max_attempts)
+    ///
+    /// # Returns
+    /// * `Result<Vec<DbJob>, GraphileWorkerError>` - The updated job records
     pub async fn reschedule_jobs(
         &self,
         ids: &[i64],
@@ -213,6 +352,16 @@ impl WorkerUtils {
         Ok(jobs)
     }
 
+    /// Force unlocks worker records in the database.
+    ///
+    /// Useful for recovering from situations where workers crashed without
+    /// properly releasing their locks, allowing their jobs to be picked up by other workers.
+    ///
+    /// # Arguments
+    /// * `worker_ids` - Array of worker IDs to force unlock
+    ///
+    /// # Returns
+    /// * `Result<(), GraphileWorkerError>` - Ok if workers were successfully unlocked
     pub async fn force_unlock_workers(
         &self,
         worker_ids: &[&str],
@@ -232,6 +381,31 @@ impl WorkerUtils {
         Ok(())
     }
 
+    /// Runs database cleanup tasks to maintain performance.
+    ///
+    /// Executes the specified cleanup tasks, which helps keep
+    /// the database size manageable and improves query performance.
+    ///
+    /// # Arguments
+    /// * `tasks` - Array of cleanup tasks to perform
+    ///
+    /// # Returns
+    /// * `Result<(), GraphileWorkerError>` - Ok if all cleanup tasks completed successfully
+    ///
+    /// # Example
+    /// ```
+    /// # use graphile_worker::WorkerUtils;
+    /// # use graphile_worker::worker_utils::CleanupTask;
+    /// # use graphile_worker::errors::GraphileWorkerError;
+    /// # async fn example(utils: &WorkerUtils) -> Result<(), GraphileWorkerError> {
+    /// utils.cleanup(&[
+    ///     CleanupTask::DeletePermenantlyFailedJobs,
+    ///     CleanupTask::GcTaskIdentifiers,
+    ///     CleanupTask::GcJobQueues,
+    /// ]).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn cleanup(&self, tasks: &[CleanupTask]) -> Result<(), GraphileWorkerError> {
         for task in tasks {
             task.execute(&self.pg_pool, &self.escaped_schema).await?;
@@ -239,6 +413,13 @@ impl WorkerUtils {
         Ok(())
     }
 
+    /// Runs database migrations to ensure the schema is up to date.
+    ///
+    /// Automatically called when initializing a worker, but can
+    /// also be called manually if needed.
+    ///
+    /// # Returns
+    /// * `Result<(), MigrateError>` - Ok if migrations completed successfully
     pub async fn migrate(&self) -> Result<(), MigrateError> {
         migrate(&self.pg_pool, &self.escaped_schema).await?;
         Ok(())

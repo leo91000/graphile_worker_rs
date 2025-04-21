@@ -3,193 +3,327 @@
 [![Codecov](https://codecov.io/github/leo91000/graphile_worker_rs/coverage.svg?branch=main)](https://codecov.io/gh/leo91000/graphile_worker_rs)
 [![Crates.io](https://img.shields.io/crates/v/graphile-worker.svg)](https://crates.io/crates/graphile-worker)
 [![Documentation](https://img.shields.io/docsrs/graphile_worker)](https://docs.rs/graphile_worker/)
+[![MIT License](https://img.shields.io/crates/l/graphile-worker.svg)](LICENSE.md)
 
-Rewrite of [Graphile Worker](https://github.com/graphile/worker) in Rust. If you like this library go sponsor [Benjie](https://github.com/benjie) project, all research has been done by him, this library is only a rewrite in Rust 🦀.
-The port should mostly be compatible with `graphile-worker` (meaning you can run it side by side with Node.JS).
+A powerful PostgreSQL-backed job queue for Rust applications, based on [Graphile Worker](https://github.com/graphile/worker). 
+This is a complete Rust rewrite that offers excellent performance, reliability, and a convenient API.
 
-The following differs from `Graphile Worker` :
-- No support for batch job (I don't need it personnally, but if this is not your case, create an issue and I will see what I can do)
-- In `Graphile Worker`, each process has it's worker_id. In rust there is only one worker_id, then jobs are processed in your async runtime thread.
+## Overview
 
-Job queue for PostgreSQL running on Rust - allows you to run jobs (e.g.
-sending emails, performing calculations, generating PDFs, etc) "in the
-background" so that your HTTP response/application code is not held up. Can be
-used with any PostgreSQL-backed application.
+Graphile Worker RS allows you to run jobs (such as sending emails, performing calculations, generating PDFs) in the background, 
+so your HTTP responses and application code remain fast and responsive. It's ideal for any PostgreSQL-backed Rust application.
 
-### Add the worker to your project:
+Key highlights:
+- **High performance**: Uses PostgreSQL's `SKIP LOCKED` for efficient job fetching
+- **Low latency**: Typically under 3ms from task schedule to execution using `LISTEN`/`NOTIFY`
+- **Reliable**: Automatically retries failed jobs with exponential backoff
+- **Flexible**: Supports scheduled jobs, task queues, cron-like recurring tasks, and more
+- **Type-safe**: Uses Rust's type system to ensure job payloads match their handlers
 
-```bash,ignore
-cargo add graphile_worker
-```
+## Differences from Node.js version
 
-### Create tasks and run the worker
+This port is mostly compatible with the original Graphile Worker, meaning you can run it side by side with the Node.js version.
+The key differences are:
 
-The definition of a task consist simply of an async function and a task identifier
-
-```rust,ignore
-use serde::{Deserialize, Serialize};
-use graphile_worker::{WorkerContext, TaskHandler, IntoTaskHandlerResult};
-
-#[derive(Deserialize, Serialize)]
-struct SayHello {
-    message: String,
-}
-
-impl TaskHandler for SayHello {
-    const IDENTIFIER: &'static str = "say_hello";
-
-    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-        println!("Hello {} !", self.message);
-    }
-}
-
-#[tokio::main]
-async fn main() -> Result<(), ()> {
-    graphile_worker::WorkerOptions::default()
-        .concurrency(2)
-        .schema("example_simple_worker")
-        .define_job::<SayHello>()
-        .pg_pool(pg_pool)
-        .init()
-        .await?
-        .run()
-        .await?;
-
-    Ok(())
-}
-```
-
-### Schedule a job via SQL
-
-Connect to your database and run the following SQL:
-
-```sql,ignore
-SELECT graphile_worker.add_job('say_hello', json_build_object('name', 'Bobby Tables'));
-```
-
-### Schedule a job via RUST
-
-```rust,ignore
-#[tokio::main]
-async fn main() -> Result<(), ()> {
-    // ...
-    let utils = worker.create_utils();
-
-    // Using add_job
-    utils.add_job(
-        SayHello { name: "Bobby Tables".to_string() },
-        Default::default(),
-    ).await.unwrap();
-
-    // You can also use `add_raw_job` if you don't have access to the task, or don't care about end 2 end safety
-    utils.add_raw_job("say_hello", serde_json::json!({ "name": "Bobby Tables" }), Default::default()).await.unwrap();
-
-    Ok(())
-}
-```
-
-### App state
-
-You can provide app state through `extension` :
-
-```rust,ignore
-use serde::{Deserialize, Serialize};
-use graphile_worker::{WorkerContext, TaskHandler, IntoTaskHandlerResult};
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering::SeqCst;
-use std::sync::Arc;
-
-#[derive(Clone, Debug)]
-struct AppState {
-    run_count: Arc<AtomicUsize>,
-}
-
-impl AppState {
-    fn new() -> Self {
-        Self {
-            run_count: Arc::new(AtomicUsize::new(0)),
-        }
-    }
-
-    fn increment_run_count(&self) -> usize {
-        self.run_count.fetch_add(1, SeqCst)
-    }
-}
-
-#[derive(Deserialize, Serialize)]
-pub struct CounterTask;
-
-impl TaskHandler for CounterTask {
-    const IDENTIFIER: &'static str = "counter_task";
-
-    async fn run(self, ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-        let app_state = ctx.get_ext::<AppState>().unwrap();
-        let run_count = app_state.increment_run_count();
-        println!("Run count since start: {run_count}");
-    }
-}
-
-#[tokio::main]
-async fn main() -> Result<(), ()> {
-    graphile_worker::WorkerOptions::default()
-        .concurrency(2)
-        .schema("example_simple_worker")
-        .add_extension(AppState::new())
-        .define_job::<CounterTask>()
-        .pg_pool(pg_pool)
-        .init()
-        .await?
-        .run()
-        .await?;
-
-    Ok(())
-}
-```
-
-## Features
-
-- Standalone and embedded modes
-- Designed to be used both from JavaScript or directly in the database
-- Easy to test (recommended: `run_once` util) 
-- Low latency (typically under 3ms from task schedule to execution, uses
-  `LISTEN`/`NOTIFY` to be informed of jobs as they're inserted)
-- High performance (uses `SKIP LOCKED` to find jobs to execute, resulting in
-  faster fetches)
-- Small tasks (uses explicit task names / payloads resulting in minimal
-  serialisation/deserialisation overhead)
-- Parallel by default
-- Adding jobs to same named queue runs them in series
-- Automatically re-attempts failed jobs with exponential back-off
-- Customisable retry count (default: 25 attempts over ~3 days)
-- Crontab-like scheduling feature for recurring tasks (with optional backfill)
-- Task de-duplication via unique `job_key`
-- Append data to already enqueued jobs with "batch jobs"
-- Open source; liberal MIT license
-- Executes tasks written in Rust (these can call out to any other language or
-  networked service)
-- Written natively in Rust
-- If you're running really lean, you can run Graphile Worker in the same Rust
-  process as your server to keep costs and devops complexity down.
-
-## Status
-
-Production ready but the API may be rough around the edges and might change.
-
-## Requirements
-
-PostgreSQL 12+
-Might work with older versions, but has not been tested.
-
-Note: Postgres 12 is required for the `generated always as (expression)` feature
+- No support for batch jobs yet (create an issue if you need this feature)
+- In the Node.js version, each process has its own worker_id. In the Rust version, there is only one worker_id, and jobs are processed in your async runtime thread
 
 ## Installation
 
-```bash,ignore
+Add the library to your project:
+
+```bash
 cargo add graphile_worker
 ```
 
-## Running
+## Getting Started
 
-`graphile_worker` manages its own database schema (`graphile_worker_worker`). Just
-point at your database and we handle our own migrations.
+### 1. Define a Task
+
+A task consists of a struct that implements the `TaskHandler` trait. Each task has:
+- A struct with `Serialize`/`Deserialize` for the payload
+- A unique identifier string
+- An async `run` method that contains the task's logic
+
+```rust,ignore
+use serde::{Deserialize, Serialize};
+use graphile_worker::{WorkerContext, TaskHandler, IntoTaskHandlerResult};
+
+#[derive(Deserialize, Serialize)]
+struct SendEmail {
+    to: String,
+    subject: String,
+    body: String,
+}
+
+impl TaskHandler for SendEmail {
+    const IDENTIFIER: &'static str = "send_email";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        println!("Sending email to {} with subject '{}'", self.to, self.subject);
+        // Email sending logic would go here
+        Ok::<(), String>(())
+    }
+}
+```
+
+### 2. Configure and Run the Worker
+
+Set up the worker with your configuration options and run it:
+
+```rust,ignore
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create a PostgreSQL connection pool
+    let pg_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(5)
+        .connect("postgres://postgres:password@localhost/mydb")
+        .await?;
+
+    // Initialize and run the worker
+    graphile_worker::WorkerOptions::default()
+        .concurrency(5)                 // Process up to 5 jobs concurrently
+        .schema("graphile_worker")      // Use this PostgreSQL schema
+        .define_job::<SendEmail>()      // Register the task handler
+        .pg_pool(pg_pool)               // Provide the database connection
+        .init()                         // Initialize the worker
+        .await?
+        .run()                          // Start processing jobs
+        .await?;
+
+    Ok(())
+}
+```
+
+### 3. Schedule Jobs
+
+#### Option A: Schedule a job via SQL
+
+Connect to your database and run the following SQL:
+
+```sql
+SELECT graphile_worker.add_job(
+    'send_email',
+    json_build_object(
+        'to', 'user@example.com',
+        'subject', 'Welcome to our app!',
+        'body', 'Thanks for signing up.'
+    )
+);
+```
+
+#### Option B: Schedule a job from Rust
+
+```rust,ignore
+// Get a WorkerUtils instance to manage jobs
+let utils = worker.create_utils();
+
+// Type-safe method (recommended):
+utils.add_job(
+    SendEmail {
+        to: "user@example.com".to_string(),
+        subject: "Welcome to our app!".to_string(),
+        body: "Thanks for signing up.".to_string(),
+    },
+    Default::default(), // Use default job options
+).await?;
+
+// Or use the raw method when type isn't available:
+utils.add_raw_job(
+    "send_email",
+    serde_json::json!({
+        "to": "user@example.com",
+        "subject": "Welcome to our app!",
+        "body": "Thanks for signing up."
+    }),
+    Default::default(),
+).await?;
+```
+
+## Advanced Features
+
+### Shared Application State
+
+You can provide shared state to all your tasks using extensions:
+
+```rust,ignore
+use serde::{Deserialize, Serialize};
+use graphile_worker::{WorkerContext, TaskHandler, IntoTaskHandlerResult};
+use std::sync::{Arc, atomic::{AtomicUsize, Ordering::SeqCst}};
+
+// Define your shared state
+#[derive(Clone, Debug)]
+struct AppState {
+    db_client: Arc<DatabaseClient>,
+    api_key: String,
+    counter: Arc<AtomicUsize>,
+}
+
+// Example database client (just for demonstration)
+struct DatabaseClient;
+impl DatabaseClient {
+    fn new() -> Self { Self }
+    async fn find_user(&self, _user_id: &str) -> Result<(), String> { Ok(()) }
+}
+
+#[derive(Deserialize, Serialize)]
+struct ProcessUserTask {
+    user_id: String,
+}
+
+impl TaskHandler for ProcessUserTask {
+    const IDENTIFIER: &'static str = "process_user";
+
+    async fn run(self, ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        // Access the shared state in your task
+        let app_state = ctx.get_ext::<AppState>().unwrap();
+        let count = app_state.counter.fetch_add(1, SeqCst);
+        
+        // Use shared resources
+        app_state.db_client.find_user(&self.user_id).await?;
+        
+        println!("Processed user {}, task count: {}", self.user_id, count);
+        Ok::<(), String>(())
+    }
+}
+
+// Add the extension when configuring the worker
+let app_state = AppState {
+    db_client: Arc::new(DatabaseClient::new()),
+    api_key: "secret_key".to_string(),
+    counter: Arc::new(AtomicUsize::new(0)),
+};
+
+graphile_worker::WorkerOptions::default()
+    .add_extension(app_state)
+    .define_job::<ProcessUserTask>()
+    // ... other configuration
+    .init()
+    .await?;
+```
+
+### Scheduling Options
+
+You can customize how and when jobs run with the `JobSpec` builder:
+
+```rust,ignore
+use graphile_worker::{JobSpecBuilder, JobKeyMode};
+use chrono::Utc;
+
+// Schedule a job to run after 5 minutes with high priority
+let job_spec = JobSpecBuilder::new()
+    .run_at(Utc::now() + chrono::Duration::minutes(5))
+    .priority(10)
+    .job_key("welcome_email_user_123")  // Unique identifier for deduplication
+    .job_key_mode(JobKeyMode::Replace)  // Replace existing jobs with this key
+    .max_attempts(5)                    // Max retry attempts (default is 25)
+    .build();
+
+utils.add_job(SendEmail { /* ... */ }, job_spec).await?;
+```
+
+### Job Queues
+
+Jobs with the same queue name run in series (one after another) rather than in parallel:
+
+```rust,ignore
+// These jobs will run one after another, not concurrently
+let spec1 = JobSpecBuilder::new()
+    .queue_name("user_123_operations")
+    .build();
+
+let spec2 = JobSpecBuilder::new()
+    .queue_name("user_123_operations")
+    .build();
+
+utils.add_job(UpdateProfile { /* ... */ }, spec1).await?;
+utils.add_job(SendEmail { /* ... */ }, spec2).await?;
+```
+
+### Cron Jobs
+
+You can schedule recurring jobs using crontab syntax:
+
+```rust,ignore
+// Run a task daily at 8:00 AM
+let worker = WorkerOptions::default()
+    .with_crontab("0 8 * * * send_daily_report")?
+    .define_job::<SendDailyReport>()
+    // ... other configuration
+    .init()
+    .await?;
+```
+
+## Job Management Utilities
+
+The `WorkerUtils` class provides methods for managing jobs:
+
+```rust,ignore
+// Get a WorkerUtils instance
+let utils = worker.create_utils();
+
+// Remove a job by its key
+utils.remove_job("job_key_123").await?;
+
+// Mark jobs as completed
+utils.complete_jobs(&[job_id1, job_id2]).await?;
+
+// Permanently fail jobs with a reason
+utils.permanently_fail_jobs(&[job_id3, job_id4], "Invalid data").await?;
+
+// Reschedule jobs
+let options = RescheduleJobOptions {
+    run_at: Some(Utc::now() + chrono::Duration::minutes(60)),
+    priority: Some(5),
+    max_attempts: Some(3),
+    ..Default::default()
+};
+utils.reschedule_jobs(&[job_id5, job_id6], options).await?;
+
+// Run database cleanup tasks
+utils.cleanup(&[
+    CleanupTask::DeletePermenantlyFailedJobs,
+    CleanupTask::GcTaskIdentifiers,
+    CleanupTask::GcJobQueues,
+]).await?;
+```
+
+## Feature List
+
+- **Flexible deployment**: Run standalone or embedded in your application
+- **Multi-language support**: Use from Rust, SQL or alongside the Node.js version
+- **Performance optimized**:
+  - Low latency job execution (typically under 3ms)
+  - PostgreSQL `LISTEN`/`NOTIFY` for immediate job notifications
+  - `SKIP LOCKED` for efficient job fetching
+- **Robust job processing**:
+  - Parallel processing with customizable concurrency 
+  - Serialized execution via named queues
+  - Automatic retries with exponential backoff
+  - Customizable retry counts (default: 25 attempts over ~3 days)
+- **Scheduling features**:
+  - Delayed execution with `run_at`
+  - Job prioritization
+  - Crontab-like recurring tasks
+  - Task deduplication via `job_key`
+- **Type safety**: End-to-end type checking of job payloads
+- **Minimal overhead**: Direct serialization of task payloads
+
+## Requirements
+
+- **PostgreSQL 12+**
+  - Required for the `generated always as (expression)` feature
+  - May work with older versions but has not been tested
+
+## Project Status
+
+Production ready but the API may continue to evolve. If you encounter any issues or have feature requests, please open an issue on GitHub.
+
+## Acknowledgments
+
+This library is a Rust port of the excellent [Graphile Worker](https://github.com/graphile/worker) by [Benjie Gillam](https://github.com/benjie). If you find this library useful, please consider [sponsoring Benjie's work](https://github.com/sponsors/benjie), as all the research and architecture design was done by him.
+
+## License
+
+MIT License - See [LICENSE.md](LICENSE.md)
 
