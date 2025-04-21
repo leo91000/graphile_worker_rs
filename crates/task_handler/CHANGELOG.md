@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.3](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_handler-v0.5.2...graphile_worker_task_handler-v0.5.3) - 2025-04-21
+
+### Other
+
+- Improve documentation
+
 ## [0.5.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_handler-v0.5.1...graphile_worker_task_handler-v0.5.2) - 2025-04-17
 
 ### Other

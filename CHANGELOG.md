@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.3](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.2...graphile_worker-v0.8.3) - 2025-04-21
+
+### Other
+
+- Improve documentation
+
 ## [0.8.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.1...graphile_worker-v0.8.2) - 2025-04-17
 
 ### Other
