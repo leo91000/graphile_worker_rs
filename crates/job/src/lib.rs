@@ -3,72 +3,95 @@ use getset::Getters;
 use serde_json::Value;
 use sqlx::FromRow;
 
+/// `DbJob` represents a job as stored in the database.
+///
+/// It contains all the fields from the database table but doesn't include
+/// the task identifier string, which is provided separately when constructing
+/// a `Job` instance for use in the worker system.
 #[derive(FromRow, Getters, Debug, Clone, PartialEq, Eq)]
 #[getset(get = "pub")]
 #[allow(dead_code)]
 pub struct DbJob {
+    /// Unique identifier for this job
     id: i64,
-    /// FK to tasks
+    /// Foreign key to job_queues table if this job is part of a queue
     job_queue_id: Option<i32>,
-    /// The JSON payload of the job
+    /// The JSON payload/data associated with this job
     payload: serde_json::Value,
-    /// Lower number means it should run sooner
+    /// Priority level (lower number means higher priority)
     priority: i16,
-    /// When it was due to run
+    /// When the job is scheduled to run
     run_at: DateTime<Utc>,
-    /// How many times it has been attempted
+    /// How many times this job has been attempted
     attempts: i16,
-    /// The limit for the number of times it should be attempted
+    /// Maximum number of retry attempts before considering the job permanently failed
     max_attempts: i16,
-    /// If attempts > 0, why did it fail last ?
+    /// Error message from the last failed attempt
     last_error: Option<String>,
+    /// When the job was created
     created_at: DateTime<Utc>,
+    /// When the job was last updated
     updated_at: DateTime<Utc>,
-    /// "job_key" - unique identifier for easy update from user code
+    /// Optional unique key for identifying/updating this job from user code
     key: Option<String>,
-    /// A count of the revision numbers
+    /// Counter tracking the number of revisions/updates to this job
     revision: i32,
+    /// When the job was locked for processing
     locked_at: Option<DateTime<Utc>>,
+    /// Worker ID that has locked this job
     locked_by: Option<String>,
+    /// Optional JSON flags to control job processing behavior
     flags: Option<Value>,
-    /// The task ID of the job
+    /// Foreign key to the tasks table identifying the task type
     task_id: i32,
 }
 
+/// `Job` extends `DbJob` with an additional task_identifier field.
+///
+/// This struct is used throughout the worker system for job processing and
+/// contains everything needed to execute a job, including the string identifier
+/// of the task which is used to look up the appropriate handler function.
 #[derive(FromRow, Getters, Debug, Clone, PartialEq, Eq)]
 #[getset(get = "pub")]
 #[allow(dead_code)]
 pub struct Job {
+    /// Unique identifier for this job
     id: i64,
-    /// FK to tasks
+    /// Foreign key to job_queues table if this job is part of a queue
     job_queue_id: Option<i32>,
-    /// The JSON payload of the job
+    /// The JSON payload/data associated with this job
     payload: serde_json::Value,
-    /// Lower number means it should run sooner
+    /// Priority level (lower number means higher priority)
     priority: i16,
-    /// When it was due to run
+    /// When the job is scheduled to run
     run_at: DateTime<Utc>,
-    /// How many times it has been attempted
+    /// How many times this job has been attempted
     attempts: i16,
-    /// The limit for the number of times it should be attempted
+    /// Maximum number of retry attempts before considering the job permanently failed
     max_attempts: i16,
-    /// If attempts > 0, why did it fail last ?
+    /// Error message from the last failed attempt
     last_error: Option<String>,
+    /// When the job was created
     created_at: DateTime<Utc>,
+    /// When the job was last updated
     updated_at: DateTime<Utc>,
-    /// "job_key" - unique identifier for easy update from user code
+    /// Optional unique key for identifying/updating this job from user code
     key: Option<String>,
-    /// A count of the revision numbers
+    /// Counter tracking the number of revisions/updates to this job
     revision: i32,
+    /// When the job was locked for processing
     locked_at: Option<DateTime<Utc>>,
+    /// Worker ID that has locked this job
     locked_by: Option<String>,
+    /// Optional JSON flags to control job processing behavior
     flags: Option<Value>,
-    /// The task ID of the job
+    /// Foreign key to the tasks table identifying the task type
     task_id: i32,
-    /// The task identifier of the job, shorcut to task.identifier
+    /// String identifier of the task, used to look up the handler function
     task_identifier: String,
 }
 
+/// Conversion from `Job` to `DbJob`, dropping the task_identifier field
 impl From<Job> for DbJob {
     fn from(job: Job) -> DbJob {
         DbJob {
@@ -93,6 +116,19 @@ impl From<Job> for DbJob {
 }
 
 impl Job {
+    /// Creates a `Job` from a `DbJob` and a task identifier string.
+    ///
+    /// The task identifier is used to look up the appropriate handler function
+    /// when the job is executed.
+    ///
+    /// # Arguments
+    ///
+    /// * `db_job` - The database job record
+    /// * `task_identifier` - The string identifier for the task type
+    ///
+    /// # Returns
+    ///
+    /// A new `Job` instance with all fields from `db_job` plus the provided task identifier
     pub fn from_db_job(db_job: DbJob, task_identifier: String) -> Job {
         Job {
             id: db_job.id,

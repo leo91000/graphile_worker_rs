@@ -11,22 +11,39 @@ use crate::{
     Job,
 };
 
+/// Indicates the source of a job signal that triggered job processing.
+///
+/// This enum represents the different mechanisms that can trigger
+/// the worker to check for and process jobs.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum StreamSource {
+    /// Job processing was triggered by a regular polling interval
     Polling,
+    /// Job processing was triggered by a PostgreSQL notification
     PgListener,
+    /// Job processing came from a one-time run request
     RunOnce,
 }
 
+/// Internal data structure for managing the job signal stream.
+///
+/// This struct holds the state needed to produce job signals from both
+/// interval-based polling and PostgreSQL notifications.
 struct JobSignalStreamData {
+    /// Timer for regular polling intervals
     interval: tokio::time::Interval,
+    /// Listener for PostgreSQL notifications
     pg_listener: PgListener,
+    /// Signal that completes when the worker should shut down
     shutdown_signal: ShutdownSignal,
+    /// Number of jobs to process concurrently
     concurrency: usize,
+    /// When a job signal is received, yields multiple items to allow for concurrent processing
     yield_n: Option<(NonZeroUsize, StreamSource)>,
 }
 
 impl JobSignalStreamData {
+    /// Creates a new JobSignalStreamData with the given components.
     fn new(
         interval: tokio::time::Interval,
         pg_listener: PgListener,
@@ -43,8 +60,28 @@ impl JobSignalStreamData {
     }
 }
 
-/// Returns a stream that yield on postgres `NOTIFY 'jobs:insert'` and on interval specified by the
-/// poll_interval argument
+/// Creates a stream that yields job processing signals from multiple sources.
+///
+/// This function returns a stream that emits signals when the worker should check for jobs.
+/// The signals come from:
+/// 1. Regular interval-based polling (every `poll_interval`)
+/// 2. PostgreSQL notifications when new jobs are inserted (`NOTIFY 'jobs:insert'`)
+///
+/// When a signal is received, the stream will emit enough items to utilize the
+/// configured concurrency (one item per potential concurrent job).
+///
+/// The stream will terminate when the shutdown signal is triggered.
+///
+/// # Arguments
+///
+/// * `pg_pool` - PostgreSQL connection pool
+/// * `poll_interval` - How often to poll for jobs when no notifications are received
+/// * `shutdown_signal` - Signal that completes when the worker should shut down
+/// * `concurrency` - Number of jobs to process concurrently
+///
+/// # Returns
+///
+/// A stream that emits `StreamSource` items when jobs should be checked for
 pub async fn job_signal_stream(
     pg_pool: PgPool,
     poll_interval: Duration,
@@ -83,8 +120,28 @@ pub async fn job_signal_stream(
     Ok(stream)
 }
 
-/// Returns a stream that yield every job that is available to be processed
-/// It stops when the shutdown_signal is triggered or when there is no more job to process
+/// Creates a stream that yields jobs ready for processing.
+///
+/// This function returns a stream that fetches and yields jobs from the database
+/// that are ready to be processed. It will continue to emit jobs until either:
+/// 1. There are no more jobs available to process
+/// 2. The shutdown signal is triggered
+///
+/// The stream is typically used with `for_each_concurrent` to process multiple
+/// jobs in parallel up to the configured concurrency limit.
+///
+/// # Arguments
+///
+/// * `pg_pool` - PostgreSQL connection pool
+/// * `shutdown_signal` - Signal that completes when the worker should shut down
+/// * `task_details` - Mapping of task IDs to their string identifiers
+/// * `escaped_schema` - Database schema name (properly escaped for SQL)
+/// * `worker_id` - Unique identifier for this worker
+/// * `forbidden_flags` - List of job flags that this worker will not process
+///
+/// # Returns
+///
+/// A stream that emits `Job` items that are ready to be processed
 pub fn job_stream(
     pg_pool: PgPool,
     shutdown_signal: ShutdownSignal,

@@ -1271,7 +1271,7 @@ async fn single_worker_runs_jobs_in_series_purges_all_before_exit() {
         async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             let rx = RXS.get().unwrap().lock().await.pop_front().unwrap(); // Obtain the receiver for the current job
             rx.await.unwrap(); // Wait for the signal to complete the job
-            JOB3_CALL_COUNT.increment().await;
+            JOB3_CALL_COUNT.increment().await; // Increment counter after job completes
         }
     }
 
@@ -1313,7 +1313,7 @@ async fn single_worker_runs_jobs_in_series_purges_all_before_exit() {
             assert_eq!(
                 JOB3_CALL_COUNT.get().await,
                 i,
-                "Job {} should be in progress",
+                "Job {} should be completed",
                 i,
             );
         }
@@ -1357,7 +1357,7 @@ async fn jobs_added_to_the_same_queue_will_be_ran_serially_even_if_multiple_work
         async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
             let rx = RXS.get().unwrap().lock().await.pop_front().unwrap(); // Obtain the receiver for the current job
             rx.await.unwrap(); // Wait for the signal to complete the job
-            JOB3_CALL_COUNT.increment().await;
+            JOB3_CALL_COUNT.increment().await; // Increment counter after job completes
         }
     }
 

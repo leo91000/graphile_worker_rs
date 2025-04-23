@@ -45,8 +45,52 @@ cfg_if! {
     }
 }
 
+/// A shareable future that completes when a shutdown signal is received.
+///
+/// This type is a future that can be cloned and shared between multiple
+/// consumers who need to be notified when a shutdown signal is received.
+/// When awaited, it will only complete when the process receives a shutdown
+/// signal (like Ctrl+C, SIGTERM, etc.).
 pub type ShutdownSignal = Shared<Pin<Box<dyn Future<Output = ()> + Send>>>;
 
+/// Creates a new shareable shutdown signal detector.
+///
+/// This function returns a `ShutdownSignal` that can be cloned and shared
+/// across different components. Each clone of the signal will complete
+/// when the process receives a shutdown signal from the operating system,
+/// such as Ctrl+C (SIGINT), SIGTERM, etc.
+///
+/// # Returns
+///
+/// A `ShutdownSignal` that can be cloned and awaited
+///
+/// # Examples
+///
+/// ```no_run
+/// use graphile_worker_shutdown_signal::shutdown_signal;
+/// use tokio::select;
+/// use tokio::time::{sleep, Duration};
+///
+/// async fn some_long_running_task() {
+///     sleep(Duration::from_secs(60)).await;
+/// }
+///
+/// async fn example() {
+///     // Create a shutdown signal
+///     let signal = shutdown_signal();
+///     
+///     // Use in select to implement graceful shutdown
+///     select! {
+///         _ = signal => {
+///             println!("Shutting down gracefully...");
+///             // Cleanup resources
+///         }
+///         _ = some_long_running_task() => {
+///             println!("Task completed!");
+///         }
+///     }
+/// }
+/// ```
 pub fn shutdown_signal() -> ShutdownSignal {
     async {
         raw_shutdown_signal().await;
