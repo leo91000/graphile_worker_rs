@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_extensions-v0.1.4...graphile_worker_extensions-v0.1.5) - 2025-04-24
+
+### Other
+
+- Improve documentation
+
 ## [0.1.4](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_extensions-v0.1.3...graphile_worker_extensions-v0.1.4) - 2025-04-17
 
 ### Other
