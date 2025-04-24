@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.4](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.3...graphile_worker-v0.8.4) - 2025-04-24
+
+### Other
+
+- Improve documentation
+- *(deps)* update rust crate tokio-util to 0.7.15 ([#258](https://github.com/leo91000/graphile_worker_rs/pull/258))
+- *(deps)* update rust crate serde_qs to 0.15.0 ([#256](https://github.com/leo91000/graphile_worker_rs/pull/256))
+
 ## [0.8.3](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.2...graphile_worker-v0.8.3) - 2025-04-21
 
 ### Other

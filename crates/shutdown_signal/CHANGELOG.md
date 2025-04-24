@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.4](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_shutdown_signal-v0.3.3...graphile_worker_shutdown_signal-v0.3.4) - 2025-04-24
+
+### Other
+
+- Improve documentation
+
 ## [0.3.3](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_shutdown_signal-v0.3.2...graphile_worker_shutdown_signal-v0.3.3) - 2025-04-17
 
 ### Other

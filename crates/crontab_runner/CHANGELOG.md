@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.9](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.5.8...graphile_worker_crontab_runner-v0.5.9) - 2025-04-24
+
+### Other
+
+- updated the following local packages: graphile_worker_shutdown_signal
+
 ## [0.5.8](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.5.7...graphile_worker_crontab_runner-v0.5.8) - 2025-04-17
 
 ### Other
