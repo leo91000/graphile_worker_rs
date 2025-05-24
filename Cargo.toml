@@ -15,7 +15,7 @@ categories = []
 members = ["crates/*"]
 
 [workspace.dependencies]
-tokio = { version = "1.45.0" }
+tokio = { version = "1.45.1" }
 tokio-util = { version = "0.7.15" }
 serde = { version = "1.0.219", features = ["derive"] }
 json5 = "0.4.1"
@@ -83,7 +83,7 @@ sqlx = { version = "0.8.6", features = [
 ], default-features = false }
 thiserror = "2.0.12"
 tracing = "0.1.41"
-tokio = { version = "1.45.0", features = ["macros", "signal"] }
+tokio = { version = "1.45.1", features = ["macros", "signal"] }
 rand = "0.9.1"
 hex = "0.4.3"
 cfg-if = "1.0.0"
@@ -91,6 +91,6 @@ indoc = "2.0.6"
 derive_builder = "0.20.2"
 
 [dev-dependencies]
-tokio = { version = "1.45.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.45.1", features = ["macros", "rt-multi-thread"] }
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 uuid = { version = "1.17.0", features = ["v7"] }
