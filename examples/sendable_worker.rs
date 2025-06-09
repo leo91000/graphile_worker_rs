@@ -344,4 +344,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Application shutdown complete");
     Ok(())
 }
-

@@ -28,8 +28,9 @@ use crate::{sql::fail_job::fail_job, streams::StreamSource};
 /// A task handler is a closure that takes a `WorkerContext` and returns a future
 /// that resolves to a `Result<(), String>`. The string in the error case represents
 /// the error message if the task fails.
-pub type WorkerFn =
-    Box<dyn Fn(WorkerContext) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> + Send + Sync>;
+pub type WorkerFn = Box<
+    dyn Fn(WorkerContext) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> + Send + Sync,
+>;
 
 /// The main worker struct that processes jobs from the queue.
 ///
