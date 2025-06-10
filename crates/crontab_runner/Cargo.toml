@@ -1,6 +1,6 @@
 [package]
 name = "graphile_worker_crontab_runner"
-version = "0.5.9"
+version = "0.5.10"
 edition = "2021"
 license-file = "LICENSE.md"
 description = "Crontab runner package for graphile worker, a high performance Rust/PostgreSQL job queue"
@@ -17,8 +17,8 @@ tls-rustls = ["sqlx/tls-rustls"]
 tls-native-tls = ["sqlx/tls-native-tls"]
 
 [dependencies]
-graphile_worker_crontab_types = { path = "../crontab_types", version = "0.5.5" }
-graphile_worker_shutdown_signal = { path = "../shutdown_signal", version = "0.3.4" }
+graphile_worker_crontab_types = { path = "../crontab_types", version = "0.5.6" }
+graphile_worker_shutdown_signal = { path = "../shutdown_signal", version = "0.3.5" }
 chrono = { workspace = true }
 sqlx = { workspace = true }
 thiserror = { workspace = true }
