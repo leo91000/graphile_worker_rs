@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.8.5](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.4...graphile_worker-v0.8.5) - 2025-06-10
+
+### Added
+
+- make Worker sendable by adding Send + Sync bounds to WorkerFn
+
+### Other
+
+- apply cargo fmt formatting
+- *(deps)* update all non-major dependencies ([#270](https://github.com/leo91000/graphile_worker_rs/pull/270))
+- *(deps)* update rust crate num_cpus to 1.17.0 ([#267](https://github.com/leo91000/graphile_worker_rs/pull/267))
+- *(deps)* update rust crate tokio to 1.45.1 ([#266](https://github.com/leo91000/graphile_worker_rs/pull/266))
+- *(deps)* update rust crate uuid to 1.17.0 ([#265](https://github.com/leo91000/graphile_worker_rs/pull/265))
+- *(deps)* update rust crate sqlx to 0.8.6 ([#264](https://github.com/leo91000/graphile_worker_rs/pull/264))
+- *(deps)* update rust crate tokio to 1.45.0 ([#263](https://github.com/leo91000/graphile_worker_rs/pull/263))
+- *(config)* migrate config renovate.json5
+- *(deps)* update rust crate chrono to 0.4.41 ([#261](https://github.com/leo91000/graphile_worker_rs/pull/261))
+- *(deps)* update rust crate syn to 2.0.101 ([#259](https://github.com/leo91000/graphile_worker_rs/pull/259))
+
 ## [0.8.4](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.3...graphile_worker-v0.8.4) - 2025-04-24
 
 ### Other

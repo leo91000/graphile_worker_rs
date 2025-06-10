@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.9](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_parser-v0.5.8...graphile_worker_crontab_parser-v0.5.9) - 2025-06-10
+
+### Other
+
+- updated the following local packages: graphile_worker_crontab_types
+
 ## [0.5.8](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_parser-v0.5.7...graphile_worker_crontab_parser-v0.5.8) - 2025-04-24
 
 ### Other
