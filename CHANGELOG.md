@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.6](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.5...graphile_worker-v0.8.6) - 2025-06-13
+
+### Other
+
+- *(deps)* update rust crate syn to 2.0.103 ([#271](https://github.com/leo91000/graphile_worker_rs/pull/271))
+
 ## [0.8.5](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.4...graphile_worker-v0.8.5) - 2025-06-10
 
 ### Added
