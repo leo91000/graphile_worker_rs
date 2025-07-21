@@ -84,7 +84,7 @@ sqlx = { version = "0.8.6", features = [
 thiserror = "2.0.12"
 tracing = "0.1.41"
 tokio = { version = "1.46.1", features = ["macros", "signal"] }
-rand = "0.9.1"
+rand = "0.9.2"
 hex = "0.4.3"
 cfg-if = "1.0.1"
 indoc = "2.0.6"
