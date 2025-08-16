@@ -1,5 +1,31 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.8.6](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.5...graphile_worker-v0.8.6) - 2025-08-16
+
+### Other
+
+- *(deps)* update rust crate syn to 2.0.106 ([#285](https://github.com/leo91000/graphile_worker_rs/pull/285))
+- *(deps)* update rust crate syn to 2.0.105 ([#284](https://github.com/leo91000/graphile_worker_rs/pull/284))
+- *(deps)* update all non-major dependencies ([#283](https://github.com/leo91000/graphile_worker_rs/pull/283))
+- *(deps)* update rust crate uuid to 1.18.0 ([#282](https://github.com/leo91000/graphile_worker_rs/pull/282))
+- *(deps)* update all non-major dependencies ([#281](https://github.com/leo91000/graphile_worker_rs/pull/281))
+- *(deps)* update rust crate tokio to 1.47.0 ([#280](https://github.com/leo91000/graphile_worker_rs/pull/280))
+- *(deps)* update rust crate rand to 0.9.2 ([#278](https://github.com/leo91000/graphile_worker_rs/pull/278))
+- *(deps)* update rust crate serde_json to 1.0.141 ([#277](https://github.com/leo91000/graphile_worker_rs/pull/277))
+- *(deps)* update rust crate tokio to 1.46.1 ([#276](https://github.com/leo91000/graphile_worker_rs/pull/276))
+- *(deps)* update rust crate tokio to 1.46.0 ([#275](https://github.com/leo91000/graphile_worker_rs/pull/275))
+- *(deps)* update rust crate syn to 2.0.104 ([#274](https://github.com/leo91000/graphile_worker_rs/pull/274))
+- *(deps)* update rust crate getset to 0.1.6 ([#273](https://github.com/leo91000/graphile_worker_rs/pull/273))
+- *(deps)* update rust crate syn to 2.0.103 ([#271](https://github.com/leo91000/graphile_worker_rs/pull/271))
+# Changelog
+
 ## [0.8.5](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.4...graphile_worker-v0.8.5) - 2025-06-10
 
 ### Added
