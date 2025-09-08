@@ -23,7 +23,7 @@ nom = "8.0.0"
 serde_json = "1.0.143"
 serde_qs = "0.15.0"
 thiserror = "2.0.16"
-chrono = { version = "0.4.41", features = ["serde"] }
+chrono = { version = "0.4.42", features = ["serde"] }
 sqlx = { version = "0.8.6", features = [
   "chrono",
   "postgres",
@@ -68,7 +68,7 @@ graphile_worker_migrations = { path = "./crates/migrations", version = "0.4.7", 
 graphile_worker_task_handler = { path = "./crates/task_handler", version = "0.5.5" }
 graphile_worker_shutdown_signal = { path = "./crates/shutdown_signal", version = "0.3.5" }
 graphile_worker_extensions = { path = "./crates/extensions", version = "0.1.5" }
-chrono = { version = "0.4.41", features = ["serde"] }
+chrono = { version = "0.4.42", features = ["serde"] }
 futures = "0.3.31"
 getset = "0.1.6"
 num_cpus = "1.17.0"
