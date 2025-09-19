@@ -1,4 +1,6 @@
 .env
 target
+run_example.log
+issue_answer.md
 Cargo.lock
 .idea
