@@ -1,8 +1,8 @@
 use crate::errors::GraphileWorkerError;
 use crate::worker_utils::{CleanupTask, RescheduleJobOptions, WorkerUtils};
 use crate::{DbJob, Job, JobSpec, TaskHandler};
-use graphile_worker_migrations::MigrateError;
 use graphile_worker_ctx::WorkerContext;
+use graphile_worker_migrations::MigrateError;
 use serde::Serialize;
 
 /// Convenience helpers available from task handlers via `WorkerContext`.
@@ -30,12 +30,16 @@ pub trait WorkerContextExt {
     ) -> impl core::future::Future<Output = Result<Job, GraphileWorkerError>> + Send;
 
     /// Remove a job by job key.
-    fn remove_job(&self, job_key: &str)
-        -> impl core::future::Future<Output = Result<(), GraphileWorkerError>> + Send;
+    fn remove_job(
+        &self,
+        job_key: &str,
+    ) -> impl core::future::Future<Output = Result<(), GraphileWorkerError>> + Send;
 
     /// Mark jobs as completed.
-    fn complete_jobs(&self, ids: &[i64])
-        -> impl core::future::Future<Output = Result<Vec<DbJob>, GraphileWorkerError>> + Send;
+    fn complete_jobs(
+        &self,
+        ids: &[i64],
+    ) -> impl core::future::Future<Output = Result<Vec<DbJob>, GraphileWorkerError>> + Send;
 
     /// Permanently fail jobs with a reason.
     fn permanently_fail_jobs(
@@ -58,8 +62,10 @@ pub trait WorkerContextExt {
     ) -> impl core::future::Future<Output = Result<(), GraphileWorkerError>> + Send;
 
     /// Run cleanup tasks.
-    fn cleanup(&self, tasks: &[CleanupTask])
-        -> impl core::future::Future<Output = Result<(), GraphileWorkerError>> + Send;
+    fn cleanup(
+        &self,
+        tasks: &[CleanupTask],
+    ) -> impl core::future::Future<Output = Result<(), GraphileWorkerError>> + Send;
 
     /// Run migrations for the schema.
     fn migrate(&self) -> impl core::future::Future<Output = Result<(), MigrateError>> + Send;
@@ -91,9 +97,7 @@ impl WorkerContextExt for WorkerContext {
         self.utils().remove_job(job_key).await
     }
 
-    async fn complete_jobs(&self, ids: &[i64])
-        -> Result<Vec<DbJob>, GraphileWorkerError>
-    {
+    async fn complete_jobs(&self, ids: &[i64]) -> Result<Vec<DbJob>, GraphileWorkerError> {
         self.utils().complete_jobs(ids).await
     }
 
@@ -113,16 +117,11 @@ impl WorkerContextExt for WorkerContext {
         self.utils().reschedule_jobs(ids, options).await
     }
 
-    async fn force_unlock_workers(
-        &self,
-        worker_ids: &[&str],
-    ) -> Result<(), GraphileWorkerError> {
+    async fn force_unlock_workers(&self, worker_ids: &[&str]) -> Result<(), GraphileWorkerError> {
         self.utils().force_unlock_workers(worker_ids).await
     }
 
-    async fn cleanup(&self, tasks: &[CleanupTask])
-        -> Result<(), GraphileWorkerError>
-    {
+    async fn cleanup(&self, tasks: &[CleanupTask]) -> Result<(), GraphileWorkerError> {
         self.utils().cleanup(tasks).await
     }
 

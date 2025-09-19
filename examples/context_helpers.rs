@@ -1,7 +1,9 @@
 use std::str::FromStr;
 
 use chrono::{offset::Utc, Duration};
-use graphile_worker::{IntoTaskHandlerResult, JobSpecBuilder, WorkerContext, WorkerContextExt, WorkerOptions};
+use graphile_worker::{
+    IntoTaskHandlerResult, JobSpecBuilder, WorkerContext, WorkerContextExt, WorkerOptions,
+};
 use graphile_worker_task_handler::TaskHandler;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgConnectOptions;
@@ -34,7 +36,9 @@ impl TaskHandler for SendWs {
 
         // 2) schedule a follow-up check in 10 seconds using the new helpers
         ctx.add_job(
-            CheckWs { request_id: self.request_id.clone() },
+            CheckWs {
+                request_id: self.request_id.clone(),
+            },
             JobSpecBuilder::new()
                 .run_at(Utc::now() + Duration::seconds(10))
                 .build(),
@@ -87,7 +91,9 @@ async fn main() {
     let utils = worker.create_utils();
     utils
         .add_job(
-            SendWs { request_id: "abc-123".to_string() },
+            SendWs {
+                request_id: "abc-123".to_string(),
+            },
             JobSpecBuilder::new().build(),
         )
         .await

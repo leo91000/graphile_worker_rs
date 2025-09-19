@@ -365,6 +365,12 @@ impl StaticCounter {
     }
 }
 
+impl Default for StaticCounter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub async fn enable_logs() {
     static ONCE: OnceCell<()> = OnceCell::const_new();
 
