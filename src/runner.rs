@@ -447,6 +447,7 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
     let worker_ctx = WorkerContext::new(
         job.payload().clone(),
         worker.pg_pool().clone(),
+        worker.escaped_schema().clone(),
         job.clone(),
         worker.worker_id().clone(),
         worker.extensions().clone(),

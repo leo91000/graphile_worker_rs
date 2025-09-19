@@ -25,6 +25,8 @@ pub struct WorkerContext {
     payload: Value,
     /// PostgreSQL connection pool for database access during job processing
     pg_pool: PgPool,
+    /// SQL-escaped schema name where Graphile Worker tables are located
+    escaped_schema: String,
     /// The complete job record with all metadata
     job: Job,
     /// Unique identifier of the worker processing this job
@@ -40,6 +42,7 @@ impl WorkerContext {
     ///
     /// * `payload` - The job's JSON payload data
     /// * `pg_pool` - PostgreSQL connection pool
+    /// * `escaped_schema` - SQL-escaped schema name used by the worker
     /// * `job` - The complete job record
     /// * `worker_id` - Identifier for the worker processing this job
     /// * `extensions` - Custom application state/extensions
@@ -50,6 +53,7 @@ impl WorkerContext {
     pub fn new(
         payload: Value,
         pg_pool: PgPool,
+        escaped_schema: String,
         job: Job,
         worker_id: String,
         extensions: ReadOnlyExtensions,
@@ -57,6 +61,7 @@ impl WorkerContext {
         WorkerContext {
             payload,
             pg_pool,
+            escaped_schema,
             job,
             worker_id,
             extensions,
