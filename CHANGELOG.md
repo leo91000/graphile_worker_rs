@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.8.6](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.5...graphile_worker-v0.8.6) - 2025-09-19
+
+### Added
+
+- WorkerContext helpers and schema threading
+
+### Other
+
+- format + clippy cleanups
+- *(deps)* update rust crate serde to 1.0.225 ([#297](https://github.com/leo91000/graphile_worker_rs/pull/297))
+- *(deps)* update all non-major dependencies ([#296](https://github.com/leo91000/graphile_worker_rs/pull/296))
+- *(deps)* update all non-major dependencies ([#295](https://github.com/leo91000/graphile_worker_rs/pull/295))
+- *(deps)* update rust crate chrono to 0.4.42 ([#294](https://github.com/leo91000/graphile_worker_rs/pull/294))
+- *(deps)* update rust crate uuid to 1.18.1 ([#292](https://github.com/leo91000/graphile_worker_rs/pull/292))
+- *(deps)* update rust crate tracing-subscriber to 0.3.20 ([#291](https://github.com/leo91000/graphile_worker_rs/pull/291))
+- *(deps)* update actions/checkout action to v5
+- *(deps)* update rust crate thiserror to 2.0.16 ([#290](https://github.com/leo91000/graphile_worker_rs/pull/290))
+- *(deps)* update rust crate cfg-if to 1.0.3 ([#289](https://github.com/leo91000/graphile_worker_rs/pull/289))
+- *(deps)* update rust crate serde_json to 1.0.143 ([#288](https://github.com/leo91000/graphile_worker_rs/pull/288))
+- *(deps)* update rust crate thiserror to 2.0.15 ([#286](https://github.com/leo91000/graphile_worker_rs/pull/286))
+- *(deps)* update rust crate syn to 2.0.106 ([#285](https://github.com/leo91000/graphile_worker_rs/pull/285))
+- *(deps)* update rust crate syn to 2.0.105 ([#284](https://github.com/leo91000/graphile_worker_rs/pull/284))
+- *(deps)* update all non-major dependencies ([#283](https://github.com/leo91000/graphile_worker_rs/pull/283))
+- *(deps)* update rust crate uuid to 1.18.0 ([#282](https://github.com/leo91000/graphile_worker_rs/pull/282))
+- *(deps)* update all non-major dependencies ([#281](https://github.com/leo91000/graphile_worker_rs/pull/281))
+- *(deps)* update rust crate tokio to 1.47.0 ([#280](https://github.com/leo91000/graphile_worker_rs/pull/280))
+- *(deps)* update rust crate rand to 0.9.2 ([#278](https://github.com/leo91000/graphile_worker_rs/pull/278))
+- *(deps)* update rust crate serde_json to 1.0.141 ([#277](https://github.com/leo91000/graphile_worker_rs/pull/277))
+- *(deps)* update rust crate tokio to 1.46.1 ([#276](https://github.com/leo91000/graphile_worker_rs/pull/276))
+- *(deps)* update rust crate tokio to 1.46.0 ([#275](https://github.com/leo91000/graphile_worker_rs/pull/275))
+- *(deps)* update rust crate syn to 2.0.104 ([#274](https://github.com/leo91000/graphile_worker_rs/pull/274))
+- *(deps)* update rust crate getset to 0.1.6 ([#273](https://github.com/leo91000/graphile_worker_rs/pull/273))
+- *(deps)* update rust crate syn to 2.0.103 ([#271](https://github.com/leo91000/graphile_worker_rs/pull/271))
+
 ## [0.8.5](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.4...graphile_worker-v0.8.5) - 2025-06-10
 
 ### Added
