@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.7](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.6...graphile_worker-v0.8.7) - 2025-09-29
+
+### Other
+
+- *(deps)* update all non-major dependencies ([#304](https://github.com/leo91000/graphile_worker_rs/pull/304))
+- *(deps)* update rust crate serde to 1.0.228 ([#303](https://github.com/leo91000/graphile_worker_rs/pull/303))
+- *(deps)* update rust crate serde to 1.0.227 ([#302](https://github.com/leo91000/graphile_worker_rs/pull/302))
+- *(deps)* update rust crate serde to 1.0.226 ([#301](https://github.com/leo91000/graphile_worker_rs/pull/301))
+- *(deps)* update rust crate anyhow to 1.0.100 ([#300](https://github.com/leo91000/graphile_worker_rs/pull/300))
+
 ## [0.8.6](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.5...graphile_worker-v0.8.6) - 2025-09-19
 
 ### Added
