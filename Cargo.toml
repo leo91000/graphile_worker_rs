@@ -22,7 +22,7 @@ json5 = "0.4.1"
 nom = "8.0.0"
 serde_json = "1.0.145"
 serde_qs = "0.15.0"
-thiserror = "2.0.16"
+thiserror = "2.0.17"
 chrono = { version = "0.4.42", features = ["serde"] }
 sqlx = { version = "0.8.6", features = [
   "chrono",
@@ -38,7 +38,7 @@ anyhow = "1.0.100"
 cfg-if = "1.0.3"
 futures = "0.3.31"
 syn = "2.0.106"
-quote = "1.0.40"
+quote = "1.0.41"
 indoc = "2.0.6"
 derive_builder = "0.20.2"
 
@@ -81,7 +81,7 @@ sqlx = { version = "0.8.6", features = [
   "macros",
   "runtime-tokio",
 ], default-features = false }
-thiserror = "2.0.16"
+thiserror = "2.0.17"
 tracing = "0.1.41"
 tokio = { version = "1.47.1", features = ["macros", "signal"] }
 rand = "0.9.2"
