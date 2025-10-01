@@ -1,0 +1,10 @@
+[package]
+name = "graphile_worker_hooks"
+version = "0.1.0"
+edition = "2021"
+license-file = "../../LICENSE.md"
+description = "Lifecycle hooks for Graphile Worker"
+repository = "https://github.com/leo91000/graphile_worker"
+
+[dependencies]
+async-trait = "0.1.85"

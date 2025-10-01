@@ -7,6 +7,7 @@ use graphile_worker_crontab_parser::{parse_crontab, CrontabParseError};
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_ctx::WorkerContext;
 use graphile_worker_extensions::Extensions;
+use graphile_worker_hooks::JobLifecycleHooks;
 use graphile_worker_migrations::migrate;
 use graphile_worker_shutdown_signal::shutdown_signal;
 use graphile_worker_task_handler::{run_task_from_worker_ctx, TaskHandler};
@@ -15,6 +16,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 
@@ -50,10 +52,10 @@ use thiserror::Error;
 ///         .define_job::<MyTask>()
 ///         .init()
 ///         .await?;
-///     
+///
 ///     // Start the worker
 ///     worker.run().await?;
-///     
+///
 ///     Ok(())
 /// }
 /// ```
@@ -91,6 +93,9 @@ pub struct WorkerOptions {
 
     /// Custom application state and dependencies
     extensions: Extensions,
+
+    /// Optional lifecycle hooks for observability
+    hooks: Option<Arc<dyn JobLifecycleHooks>>,
 }
 
 /// Errors that can occur when initializing a worker.
@@ -198,6 +203,7 @@ impl WorkerOptions {
             use_local_time: self.use_local_time,
             shutdown_signal: shutdown_signal(),
             extensions: self.extensions.into(),
+            hooks: self.hooks,
         };
 
         Ok(worker)
@@ -415,6 +421,39 @@ impl WorkerOptions {
     /// across multiple worker instances, especially in distributed deployments.
     pub fn use_local_time(mut self, value: bool) -> Self {
         self.use_local_time = value;
+        self
+    }
+
+    /// Sets lifecycle hooks for observability and metrics collection.
+    ///
+    /// Hooks are called at key points in the job lifecycle:
+    /// - When a job starts execution
+    /// - When a job completes successfully
+    /// - When a job fails
+    ///
+    /// This is useful for metrics collection, logging, tracing, and other
+    /// cross-cutting concerns.
+    ///
+    /// # Arguments
+    /// * `hooks` - An implementation of the `JobLifecycleHooks` trait
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use graphile_worker::WorkerOptions;
+    /// # use graphile_worker_hooks::{JobLifecycleHooks, LifeCycleEvent};
+    /// # use async_trait::async_trait;
+    /// # struct MetricsHooks;
+    /// # #[async_trait]
+    /// # impl JobLifecycleHooks for MetricsHooks {
+    /// #     async fn on_event(&self, event: LifeCycleEvent) {}
+    /// # }
+    ///
+    /// let hook = MetricsHooks;
+    /// let options = WorkerOptions::default()
+    ///     .with_hooks(hook);
+    /// ```
+    pub fn with_hooks<H: JobLifecycleHooks + 'static>(mut self, hooks: H) -> Self {
+        self.hooks = Some(Arc::new(hooks));
         self
     }
 

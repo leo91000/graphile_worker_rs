@@ -41,6 +41,7 @@ syn = "2.0.108"
 quote = "1.0.41"
 indoc = "2.0.7"
 derive_builder = "0.20.2"
+async-trait = "0.1.85"
 
 [features]
 default = ["tls-rustls"]
@@ -68,6 +69,7 @@ graphile_worker_migrations = { path = "./crates/migrations", version = "0.4.9", 
 graphile_worker_task_handler = { path = "./crates/task_handler", version = "0.5.7" }
 graphile_worker_shutdown_signal = { path = "./crates/shutdown_signal", version = "0.3.7" }
 graphile_worker_extensions = { path = "./crates/extensions", version = "0.1.5" }
+graphile_worker_hooks = { path = "./crates/hooks", version = "0.1.0" }
 chrono = { version = "0.4.42", features = ["serde"] }
 futures = "0.3.31"
 getset = "0.1.6"
@@ -94,3 +96,4 @@ derive_builder = "0.20.2"
 tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread"] }
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 uuid = { version = "1.18.1", features = ["v7"] }
+async-trait = "0.1.85"
