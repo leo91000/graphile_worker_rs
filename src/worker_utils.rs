@@ -114,6 +114,7 @@ pub struct RescheduleJobOptions {
 ///
 /// This is the primary interface for adding jobs to the queue, managing existing jobs,
 /// performing maintenance tasks, and migrating the database schema.
+#[derive(Clone)]
 pub struct WorkerUtils {
     /// Database connection pool
     pg_pool: PgPool,
