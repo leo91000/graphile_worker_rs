@@ -24,11 +24,12 @@ use graphile_worker_lifecycle_hooks::{
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
 use tokio::sync::Notify;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn, Instrument, Span};
 
 use crate::builder::WorkerOptions;
 use crate::sql::complete_job::complete_job;
 use crate::{sql::fail_job::fail_job, streams::StreamSource};
+use crate::tracing::link_to_job_create_span;
 
 /// Type alias for task handler functions.
 ///
@@ -589,7 +590,19 @@ enum RunJobError {
 /// A `Result` indicating whether the job was successfully executed:
 /// - `Ok(())` if the task handler completed successfully
 /// - `Err(RunJobError)` if an error occurred during execution
+#[tracing::instrument(
+    "run_job",
+    skip(job, worker, source),
+    fields(
+        job_id = job.id(),
+        messaging.system = "graphile-worker",
+        messaging.operation.name = "run_job",
+        messaging.destination.name = tracing::field::Empty,
+        otel.name = tracing::field::Empty
+    )
+)]
 async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<(), RunJobError> {
+    link_to_job_create_span(job.payload().clone());
     let task_id = job.task_id();
 
     // Look up the task identifier (string) from the task ID (integer)
@@ -597,6 +610,10 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
         .task_details()
         .get(task_id)
         .ok_or_else(|| RunJobError::IdentifierNotFound(*task_id))?;
+
+    let span = Span::current();
+    span.record("otel.name", task_identifier.as_str());
+    span.record("messaging.destination.name", task_identifier.as_str());
 
     // Find the handler function for this task identifier
     let task_fn = worker
@@ -624,7 +641,7 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
     let start = Instant::now();
 
     // Spawn the task on a separate Tokio task
-    let job_task = tokio::spawn(task_fut);
+    let job_task = tokio::spawn(task_fut.instrument(span));
     let abort_handle = job_task.abort_handle();
 
     // Set up a shutdown handler that waits for the shutdown signal

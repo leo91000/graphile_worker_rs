@@ -5,6 +5,7 @@ use sqlx::{query_as, PgExecutor};
 use tracing::info;
 
 /// Add a job to the queue
+#[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn add_job(
     executor: impl for<'e> PgExecutor<'e>,
     escaped_schema: &str,

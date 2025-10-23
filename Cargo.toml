@@ -54,6 +54,14 @@ tls-rustls = [
   "graphile_worker_crontab_runner/tls-rustls",
   "graphile_worker_migrations/tls-rustls",
 ]
+opentelemetry_0_30 = [
+    "opentelemetry-30",
+    "tracing-opentelemetry-30",
+]
+opentelemetry_0_31 = [
+    "opentelemetry",
+    "tracing-opentelemetry",
+]
 # For now we don't support async std
 # runtime-async-std-rustls = ["sqlx/runtime-async-std-rustls"]
 # runtime-async-std-native-tls = ["sqlx/runtime-async-std-native-tls"]
@@ -91,6 +99,10 @@ hex = "0.4.3"
 cfg-if = "1.0.4"
 indoc = "2.0.7"
 derive_builder = "0.20.2"
+opentelemetry-30 = { package = "opentelemetry", version = "0.30", optional = true }
+opentelemetry = { version = "0.31", optional = true }
+tracing-opentelemetry-30 = { package = "tracing-opentelemetry", version = "0.31", optional = true }
+tracing-opentelemetry = { version = "0.32", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread"] }

@@ -34,6 +34,7 @@ impl From<Vec<TaskRow>> for TaskDetails {
     }
 }
 
+#[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn get_tasks_details<'e>(
     executor: impl PgExecutor<'e> + Clone,
     escaped_schema: &str,

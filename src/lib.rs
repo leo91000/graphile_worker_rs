@@ -54,6 +54,7 @@ pub mod utils;
 pub mod context_ext;
 /// Utility functions for job management
 pub mod worker_utils;
+mod tracing;
 
 pub use crate::job_spec::*;
 pub use graphile_worker_crontab_parser::parse_crontab;
