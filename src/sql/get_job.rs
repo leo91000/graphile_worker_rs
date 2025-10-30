@@ -39,8 +39,7 @@ pub async fn get_job<'e>(
                             locked_at = now()
                         from j
                         where jobs.id = j.id
-                        returning jobs.*,
-                            (select queue_name from {escaped_schema}._private_job_queues where id = jobs.job_queue_id) as queue_name
+                        returning jobs.*
         "#
     );
 

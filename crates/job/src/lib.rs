@@ -16,9 +16,6 @@ pub struct DbJob {
     id: i64,
     /// Foreign key to job_queues table if this job is part of a queue
     job_queue_id: Option<i32>,
-    /// Queue name if this job is part of a queue (not stored in _private_jobs table)
-    #[sqlx(default)]
-    queue_name: Option<String>,
     /// The JSON payload/data associated with this job
     payload: serde_json::Value,
     /// Priority level (lower number means higher priority)
@@ -62,8 +59,6 @@ pub struct Job {
     id: i64,
     /// Foreign key to job_queues table if this job is part of a queue
     job_queue_id: Option<i32>,
-    /// Queue name if this job is part of a queue
-    queue_name: Option<String>,
     /// The JSON payload/data associated with this job
     payload: serde_json::Value,
     /// Priority level (lower number means higher priority)
@@ -102,7 +97,6 @@ impl From<Job> for DbJob {
         DbJob {
             id: job.id,
             job_queue_id: job.job_queue_id,
-            queue_name: job.queue_name,
             payload: job.payload,
             priority: job.priority,
             run_at: job.run_at,
@@ -139,7 +133,6 @@ impl Job {
         Job {
             id: db_job.id,
             job_queue_id: db_job.job_queue_id,
-            queue_name: db_job.queue_name,
             payload: db_job.payload,
             priority: db_job.priority,
             run_at: db_job.run_at,
@@ -168,7 +161,6 @@ mod tests {
         let db_job = DbJob {
             id: 1,
             job_queue_id: Some(1),
-            queue_name: Some("test_queue".to_string()),
             payload: serde_json::json!({}),
             priority: 1,
             run_at: Utc::now(),
@@ -205,7 +197,6 @@ mod tests {
         let job = Job {
             id: 1,
             job_queue_id: Some(1),
-            queue_name: Some("test_queue".to_string()),
             payload: serde_json::json!({}),
             priority: 1,
             run_at: Utc::now(),

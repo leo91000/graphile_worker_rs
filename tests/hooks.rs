@@ -1,9 +1,10 @@
-use async_trait::async_trait;
 use graphile_worker::{
     IntoTaskHandlerResult, JobCompleted, JobFailed, JobLifecycleHooks, JobSpec, JobStarted,
     LifeCycleEvent, TaskHandler, Worker, WorkerContext,
 };
 use serde::{Deserialize, Serialize};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use tokio::{
     sync::Mutex,
@@ -34,20 +35,22 @@ impl TestHooks {
     }
 }
 
-#[async_trait]
 impl JobLifecycleHooks for TestHooks {
-    async fn on_event(&self, event: LifeCycleEvent) {
-        match event {
-            LifeCycleEvent::Started(started) => {
-                self.events.lock().await.started.push(started);
+    fn on_event(&self, event: LifeCycleEvent) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+        let events = self.events.clone();
+        Box::pin(async move {
+            match event {
+                LifeCycleEvent::Started(started) => {
+                    events.lock().await.started.push(started);
+                }
+                LifeCycleEvent::Completed(completed) => {
+                    events.lock().await.completed.push(completed);
+                }
+                LifeCycleEvent::Failed(failed) => {
+                    events.lock().await.failed.push(failed);
+                }
             }
-            LifeCycleEvent::Completed(completed) => {
-                self.events.lock().await.completed.push(completed);
-            }
-            LifeCycleEvent::Failed(failed) => {
-                self.events.lock().await.failed.push(failed);
-            }
-        }
+        })
     }
 }
 

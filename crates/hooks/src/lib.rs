@@ -1,4 +1,5 @@
-use async_trait::async_trait;
+use std::future::Future;
+use std::pin::Pin;
 use std::time::Duration;
 
 /// A variant of this enum is emitted at each lifecycle point.
@@ -19,8 +20,6 @@ pub struct JobStarted {
     pub job_id: i64,
     /// Task identifier (e.g., "send_email")
     pub task_identifier: String,
-    /// Optional queue name for serialized execution
-    pub queue_name: Option<String>,
     /// Job priority (higher values = higher priority)
     pub priority: i16,
     /// Number of execution attempts (1 for first attempt)
@@ -34,8 +33,6 @@ pub struct JobCompleted {
     pub job_id: i64,
     /// Task identifier (e.g., "send_email")
     pub task_identifier: String,
-    /// Optional queue name for serialized execution
-    pub queue_name: Option<String>,
     /// Duration of job execution
     pub duration: Duration,
     /// Number of execution attempts (includes retries)
@@ -49,8 +46,6 @@ pub struct JobFailed {
     pub job_id: i64,
     /// Task identifier (e.g., "send_email")
     pub task_identifier: String,
-    /// Optional queue name for serialized execution
-    pub queue_name: Option<String>,
     /// Error message from the failed execution
     pub error: String,
     /// Duration of job execution before failure
@@ -73,32 +68,34 @@ pub struct JobFailed {
 ///
 /// ```rust
 /// use graphile_worker_hooks::{JobLifecycleHooks, LifeCycleEvent};
-/// use async_trait::async_trait;
+/// use std::future::Future;
+/// use std::pin::Pin;
 ///
 /// struct MetricsHooks;
 ///
-/// #[async_trait]
 /// impl JobLifecycleHooks for MetricsHooks {
-///     async fn on_event(&self, event: LifeCycleEvent) {
-///         match event {
-///             /// This hook is called immediately before the task handler runs.
-///             LifeCycleEvent::Started(started) => todo!(),
-///             /// Called when a job completes successfully, after the task handler
-///             /// returns Ok and before the job is marked completed in the database.
-///             LifeCycleEvent::Completed(completed) => todo!(),
-///             /// Called when a job fails, after the task handler returns an error
-///             /// and before the job is marked as failed or scheduled for retry.
-///             LifeCycleEvent::Failed(failed) => todo!(),
-///         }
+///     fn on_event(&self, event: LifeCycleEvent) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+///         Box::pin(async move {
+///             match event {
+///                 /// This hook is called immediately before the task handler runs.
+///                 LifeCycleEvent::Started(started) => todo!(),
+///                 /// Called when a job completes successfully, after the task handler
+///                 /// returns Ok and before the job is marked completed in the database.
+///                 LifeCycleEvent::Completed(completed) => todo!(),
+///                 /// Called when a job fails, after the task handler returns an error
+///                 /// and before the job is marked as failed or scheduled for retry.
+///                 LifeCycleEvent::Failed(failed) => todo!(),
+///             }
+///         })
 ///     }
 /// }
 /// ```
-#[async_trait]
 pub trait JobLifecycleHooks: Send + Sync {
     /// Called on any job lifecycle event.
-    async fn on_event(&self, _event: LifeCycleEvent) {}
+    fn on_event(&self, _event: LifeCycleEvent) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+        Box::pin(async {})
+    }
 }
 
 /// Unit type implementation provides zero-cost abstraction when hooks are not used.
-#[async_trait]
 impl JobLifecycleHooks for () {}

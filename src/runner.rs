@@ -479,7 +479,6 @@ async fn run_job(
             .on_event(LifeCycleEvent::Started(JobStarted {
                 job_id: *job.id(),
                 task_identifier: task_identifier.clone(),
-                queue_name: job.queue_name().clone(),
                 priority: *job.priority(),
                 attempts: *job.attempts(),
             }))
@@ -592,7 +591,6 @@ async fn release_job(
                     .on_event(LifeCycleEvent::Completed(JobCompleted {
                         job_id: *job.id(),
                         task_identifier: task_identifier.clone(),
-                        queue_name: job.queue_name().clone(),
                         duration,
                         attempts: *job.attempts(),
                     }))
@@ -622,7 +620,6 @@ async fn release_job(
                     .on_event(LifeCycleEvent::Failed(JobFailed {
                         job_id: *job.id(),
                         task_identifier: task_identifier.clone(),
-                        queue_name: job.queue_name().clone(),
                         error: format!("{e:?}"),
                         duration,
                         attempts: *job.attempts(),

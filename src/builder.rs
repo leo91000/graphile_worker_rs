@@ -441,11 +441,13 @@ impl WorkerOptions {
     /// ```no_run
     /// # use graphile_worker::WorkerOptions;
     /// # use graphile_worker_hooks::{JobLifecycleHooks, LifeCycleEvent};
-    /// # use async_trait::async_trait;
+    /// # use std::future::Future;
+    /// # use std::pin::Pin;
     /// # struct MetricsHooks;
-    /// # #[async_trait]
     /// # impl JobLifecycleHooks for MetricsHooks {
-    /// #     async fn on_event(&self, event: LifeCycleEvent) {}
+    /// #     fn on_event(&self, event: LifeCycleEvent) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+    /// #         Box::pin(async {})
+    /// #     }
     /// # }
     ///
     /// let hook = MetricsHooks;
