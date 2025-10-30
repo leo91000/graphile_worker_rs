@@ -20,6 +20,8 @@ pub struct JobStarted {
     pub job_id: i64,
     /// Task identifier (e.g., "send_email")
     pub task_identifier: String,
+    /// Optional queue name for serialized execution
+    pub queue_name: Option<String>,
     /// Job priority (higher values = higher priority)
     pub priority: i16,
     /// Number of execution attempts (1 for first attempt)
@@ -33,6 +35,8 @@ pub struct JobCompleted {
     pub job_id: i64,
     /// Task identifier (e.g., "send_email")
     pub task_identifier: String,
+    /// Optional queue name for serialized execution
+    pub queue_name: Option<String>,
     /// Duration of job execution
     pub duration: Duration,
     /// Number of execution attempts (includes retries)
@@ -46,6 +50,8 @@ pub struct JobFailed {
     pub job_id: i64,
     /// Task identifier (e.g., "send_email")
     pub task_identifier: String,
+    /// Optional queue name for serialized execution
+    pub queue_name: Option<String>,
     /// Error message from the failed execution
     pub error: String,
     /// Duration of job execution before failure

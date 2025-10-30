@@ -6,7 +6,7 @@ use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
 
 use crate::errors::GraphileWorkerError;
-use crate::sql::{get_job::get_job, task_identifiers::TaskDetails};
+use crate::sql::{get_job::get_job, queue_details::QueueDetails, task_identifiers::TaskDetails};
 use crate::streams::{job_signal_stream, job_stream};
 use crate::worker_utils::WorkerUtils;
 use futures::{try_join, StreamExt, TryStreamExt};
@@ -60,6 +60,8 @@ pub struct Worker {
     pub(crate) escaped_schema: String,
     /// Mapping of task IDs to their string identifiers
     pub(crate) task_details: TaskDetails,
+    /// Mapping of queue IDs to their queue names
+    pub(crate) queue_details: QueueDetails,
     /// List of job flags that this worker will not process
     pub(crate) forbidden_flags: Vec<String>,
     /// List of cron job definitions to be scheduled
@@ -475,10 +477,17 @@ async fn run_job(
 
     // Emit job started event, now that we have a valid job to start.
     if let Some(hooks) = &worker.hooks {
+        let queue_name = if let Some(queue_id) = job.job_queue_id() {
+            worker.queue_details().get(queue_id).await
+        } else {
+            None
+        };
+
         hooks
             .on_event(LifeCycleEvent::Started(JobStarted {
                 job_id: *job.id(),
                 task_identifier: task_identifier.clone(),
+                queue_name,
                 priority: *job.priority(),
                 attempts: *job.attempts(),
             }))
@@ -587,10 +596,17 @@ async fn release_job(
         Ok(_) => {
             // Emit job completed event
             if let Some(hooks) = &worker.hooks {
+                let queue_name = if let Some(queue_id) = job.job_queue_id() {
+                    worker.queue_details().get(queue_id).await
+                } else {
+                    None
+                };
+
                 hooks
                     .on_event(LifeCycleEvent::Completed(JobCompleted {
                         job_id: *job.id(),
                         task_identifier: task_identifier.clone(),
+                        queue_name,
                         duration,
                         attempts: *job.attempts(),
                     }))
@@ -616,10 +632,17 @@ async fn release_job(
 
             // Emit job failed event
             if let Some(hooks) = &worker.hooks {
+                let queue_name = if let Some(queue_id) = job.job_queue_id() {
+                    worker.queue_details().get(queue_id).await
+                } else {
+                    None
+                };
+
                 hooks
                     .on_event(LifeCycleEvent::Failed(JobFailed {
                         job_id: *job.id(),
                         task_identifier: task_identifier.clone(),
+                        queue_name,
                         error: format!("{e:?}"),
                         duration,
                         attempts: *job.attempts(),

@@ -1,4 +1,5 @@
 use crate::runner::WorkerFn;
+use crate::sql::queue_details::get_queues_details;
 use crate::sql::task_identifiers::get_tasks_details;
 use crate::utils::escape_identifier;
 use crate::Worker;
@@ -187,6 +188,8 @@ impl WorkerOptions {
         )
         .await?;
 
+        let queue_details = get_queues_details(pg_pool.clone(), escaped_schema.clone()).await?;
+
         let mut random_bytes = [0u8; 9];
         rand::rng().fill_bytes(&mut random_bytes);
 
@@ -198,6 +201,7 @@ impl WorkerOptions {
             pg_pool,
             escaped_schema,
             task_details,
+            queue_details,
             forbidden_flags: self.forbidden_flags,
             crontabs: self.crontabs.unwrap_or_default(),
             use_local_time: self.use_local_time,
