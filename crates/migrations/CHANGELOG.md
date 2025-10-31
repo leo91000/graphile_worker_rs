@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.9](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.8...graphile_worker_migrations-v0.4.9) - 2025-10-31
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.4.8](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.7...graphile_worker_migrations-v0.4.8) - 2025-09-19
 
 ### Other
