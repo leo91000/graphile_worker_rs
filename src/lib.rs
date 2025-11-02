@@ -65,4 +65,4 @@ pub use graphile_worker_task_handler::*;
 pub use builder::{WorkerBuildError, WorkerOptions};
 pub use context_ext::WorkerContextExt;
 pub use runner::Worker;
-pub use worker_utils::WorkerUtils;
+pub use worker_utils::{create_utils, create_utils_with_hooks, WorkerUtils};

@@ -1,8 +1,11 @@
+use futures::future::join_all;
+use graphile_worker_hooks::{JobCreated, JobCreating, LifeCycleEvent, LifeCycleHook};
 use graphile_worker_migrations::{migrate, MigrateError};
 use graphile_worker_task_handler::TaskHandler;
 use indoc::formatdoc;
 use serde::Serialize;
 use sqlx::{PgExecutor, PgPool};
+use std::sync::Arc;
 
 use crate::{errors::GraphileWorkerError, sql::add_job::add_job, DbJob, Job, JobSpec};
 
@@ -121,10 +124,13 @@ pub struct WorkerUtils {
 
     /// SQL-escaped schema name where Graphile Worker tables are located
     escaped_schema: String,
+
+    /// Lifecycle hooks for observability (executed concurrently)
+    hooks: Arc<Vec<Arc<dyn LifeCycleHook>>>,
 }
 
 impl WorkerUtils {
-    /// Creates a new instance of WorkerUtils.
+    /// Creates a new instance of WorkerUtils without hooks.
     ///
     /// # Arguments
     /// * `pg_pool` - PostgreSQL connection pool
@@ -136,6 +142,28 @@ impl WorkerUtils {
         Self {
             pg_pool,
             escaped_schema,
+            hooks: Arc::new(vec![]),
+        }
+    }
+
+    /// Creates a new instance of WorkerUtils with lifecycle hooks.
+    ///
+    /// # Arguments
+    /// * `pg_pool` - PostgreSQL connection pool
+    /// * `escaped_schema` - The escaped name of the schema where Graphile Worker tables are stored
+    /// * `hooks` - Lifecycle hooks to be called during job creation and execution
+    ///
+    /// # Returns
+    /// A new WorkerUtils instance
+    pub fn new_with_hooks(
+        pg_pool: PgPool,
+        escaped_schema: String,
+        hooks: Arc<Vec<Arc<dyn LifeCycleHook>>>,
+    ) -> Self {
+        Self {
+            pg_pool,
+            escaped_schema,
+            hooks,
         }
     }
 
@@ -177,14 +205,40 @@ impl WorkerUtils {
     ) -> Result<Job, GraphileWorkerError> {
         let identifier = T::IDENTIFIER;
         let payload = serde_json::to_value(payload)?;
-        add_job(
+
+        // Emit JobCreating hook
+        let hook_futures = self.hooks.iter().map(|hook| {
+            hook.on_event(LifeCycleEvent::Creating(JobCreating {
+                task_identifier: identifier.to_string(),
+                queue_name: spec.queue_name.clone(),
+                priority: spec.priority.unwrap_or(0),
+                payload: payload.clone(),
+                run_at: spec.run_at,
+            }))
+        });
+        join_all(hook_futures).await;
+
+        let job = add_job(
             &self.pg_pool,
             &self.escaped_schema,
             identifier,
             payload,
-            spec,
+            spec.clone(),
         )
-        .await
+        .await?;
+
+        // Emit JobCreated hook
+        let hook_futures = self.hooks.iter().map(|hook| {
+            hook.on_event(LifeCycleEvent::Created(JobCreated {
+                job_id: *job.id(),
+                task_identifier: identifier.to_string(),
+                queue_name: spec.queue_name.clone(),
+                priority: spec.priority.unwrap_or(0),
+            }))
+        });
+        join_all(hook_futures).await;
+
+        Ok(job)
     }
 
     /// Adds a job to the queue with a raw identifier and payload.
@@ -225,14 +279,40 @@ impl WorkerUtils {
         P: Serialize,
     {
         let payload = serde_json::to_value(payload)?;
-        add_job(
+
+        // Emit JobCreating hook
+        let hook_futures = self.hooks.iter().map(|hook| {
+            hook.on_event(LifeCycleEvent::Creating(JobCreating {
+                task_identifier: identifier.to_string(),
+                queue_name: spec.queue_name.clone(),
+                priority: spec.priority.unwrap_or(0),
+                payload: payload.clone(),
+                run_at: spec.run_at,
+            }))
+        });
+        join_all(hook_futures).await;
+
+        let job = add_job(
             &self.pg_pool,
             &self.escaped_schema,
             identifier,
             payload,
-            spec,
+            spec.clone(),
         )
-        .await
+        .await?;
+
+        // Emit JobCreated hook
+        let hook_futures = self.hooks.iter().map(|hook| {
+            hook.on_event(LifeCycleEvent::Created(JobCreated {
+                job_id: *job.id(),
+                task_identifier: identifier.to_string(),
+                queue_name: spec.queue_name.clone(),
+                priority: spec.priority.unwrap_or(0),
+            }))
+        });
+        join_all(hook_futures).await;
+
+        Ok(job)
     }
 
     /// Removes a job from the queue by its job key.
@@ -425,4 +505,36 @@ impl WorkerUtils {
         migrate(&self.pg_pool, &self.escaped_schema).await?;
         Ok(())
     }
+}
+
+/// Creates a WorkerUtils instance from a connection pool without lifecycle hooks.
+///
+/// This is a convenience function for creating a WorkerUtils instance with the
+/// default schema name and no lifecycle hooks.
+///
+/// # Arguments
+/// * `pool` - PostgreSQL connection pool
+///
+/// # Returns
+/// A new WorkerUtils instance
+pub fn create_utils(pool: PgPool) -> WorkerUtils {
+    create_utils_with_hooks(pool, Arc::new(vec![]))
+}
+
+/// Creates a WorkerUtils instance from a connection pool with lifecycle hooks.
+///
+/// This is a convenience function for creating a WorkerUtils instance with the
+/// default schema name and lifecycle hooks for observability.
+///
+/// # Arguments
+/// * `pool` - PostgreSQL connection pool
+/// * `hooks` - Lifecycle hooks to be called during job creation
+///
+/// # Returns
+/// A new WorkerUtils instance
+pub fn create_utils_with_hooks(
+    pool: PgPool,
+    hooks: Arc<Vec<Arc<dyn LifeCycleHook>>>,
+) -> WorkerUtils {
+    WorkerUtils::new_with_hooks(pool, "graphile_worker".to_string(), hooks)
 }

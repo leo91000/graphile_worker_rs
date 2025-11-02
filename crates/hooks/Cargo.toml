@@ -7,3 +7,5 @@ description = "Lifecycle hooks for Graphile Worker"
 repository = "https://github.com/leo91000/graphile_worker"
 
 [dependencies]
+chrono = "0.4"
+serde_json = "1.0"

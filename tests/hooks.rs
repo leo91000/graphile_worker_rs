@@ -1,6 +1,6 @@
 use graphile_worker::{
-    IntoTaskHandlerResult, JobCompleted, JobFailed, JobLifecycleHook, JobSpec, JobStarted,
-    LifeCycleEvent, TaskHandler, Worker, WorkerContext,
+    IntoTaskHandlerResult, JobCompleted, JobFailed, JobSpec, JobStarted, LifeCycleEvent,
+    LifeCycleHook, TaskHandler, Worker, WorkerContext,
 };
 use serde::{Deserialize, Serialize};
 use std::future::Future;
@@ -18,6 +18,8 @@ mod helpers;
 
 #[derive(Debug, Default, Clone)]
 struct HookEvents {
+    creating: Vec<graphile_worker::JobCreating>,
+    created: Vec<graphile_worker::JobCreated>,
     started: Vec<JobStarted>,
     completed: Vec<JobCompleted>,
     failed: Vec<JobFailed>,
@@ -35,7 +37,7 @@ impl TestHooks {
     }
 }
 
-impl JobLifecycleHook for TestHooks {
+impl LifeCycleHook for TestHooks {
     fn on_event(
         &self,
         event: LifeCycleEvent,
@@ -43,6 +45,12 @@ impl JobLifecycleHook for TestHooks {
         let events = self.events.clone();
         Box::pin(async move {
             match event {
+                LifeCycleEvent::Creating(creating) => {
+                    events.lock().await.creating.push(creating);
+                }
+                LifeCycleEvent::Created(created) => {
+                    events.lock().await.created.push(created);
+                }
                 LifeCycleEvent::Started(started) => {
                     events.lock().await.started.push(started);
                 }
@@ -127,6 +135,7 @@ async fn hooks_fire_for_successful_jobs() {
         let started = &events.started[0];
         assert_eq!(started.task_identifier, "success_job");
         assert_eq!(started.attempts, 1);
+        assert_eq!(started.payload["value"], 42, "Should have payload data");
 
         let completed = &events.completed[0];
         assert_eq!(completed.task_identifier, "success_job");

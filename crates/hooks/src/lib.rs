@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
@@ -5,12 +6,44 @@ use std::time::Duration;
 /// A variant of this enum is emitted at each lifecycle point.
 #[derive(Debug, Clone)]
 pub enum LifeCycleEvent {
+    /// Variant emitted when a job is being created, before database insert.
+    Creating(JobCreating),
+    /// Variant emitted after a job has been created and inserted into the database.
+    Created(JobCreated),
     /// Variant emitted when a job starts execution.
     Started(JobStarted),
     /// Variant emitted when a job completes successfully.
     Completed(JobCompleted),
     /// Variant emitted when a job fails.
     Failed(JobFailed),
+}
+
+/// Event emitted when a job is being created, before database insert.
+#[derive(Debug, Clone)]
+pub struct JobCreating {
+    /// Task identifier (e.g., "send_email")
+    pub task_identifier: String,
+    /// Optional queue name for serialized execution
+    pub queue_name: Option<String>,
+    /// Job priority (higher values = higher priority)
+    pub priority: i16,
+    /// Job payload as JSON value
+    pub payload: serde_json::Value,
+    /// Optional scheduled run time (None for immediate execution)
+    pub run_at: Option<DateTime<Utc>>,
+}
+
+/// Event emitted after a job has been created and inserted into the database.
+#[derive(Debug, Clone)]
+pub struct JobCreated {
+    /// Unique identifier assigned to the job
+    pub job_id: i64,
+    /// Task identifier (e.g., "send_email")
+    pub task_identifier: String,
+    /// Optional queue name for serialized execution
+    pub queue_name: Option<String>,
+    /// Job priority (higher values = higher priority)
+    pub priority: i16,
 }
 
 /// Event emitted when a job starts execution.
@@ -26,6 +59,8 @@ pub struct JobStarted {
     pub priority: i16,
     /// Number of execution attempts (1 for first attempt)
     pub attempts: i16,
+    /// Job payload as JSON value (useful for extracting trace context)
+    pub payload: serde_json::Value,
 }
 
 /// Event emitted when a job completes successfully.
@@ -75,17 +110,21 @@ pub struct JobFailed {
 /// # Example
 ///
 /// ```rust
-/// use graphile_worker_hooks::{JobLifecycleHook, LifeCycleEvent};
+/// use graphile_worker_hooks::{LifeCycleHook, LifeCycleEvent};
 /// use std::future::Future;
 /// use std::pin::Pin;
 ///
 /// struct MetricsHook;
 ///
-/// impl JobLifecycleHook for MetricsHook {
+/// impl LifeCycleHook for MetricsHook {
 ///     fn on_event(&self, event: LifeCycleEvent) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
 ///         Box::pin(async move {
 ///             match event {
-///                 /// This hook is called immediately before the task handler runs.
+///                 /// Called when a job is being created, before database insert.
+///                 LifeCycleEvent::Creating(creating) => todo!(),
+///                 /// Called after a job has been created and inserted.
+///                 LifeCycleEvent::Created(created) => todo!(),
+///                 /// Called immediately before the task handler runs.
 ///                 LifeCycleEvent::Started(started) => todo!(),
 ///                 /// Called when a job completes successfully, after the task handler
 ///                 /// returns Ok and before the job is marked completed in the database.
@@ -98,7 +137,7 @@ pub struct JobFailed {
 ///     }
 /// }
 /// ```
-pub trait JobLifecycleHook: Send + Sync {
+pub trait LifeCycleHook: Send + Sync {
     /// Called on any job lifecycle event.
     fn on_event(
         &self,
@@ -109,4 +148,4 @@ pub trait JobLifecycleHook: Send + Sync {
 }
 
 /// Unit type implementation provides zero-cost abstraction when hooks are not used.
-impl JobLifecycleHook for () {}
+impl LifeCycleHook for () {}

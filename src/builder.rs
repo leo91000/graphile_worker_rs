@@ -8,7 +8,7 @@ use graphile_worker_crontab_parser::{parse_crontab, CrontabParseError};
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_ctx::WorkerContext;
 use graphile_worker_extensions::Extensions;
-use graphile_worker_hooks::JobLifecycleHook;
+use graphile_worker_hooks::LifeCycleHook;
 use graphile_worker_migrations::migrate;
 use graphile_worker_shutdown_signal::shutdown_signal;
 use graphile_worker_task_handler::{run_task_from_worker_ctx, TaskHandler};
@@ -96,7 +96,7 @@ pub struct WorkerOptions {
     extensions: Extensions,
 
     /// Lifecycle hooks for observability (executed concurrently)
-    hooks: Vec<Arc<dyn JobLifecycleHook>>,
+    hooks: Vec<Arc<dyn LifeCycleHook>>,
 }
 
 /// Errors that can occur when initializing a worker.
@@ -442,16 +442,16 @@ impl WorkerOptions {
     /// cross-cutting concerns.
     ///
     /// # Arguments
-    /// * `hook` - An implementation of the `JobLifecycleHook` trait
+    /// * `hook` - An implementation of the `LifeCycleHook` trait
     ///
     /// # Example
     /// ```no_run
     /// # use graphile_worker::WorkerOptions;
-    /// # use graphile_worker_hooks::{JobLifecycleHook, LifeCycleEvent};
+    /// # use graphile_worker_hooks::{LifeCycleHook, LifeCycleEvent};
     /// # use std::future::Future;
     /// # use std::pin::Pin;
     /// # struct MetricsHook;
-    /// # impl JobLifecycleHook for MetricsHook {
+    /// # impl LifeCycleHook for MetricsHook {
     /// #     fn on_event(&self, event: LifeCycleEvent) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
     /// #         Box::pin(async {})
     /// #     }
@@ -461,7 +461,7 @@ impl WorkerOptions {
     /// let options = WorkerOptions::default()
     ///     .with_hook(hook);
     /// ```
-    pub fn with_hook<H: JobLifecycleHook + 'static>(mut self, hook: H) -> Self {
+    pub fn with_hook<H: LifeCycleHook + 'static>(mut self, hook: H) -> Self {
         self.hooks.push(Arc::new(hook));
         self
     }
@@ -473,16 +473,16 @@ impl WorkerOptions {
     /// All hooks execute concurrently for each lifecycle event.
     ///
     /// # Arguments
-    /// * `hooks` - An iterator of hooks implementing the `JobLifecycleHook` trait
+    /// * `hooks` - An iterator of hooks implementing the `LifeCycleHook` trait
     ///
     /// # Example
     /// ```no_run
     /// # use graphile_worker::WorkerOptions;
-    /// # use graphile_worker_hooks::{JobLifecycleHook, LifeCycleEvent};
+    /// # use graphile_worker_hooks::{LifeCycleHook, LifeCycleEvent};
     /// # use std::future::Future;
     /// # use std::pin::Pin;
     /// # struct MetricsHook { name: String }
-    /// # impl JobLifecycleHook for MetricsHook {
+    /// # impl LifeCycleHook for MetricsHook {
     /// #     fn on_event(&self, event: LifeCycleEvent) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
     /// #         Box::pin(async {})
     /// #     }
@@ -500,7 +500,7 @@ impl WorkerOptions {
     /// // .with_hook(MetricsHook)
     /// // .with_hook(LoggingHook)
     /// ```
-    pub fn with_hooks<H: JobLifecycleHook + 'static>(
+    pub fn with_hooks<H: LifeCycleHook + 'static>(
         mut self,
         hooks: impl IntoIterator<Item = H>,
     ) -> Self {

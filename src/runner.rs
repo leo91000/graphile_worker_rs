@@ -15,9 +15,7 @@ use graphile_worker_crontab_runner::{cron_main, ScheduleCronJobError};
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_ctx::WorkerContext;
 use graphile_worker_extensions::ReadOnlyExtensions;
-use graphile_worker_hooks::{
-    JobCompleted, JobFailed, JobLifecycleHook, JobStarted, LifeCycleEvent,
-};
+use graphile_worker_hooks::{JobCompleted, JobFailed, JobStarted, LifeCycleEvent, LifeCycleHook};
 use graphile_worker_job::Job;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
@@ -75,7 +73,7 @@ pub struct Worker {
     /// Extensions that can modify worker behavior
     pub(crate) extensions: ReadOnlyExtensions,
     /// Lifecycle hooks for observability (executed concurrently)
-    pub(crate) hooks: Vec<Arc<dyn JobLifecycleHook>>,
+    pub(crate) hooks: Vec<Arc<dyn LifeCycleHook>>,
 }
 
 /// Errors that can occur during worker runtime.
@@ -301,9 +299,13 @@ impl Worker {
     /// # Returns
     ///
     /// A new `WorkerUtils` instance configured with this worker's database connection
-    /// pool and schema.
+    /// pool and schema, with the same lifecycle hooks as the worker.
     pub fn create_utils(&self) -> WorkerUtils {
-        WorkerUtils::new(self.pg_pool.clone(), self.escaped_schema.clone())
+        WorkerUtils::new_with_hooks(
+            self.pg_pool.clone(),
+            self.escaped_schema.clone(),
+            Arc::new(self.hooks.clone()),
+        )
     }
 }
 
@@ -491,6 +493,7 @@ async fn run_job(
             queue_name: queue_name.clone(),
             priority: *job.priority(),
             attempts: *job.attempts(),
+            payload: job.payload().clone(),
         }))
     });
     join_all(hook_futures).await;
