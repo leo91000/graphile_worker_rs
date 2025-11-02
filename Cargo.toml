@@ -16,7 +16,7 @@ members = ["crates/*"]
 
 [workspace.dependencies]
 tokio = { version = "1.48.0" }
-tokio-util = { version = "0.7.16" }
+tokio-util = { version = "0.7.17" }
 serde = { version = "1.0.228", features = ["derive"] }
 json5 = "0.4.1"
 nom = "8.0.0"
