@@ -1,5 +1,5 @@
 use graphile_worker::{
-    IntoTaskHandlerResult, JobCompleted, JobFailed, JobLifecycleHooks, JobSpec, JobStarted,
+    IntoTaskHandlerResult, JobCompleted, JobFailed, JobLifecycleHook, JobSpec, JobStarted,
     LifeCycleEvent, TaskHandler, Worker, WorkerContext,
 };
 use serde::{Deserialize, Serialize};
@@ -35,8 +35,11 @@ impl TestHooks {
     }
 }
 
-impl JobLifecycleHooks for TestHooks {
-    fn on_event(&self, event: LifeCycleEvent) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+impl JobLifecycleHook for TestHooks {
+    fn on_event(
+        &self,
+        event: LifeCycleEvent,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
         let events = self.events.clone();
         Box::pin(async move {
             match event {
@@ -87,7 +90,7 @@ async fn hooks_fire_for_successful_jobs() {
                     .pg_pool(test_pool)
                     .concurrency(1)
                     .define_job::<SuccessJob>()
-                    .with_hooks(hooks)
+                    .with_hook(hooks)
                     .init()
                     .await
                     .expect("Failed to create worker")
@@ -169,7 +172,7 @@ async fn hooks_fire_for_failed_jobs() {
                     .pg_pool(test_pool)
                     .concurrency(1)
                     .define_job::<FailJob>()
-                    .with_hooks(hooks)
+                    .with_hook(hooks)
                     .init()
                     .await
                     .expect("Failed to create worker")
@@ -260,7 +263,7 @@ async fn hooks_fire_for_retried_jobs() {
                     .pg_pool(test_pool)
                     .concurrency(1)
                     .define_job::<RetryJob>()
-                    .with_hooks(hooks)
+                    .with_hook(hooks)
                     .init()
                     .await
                     .expect("Failed to create worker")

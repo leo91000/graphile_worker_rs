@@ -62,7 +62,7 @@ pub struct JobFailed {
     pub will_retry: bool,
 }
 
-/// Trait for implementing lifecycle hooks on job execution.
+/// Trait for implementing a lifecycle hook on job execution.
 ///
 /// This trait allows you to observe job execution lifecycle events for
 /// observability, metrics collection, logging, or other cross-cutting concerns.
@@ -70,17 +70,19 @@ pub struct JobFailed {
 /// Implement the single method, match on event, and handle the variants you are
 /// interested in. For example, you might emit metrics on each event.
 ///
+/// Multiple hooks can be registered and will execute concurrently for each event.
+///
 /// # Example
 ///
 /// ```rust
-/// use graphile_worker_hooks::{JobLifecycleHooks, LifeCycleEvent};
+/// use graphile_worker_hooks::{JobLifecycleHook, LifeCycleEvent};
 /// use std::future::Future;
 /// use std::pin::Pin;
 ///
-/// struct MetricsHooks;
+/// struct MetricsHook;
 ///
-/// impl JobLifecycleHooks for MetricsHooks {
-///     fn on_event(&self, event: LifeCycleEvent) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+/// impl JobLifecycleHook for MetricsHook {
+///     fn on_event(&self, event: LifeCycleEvent) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
 ///         Box::pin(async move {
 ///             match event {
 ///                 /// This hook is called immediately before the task handler runs.
@@ -96,12 +98,15 @@ pub struct JobFailed {
 ///     }
 /// }
 /// ```
-pub trait JobLifecycleHooks: Send + Sync {
+pub trait JobLifecycleHook: Send + Sync {
     /// Called on any job lifecycle event.
-    fn on_event(&self, _event: LifeCycleEvent) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+    fn on_event(
+        &self,
+        _event: LifeCycleEvent,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
         Box::pin(async {})
     }
 }
 
 /// Unit type implementation provides zero-cost abstraction when hooks are not used.
-impl JobLifecycleHooks for () {}
+impl JobLifecycleHook for () {}

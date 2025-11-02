@@ -8,7 +8,7 @@ use graphile_worker_crontab_parser::{parse_crontab, CrontabParseError};
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_ctx::WorkerContext;
 use graphile_worker_extensions::Extensions;
-use graphile_worker_hooks::JobLifecycleHooks;
+use graphile_worker_hooks::JobLifecycleHook;
 use graphile_worker_migrations::migrate;
 use graphile_worker_shutdown_signal::shutdown_signal;
 use graphile_worker_task_handler::{run_task_from_worker_ctx, TaskHandler};
@@ -95,8 +95,8 @@ pub struct WorkerOptions {
     /// Custom application state and dependencies
     extensions: Extensions,
 
-    /// Optional lifecycle hooks for observability
-    hooks: Option<Arc<dyn JobLifecycleHooks>>,
+    /// Lifecycle hooks for observability (executed concurrently)
+    hooks: Vec<Arc<dyn JobLifecycleHook>>,
 }
 
 /// Errors that can occur when initializing a worker.
@@ -428,38 +428,85 @@ impl WorkerOptions {
         self
     }
 
-    /// Sets lifecycle hooks for observability and metrics collection.
+    /// Adds a single lifecycle hook for observability and metrics collection.
     ///
     /// Hooks are called at key points in the job lifecycle:
     /// - When a job starts execution
     /// - When a job completes successfully
     /// - When a job fails
     ///
+    /// Multiple hooks can be registered by calling this method multiple times.
+    /// All hooks execute concurrently for each lifecycle event.
+    ///
     /// This is useful for metrics collection, logging, tracing, and other
     /// cross-cutting concerns.
     ///
     /// # Arguments
-    /// * `hooks` - An implementation of the `JobLifecycleHooks` trait
+    /// * `hook` - An implementation of the `JobLifecycleHook` trait
     ///
     /// # Example
     /// ```no_run
     /// # use graphile_worker::WorkerOptions;
-    /// # use graphile_worker_hooks::{JobLifecycleHooks, LifeCycleEvent};
+    /// # use graphile_worker_hooks::{JobLifecycleHook, LifeCycleEvent};
     /// # use std::future::Future;
     /// # use std::pin::Pin;
-    /// # struct MetricsHooks;
-    /// # impl JobLifecycleHooks for MetricsHooks {
-    /// #     fn on_event(&self, event: LifeCycleEvent) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+    /// # struct MetricsHook;
+    /// # impl JobLifecycleHook for MetricsHook {
+    /// #     fn on_event(&self, event: LifeCycleEvent) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
     /// #         Box::pin(async {})
     /// #     }
     /// # }
     ///
-    /// let hook = MetricsHooks;
+    /// let hook = MetricsHook;
     /// let options = WorkerOptions::default()
-    ///     .with_hooks(hook);
+    ///     .with_hook(hook);
     /// ```
-    pub fn with_hooks<H: JobLifecycleHooks + 'static>(mut self, hooks: H) -> Self {
-        self.hooks = Some(Arc::new(hooks));
+    pub fn with_hook<H: JobLifecycleHook + 'static>(mut self, hook: H) -> Self {
+        self.hooks.push(Arc::new(hook));
+        self
+    }
+
+    /// Adds multiple lifecycle hooks at once.
+    ///
+    /// This is a convenience method for adding multiple hooks of the same type.
+    /// For different hook types, chain multiple `.with_hook()` calls instead.
+    /// All hooks execute concurrently for each lifecycle event.
+    ///
+    /// # Arguments
+    /// * `hooks` - An iterator of hooks implementing the `JobLifecycleHook` trait
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use graphile_worker::WorkerOptions;
+    /// # use graphile_worker_hooks::{JobLifecycleHook, LifeCycleEvent};
+    /// # use std::future::Future;
+    /// # use std::pin::Pin;
+    /// # struct MetricsHook { name: String }
+    /// # impl JobLifecycleHook for MetricsHook {
+    /// #     fn on_event(&self, event: LifeCycleEvent) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+    /// #         Box::pin(async {})
+    /// #     }
+    /// # }
+    ///
+    /// // Add multiple hooks of the same type
+    /// let hooks = vec![
+    ///     MetricsHook { name: "metrics1".to_string() },
+    ///     MetricsHook { name: "metrics2".to_string() },
+    /// ];
+    /// let options = WorkerOptions::default()
+    ///     .with_hooks(hooks);
+    ///
+    /// // For different hook types, chain with_hook() calls:
+    /// // .with_hook(MetricsHook)
+    /// // .with_hook(LoggingHook)
+    /// ```
+    pub fn with_hooks<H: JobLifecycleHook + 'static>(
+        mut self,
+        hooks: impl IntoIterator<Item = H>,
+    ) -> Self {
+        for hook in hooks {
+            self.hooks.push(Arc::new(hook));
+        }
         self
     }
 

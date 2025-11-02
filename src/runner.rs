@@ -9,13 +9,15 @@ use crate::errors::GraphileWorkerError;
 use crate::sql::{get_job::get_job, queue_details::QueueDetails, task_identifiers::TaskDetails};
 use crate::streams::{job_signal_stream, job_stream};
 use crate::worker_utils::WorkerUtils;
-use futures::{try_join, StreamExt, TryStreamExt};
+use futures::{future::join_all, try_join, StreamExt, TryStreamExt};
 use getset::Getters;
 use graphile_worker_crontab_runner::{cron_main, ScheduleCronJobError};
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_ctx::WorkerContext;
 use graphile_worker_extensions::ReadOnlyExtensions;
-use graphile_worker_hooks::*;
+use graphile_worker_hooks::{
+    JobCompleted, JobFailed, JobLifecycleHook, JobStarted, LifeCycleEvent,
+};
 use graphile_worker_job::Job;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
@@ -72,8 +74,8 @@ pub struct Worker {
     pub(crate) shutdown_signal: ShutdownSignal,
     /// Extensions that can modify worker behavior
     pub(crate) extensions: ReadOnlyExtensions,
-    /// Optional lifecycle hooks for observability
-    pub(crate) hooks: Option<Arc<dyn JobLifecycleHooks>>,
+    /// Lifecycle hooks for observability (executed concurrently)
+    pub(crate) hooks: Vec<Arc<dyn JobLifecycleHook>>,
 }
 
 /// Errors that can occur during worker runtime.
@@ -476,23 +478,22 @@ async fn run_job(
     );
 
     // Emit job started event, now that we have a valid job to start.
-    if let Some(hooks) = &worker.hooks {
-        let queue_name = if let Some(queue_id) = job.job_queue_id() {
-            worker.queue_details().get(queue_id).await
-        } else {
-            None
-        };
+    let queue_name = if let Some(queue_id) = job.job_queue_id() {
+        worker.queue_details().get(queue_id).await
+    } else {
+        None
+    };
 
-        hooks
-            .on_event(LifeCycleEvent::Started(JobStarted {
-                job_id: *job.id(),
-                task_identifier: task_identifier.clone(),
-                queue_name,
-                priority: *job.priority(),
-                attempts: *job.attempts(),
-            }))
-            .await;
-    }
+    let hook_futures = worker.hooks.iter().map(|hook| {
+        hook.on_event(LifeCycleEvent::Started(JobStarted {
+            job_id: *job.id(),
+            task_identifier: task_identifier.clone(),
+            queue_name: queue_name.clone(),
+            priority: *job.priority(),
+            attempts: *job.attempts(),
+        }))
+    });
+    join_all(hook_futures).await;
 
     // Get the future that will execute the task
     let task_fut = task_fn(worker_ctx);
@@ -595,23 +596,22 @@ async fn release_job(
     match job_result {
         Ok(_) => {
             // Emit job completed event
-            if let Some(hooks) = &worker.hooks {
-                let queue_name = if let Some(queue_id) = job.job_queue_id() {
-                    worker.queue_details().get(queue_id).await
-                } else {
-                    None
-                };
+            let queue_name = if let Some(queue_id) = job.job_queue_id() {
+                worker.queue_details().get(queue_id).await
+            } else {
+                None
+            };
 
-                hooks
-                    .on_event(LifeCycleEvent::Completed(JobCompleted {
-                        job_id: *job.id(),
-                        task_identifier: task_identifier.clone(),
-                        queue_name,
-                        duration,
-                        attempts: *job.attempts(),
-                    }))
-                    .await;
-            }
+            let hook_futures = worker.hooks.iter().map(|hook| {
+                hook.on_event(LifeCycleEvent::Completed(JobCompleted {
+                    job_id: *job.id(),
+                    task_identifier: task_identifier.clone(),
+                    queue_name: queue_name.clone(),
+                    duration,
+                    attempts: *job.attempts(),
+                }))
+            });
+            join_all(hook_futures).await;
 
             // The job was successful - mark it as completed
             complete_job(
@@ -631,25 +631,24 @@ async fn release_job(
             let will_retry = job.attempts() < job.max_attempts();
 
             // Emit job failed event
-            if let Some(hooks) = &worker.hooks {
-                let queue_name = if let Some(queue_id) = job.job_queue_id() {
-                    worker.queue_details().get(queue_id).await
-                } else {
-                    None
-                };
+            let queue_name = if let Some(queue_id) = job.job_queue_id() {
+                worker.queue_details().get(queue_id).await
+            } else {
+                None
+            };
 
-                hooks
-                    .on_event(LifeCycleEvent::Failed(JobFailed {
-                        job_id: *job.id(),
-                        task_identifier: task_identifier.clone(),
-                        queue_name,
-                        error: format!("{e:?}"),
-                        duration,
-                        attempts: *job.attempts(),
-                        will_retry,
-                    }))
-                    .await;
-            }
+            let hook_futures = worker.hooks.iter().map(|hook| {
+                hook.on_event(LifeCycleEvent::Failed(JobFailed {
+                    job_id: *job.id(),
+                    task_identifier: task_identifier.clone(),
+                    queue_name: queue_name.clone(),
+                    error: format!("{e:?}"),
+                    duration,
+                    attempts: *job.attempts(),
+                    will_retry,
+                }))
+            });
+            join_all(hook_futures).await;
 
             if !will_retry {
                 // This was the last attempt - log as an error
