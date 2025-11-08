@@ -5,6 +5,7 @@ use crate::errors::GraphileWorkerError;
 
 use crate::Job;
 
+#[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn fail_job(
     executor: impl for<'e> PgExecutor<'e>,
     job: &Job,

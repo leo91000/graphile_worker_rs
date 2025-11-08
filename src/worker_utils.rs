@@ -3,8 +3,9 @@ use graphile_worker_task_handler::TaskHandler;
 use indoc::formatdoc;
 use serde::Serialize;
 use sqlx::{PgExecutor, PgPool};
-
+use tracing::Span;
 use crate::{errors::GraphileWorkerError, sql::add_job::add_job, DbJob, Job, JobSpec};
+use crate::tracing::add_tracing_info;
 
 /// Types of database cleanup tasks that can be performed on the Graphile Worker schema.
 ///
@@ -170,13 +171,29 @@ impl WorkerUtils {
     /// # Ok(())
     /// # }
     /// ```
+    #[tracing::instrument(
+        "add_job",
+        skip_all,
+        fields(
+            messaging.system = "graphile-worker",
+            messaging.operation.name = "add_job",
+            messaging.destination.name = tracing::field::Empty,
+            otel.name = tracing::field::Empty
+        )
+    )]
     pub async fn add_job<T: TaskHandler>(
         &self,
         payload: T,
         spec: JobSpec,
     ) -> Result<Job, GraphileWorkerError> {
         let identifier = T::IDENTIFIER;
-        let payload = serde_json::to_value(payload)?;
+        let mut payload = serde_json::to_value(payload)?;
+        add_tracing_info(&mut payload);
+
+        let span = Span::current();
+        span.record("otel.name", identifier);
+        span.record("messaging.destination.name", identifier);
+
         add_job(
             &self.pg_pool,
             &self.escaped_schema,
@@ -215,6 +232,16 @@ impl WorkerUtils {
     /// # Ok(())
     /// # }
     /// ```
+    #[tracing::instrument(
+        "add_raw_job",
+        skip_all,
+        fields(
+            messaging.system = "graphile-worker",
+            messaging.operation.name = "add_job",
+            messaging.destination.name = identifier,
+            otel.name = identifier
+        )
+    )]
     pub async fn add_raw_job<P>(
         &self,
         identifier: &str,
@@ -224,7 +251,9 @@ impl WorkerUtils {
     where
         P: Serialize,
     {
-        let payload = serde_json::to_value(payload)?;
+        let mut payload = serde_json::to_value(payload)?;
+        add_tracing_info(&mut payload);
+
         add_job(
             &self.pg_pool,
             &self.escaped_schema,
