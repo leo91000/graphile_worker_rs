@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.8](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.7...graphile_worker-v0.8.8) - 2025-11-10
+
+### Other
+
+- *(deps)* update rust crate syn to 2.0.110 ([#320](https://github.com/leo91000/graphile_worker_rs/pull/320))
+- *(deps)* update rust crate quote to 1.0.42 ([#319](https://github.com/leo91000/graphile_worker_rs/pull/319))
+- *(deps)* update rust crate syn to 2.0.109 ([#318](https://github.com/leo91000/graphile_worker_rs/pull/318))
+- *(deps)* update rust crate tokio-util to 0.7.17 ([#315](https://github.com/leo91000/graphile_worker_rs/pull/315))
+
 ## [0.8.7](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.6...graphile_worker-v0.8.7) - 2025-10-31
 
 ### Other
