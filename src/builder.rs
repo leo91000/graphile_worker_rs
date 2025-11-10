@@ -1,4 +1,5 @@
 use crate::runner::WorkerFn;
+use crate::sql::queue_details::get_queues_details;
 use crate::sql::task_identifiers::get_tasks_details;
 use crate::utils::escape_identifier;
 use crate::Worker;
@@ -7,6 +8,7 @@ use graphile_worker_crontab_parser::{parse_crontab, CrontabParseError};
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_ctx::WorkerContext;
 use graphile_worker_extensions::Extensions;
+use graphile_worker_hooks::LifeCycleHook;
 use graphile_worker_migrations::migrate;
 use graphile_worker_shutdown_signal::shutdown_signal;
 use graphile_worker_task_handler::{run_task_from_worker_ctx, TaskHandler};
@@ -15,6 +17,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 
@@ -50,10 +53,10 @@ use thiserror::Error;
 ///         .define_job::<MyTask>()
 ///         .init()
 ///         .await?;
-///     
+///
 ///     // Start the worker
 ///     worker.run().await?;
-///     
+///
 ///     Ok(())
 /// }
 /// ```
@@ -91,6 +94,9 @@ pub struct WorkerOptions {
 
     /// Custom application state and dependencies
     extensions: Extensions,
+
+    /// Lifecycle hooks for observability (executed concurrently)
+    hooks: Vec<Arc<dyn LifeCycleHook>>,
 }
 
 /// Errors that can occur when initializing a worker.
@@ -182,6 +188,8 @@ impl WorkerOptions {
         )
         .await?;
 
+        let queue_details = get_queues_details(pg_pool.clone(), escaped_schema.clone()).await?;
+
         let mut random_bytes = [0u8; 9];
         rand::rng().fill_bytes(&mut random_bytes);
 
@@ -193,11 +201,13 @@ impl WorkerOptions {
             pg_pool,
             escaped_schema,
             task_details,
+            queue_details,
             forbidden_flags: self.forbidden_flags,
             crontabs: self.crontabs.unwrap_or_default(),
             use_local_time: self.use_local_time,
             shutdown_signal: shutdown_signal(),
             extensions: self.extensions.into(),
+            hooks: self.hooks,
         };
 
         Ok(worker)
@@ -415,6 +425,88 @@ impl WorkerOptions {
     /// across multiple worker instances, especially in distributed deployments.
     pub fn use_local_time(mut self, value: bool) -> Self {
         self.use_local_time = value;
+        self
+    }
+
+    /// Adds a single lifecycle hook for observability and metrics collection.
+    ///
+    /// Hooks are called at key points in the job lifecycle:
+    /// - When a job starts execution
+    /// - When a job completes successfully
+    /// - When a job fails
+    ///
+    /// Multiple hooks can be registered by calling this method multiple times.
+    /// All hooks execute concurrently for each lifecycle event.
+    ///
+    /// This is useful for metrics collection, logging, tracing, and other
+    /// cross-cutting concerns.
+    ///
+    /// # Arguments
+    /// * `hook` - An implementation of the `LifeCycleHook` trait
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use graphile_worker::WorkerOptions;
+    /// # use graphile_worker_hooks::{LifeCycleHook, LifeCycleEvent};
+    /// # use std::future::Future;
+    /// # use std::pin::Pin;
+    /// # struct MetricsHook;
+    /// # impl LifeCycleHook for MetricsHook {
+    /// #     fn on_event(&self, event: LifeCycleEvent) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+    /// #         Box::pin(async {})
+    /// #     }
+    /// # }
+    ///
+    /// let hook = MetricsHook;
+    /// let options = WorkerOptions::default()
+    ///     .with_hook(hook);
+    /// ```
+    pub fn with_hook<H: LifeCycleHook + 'static>(mut self, hook: H) -> Self {
+        self.hooks.push(Arc::new(hook));
+        self
+    }
+
+    /// Adds multiple lifecycle hooks at once.
+    ///
+    /// This is a convenience method for adding multiple hooks of the same type.
+    /// For different hook types, chain multiple `.with_hook()` calls instead.
+    /// All hooks execute concurrently for each lifecycle event.
+    ///
+    /// # Arguments
+    /// * `hooks` - An iterator of hooks implementing the `LifeCycleHook` trait
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use graphile_worker::WorkerOptions;
+    /// # use graphile_worker_hooks::{LifeCycleHook, LifeCycleEvent};
+    /// # use std::future::Future;
+    /// # use std::pin::Pin;
+    /// # struct MetricsHook { name: String }
+    /// # impl LifeCycleHook for MetricsHook {
+    /// #     fn on_event(&self, event: LifeCycleEvent) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+    /// #         Box::pin(async {})
+    /// #     }
+    /// # }
+    ///
+    /// // Add multiple hooks of the same type
+    /// let hooks = vec![
+    ///     MetricsHook { name: "metrics1".to_string() },
+    ///     MetricsHook { name: "metrics2".to_string() },
+    /// ];
+    /// let options = WorkerOptions::default()
+    ///     .with_hooks(hooks);
+    ///
+    /// // For different hook types, chain with_hook() calls:
+    /// // .with_hook(MetricsHook)
+    /// // .with_hook(LoggingHook)
+    /// ```
+    pub fn with_hooks<H: LifeCycleHook + 'static>(
+        mut self,
+        hooks: impl IntoIterator<Item = H>,
+    ) -> Self {
+        for hook in hooks {
+            self.hooks.push(Arc::new(hook));
+        }
         self
     }
 

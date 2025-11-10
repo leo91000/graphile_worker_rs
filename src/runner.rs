@@ -1,19 +1,21 @@
 use std::fmt::Debug;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
 
 use crate::errors::GraphileWorkerError;
-use crate::sql::{get_job::get_job, task_identifiers::TaskDetails};
+use crate::sql::{get_job::get_job, queue_details::QueueDetails, task_identifiers::TaskDetails};
 use crate::streams::{job_signal_stream, job_stream};
 use crate::worker_utils::WorkerUtils;
-use futures::{try_join, StreamExt, TryStreamExt};
+use futures::{future::join_all, try_join, StreamExt, TryStreamExt};
 use getset::Getters;
 use graphile_worker_crontab_runner::{cron_main, ScheduleCronJobError};
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_ctx::WorkerContext;
 use graphile_worker_extensions::ReadOnlyExtensions;
+use graphile_worker_hooks::{JobCompleted, JobFailed, JobStarted, LifeCycleEvent, LifeCycleHook};
 use graphile_worker_job::Job;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
@@ -58,6 +60,8 @@ pub struct Worker {
     pub(crate) escaped_schema: String,
     /// Mapping of task IDs to their string identifiers
     pub(crate) task_details: TaskDetails,
+    /// Mapping of queue IDs to their queue names
+    pub(crate) queue_details: QueueDetails,
     /// List of job flags that this worker will not process
     pub(crate) forbidden_flags: Vec<String>,
     /// List of cron job definitions to be scheduled
@@ -68,6 +72,8 @@ pub struct Worker {
     pub(crate) shutdown_signal: ShutdownSignal,
     /// Extensions that can modify worker behavior
     pub(crate) extensions: ReadOnlyExtensions,
+    /// Lifecycle hooks for observability (executed concurrently)
+    pub(crate) hooks: Vec<Arc<dyn LifeCycleHook>>,
 }
 
 /// Errors that can occur during worker runtime.
@@ -293,9 +299,13 @@ impl Worker {
     /// # Returns
     ///
     /// A new `WorkerUtils` instance configured with this worker's database connection
-    /// pool and schema.
+    /// pool and schema, with the same lifecycle hooks as the worker.
     pub fn create_utils(&self) -> WorkerUtils {
-        WorkerUtils::new(self.pg_pool.clone(), self.escaped_schema.clone())
+        WorkerUtils::new_with_hooks(
+            self.pg_pool.clone(),
+            self.escaped_schema.clone(),
+            Arc::new(self.hooks.clone()),
+        )
     }
 }
 
@@ -379,11 +389,13 @@ async fn run_and_release_job<'a>(
     worker: &Worker,
     source: &StreamSource,
 ) -> Result<&'a Job, ProcessJobError> {
-    let job_result = run_job(job, worker, source).await;
-    release_job(job_result, job, worker).await.map_err(|e| {
-        error!("Release job error : {:?}", e);
-        e
-    })?;
+    let (job_result, duration) = run_job(job, worker, source).await;
+    release_job(job_result, job, worker, duration)
+        .await
+        .map_err(|e| {
+            error!("Release job error : {:?}", e);
+            e
+        })?;
     Ok(job)
 }
 
@@ -422,23 +434,37 @@ enum RunJobError {
 ///
 /// # Returns
 ///
-/// A `Result` indicating whether the job was successfully executed:
-/// - `Ok(())` if the task handler completed successfully
-/// - `Err(RunJobError)` if an error occurred during execution
-async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<(), RunJobError> {
+/// A tuple containing:
+/// - A `Result` indicating whether the job was successfully executed
+/// - The `Duration` of the job execution
+async fn run_job(
+    job: &Job,
+    worker: &Worker,
+    source: &StreamSource,
+) -> (Result<(), RunJobError>, Duration) {
     let task_id = job.task_id();
 
     // Look up the task identifier (string) from the task ID (integer)
-    let task_identifier = worker
+    let task_identifier_result = worker
         .task_details()
         .get(task_id)
-        .ok_or_else(|| RunJobError::IdentifierNotFound(*task_id))?;
+        .ok_or_else(|| RunJobError::IdentifierNotFound(*task_id));
+
+    let task_identifier = match task_identifier_result {
+        Ok(id) => id,
+        Err(e) => return (Err(e), Duration::from_secs(0)),
+    };
 
     // Find the handler function for this task identifier
-    let task_fn = worker
+    let task_fn_result = worker
         .jobs()
         .get(task_identifier)
-        .ok_or_else(|| RunJobError::FnNotFound(task_identifier.into()))?;
+        .ok_or_else(|| RunJobError::FnNotFound(task_identifier.into()));
+
+    let task_fn = match task_fn_result {
+        Ok(f) => f,
+        Err(e) => return (Err(e), Duration::from_secs(0)),
+    };
 
     debug!(source = ?source, job_id = job.id(), task_identifier, task_id, "Found task");
     let payload = job.payload().to_string();
@@ -452,6 +478,25 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
         worker.worker_id().clone(),
         worker.extensions().clone(),
     );
+
+    // Emit job started event, now that we have a valid job to start.
+    let queue_name = if let Some(queue_id) = job.job_queue_id() {
+        worker.queue_details().get(queue_id).await
+    } else {
+        None
+    };
+
+    let hook_futures = worker.hooks.iter().map(|hook| {
+        hook.on_event(LifeCycleEvent::Started(JobStarted {
+            job_id: *job.id(),
+            task_identifier: task_identifier.clone(),
+            queue_name: queue_name.clone(),
+            priority: *job.priority(),
+            attempts: *job.attempts(),
+            payload: job.payload().clone(),
+        }))
+    });
+    join_all(hook_futures).await;
 
     // Get the future that will execute the task
     let task_fut = task_fn(worker_ctx);
@@ -472,7 +517,7 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
     };
 
     // Wait for either the task to complete or the shutdown timeout to occur
-    tokio::select! {
+    let result = tokio::select! {
         res = job_task => {
             match res {
                 Err(e) => Err(RunJobError::TaskPanic(e)),
@@ -485,23 +530,25 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
             warn!(task_identifier, payload, job_id = job.id(), "Job interrupted by shutdown signal after 5 seconds timeout");
             Err(RunJobError::TaskAborted)
         }
-    }?;
+    };
 
     // Calculate execution duration
     let duration = start.elapsed();
 
-    info!(
-        task_identifier,
-        payload,
-        job_id = job.id(),
-        duration = duration.as_millis(),
-        "Completed task with success"
-    );
+    if result.is_ok() {
+        info!(
+            task_identifier,
+            payload,
+            job_id = job.id(),
+            duration = duration.as_millis(),
+            "Completed task with success"
+        );
+    }
 
     // TODO: Handle batch jobs (vec of futures returned by
     // function)
 
-    Ok(())
+    (result, duration)
 }
 
 /// Error that occurs when trying to mark a job as completed or failed.
@@ -529,6 +576,7 @@ pub struct ReleaseJobError {
 /// * `job_result` - The result of executing the job's task handler
 /// * `job` - The job that was executed
 /// * `worker` - The worker instance that provides access to the database
+/// * `duration` - The duration of the job execution
 ///
 /// # Returns
 ///
@@ -539,9 +587,35 @@ async fn release_job(
     job_result: Result<(), RunJobError>,
     job: &Job,
     worker: &Worker,
+    duration: Duration,
 ) -> Result<(), ReleaseJobError> {
+    // Get task identifier for hooks
+    let task_identifier = worker
+        .task_details()
+        .get(job.task_id())
+        .cloned()
+        .unwrap_or_else(|| "unknown".to_string());
+
     match job_result {
         Ok(_) => {
+            // Emit job completed event
+            let queue_name = if let Some(queue_id) = job.job_queue_id() {
+                worker.queue_details().get(queue_id).await
+            } else {
+                None
+            };
+
+            let hook_futures = worker.hooks.iter().map(|hook| {
+                hook.on_event(LifeCycleEvent::Completed(JobCompleted {
+                    job_id: *job.id(),
+                    task_identifier: task_identifier.clone(),
+                    queue_name: queue_name.clone(),
+                    duration,
+                    attempts: *job.attempts(),
+                }))
+            });
+            join_all(hook_futures).await;
+
             // The job was successful - mark it as completed
             complete_job(
                 worker.pg_pool(),
@@ -557,7 +631,29 @@ async fn release_job(
         }
         Err(e) => {
             // The job failed - log the error and mark it as failed
-            if job.attempts() >= job.max_attempts() {
+            let will_retry = job.attempts() < job.max_attempts();
+
+            // Emit job failed event
+            let queue_name = if let Some(queue_id) = job.job_queue_id() {
+                worker.queue_details().get(queue_id).await
+            } else {
+                None
+            };
+
+            let hook_futures = worker.hooks.iter().map(|hook| {
+                hook.on_event(LifeCycleEvent::Failed(JobFailed {
+                    job_id: *job.id(),
+                    task_identifier: task_identifier.clone(),
+                    queue_name: queue_name.clone(),
+                    error: format!("{e:?}"),
+                    duration,
+                    attempts: *job.attempts(),
+                    will_retry,
+                }))
+            });
+            join_all(hook_futures).await;
+
+            if !will_retry {
                 // This was the last attempt - log as an error
                 error!(
                     error = ?e,

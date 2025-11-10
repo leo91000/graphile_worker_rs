@@ -39,7 +39,7 @@ pub async fn get_job<'e>(
                             locked_at = now()
                         from j
                         where jobs.id = j.id
-                        returning *
+                        returning jobs.*
         "#
     );
 
