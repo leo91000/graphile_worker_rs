@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
 
@@ -17,6 +18,7 @@ use graphile_worker_extensions::ReadOnlyExtensions;
 use graphile_worker_job::Job;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
+use tokio::sync::Notify;
 use tracing::{debug, error, info, trace, warn};
 
 use crate::builder::WorkerOptions;
@@ -66,6 +68,9 @@ pub struct Worker {
     pub(crate) use_local_time: bool,
     /// Signal that can be triggered to gracefully shut down the worker
     pub(crate) shutdown_signal: ShutdownSignal,
+    /// Internal notifier used to request shutdown programmatically
+    #[getset(skip)]
+    pub(crate) shutdown_notifier: Arc<Notify>,
     /// Extensions that can modify worker behavior
     pub(crate) extensions: ReadOnlyExtensions,
 }
@@ -296,6 +301,14 @@ impl Worker {
     /// pool and schema.
     pub fn create_utils(&self) -> WorkerUtils {
         WorkerUtils::new(self.pg_pool.clone(), self.escaped_schema.clone())
+    }
+
+    /// Requests a graceful shutdown of the worker.
+    ///
+    /// Wakes all internal listeners waiting on the shutdown signal so that
+    /// `run`/`run_once` loops exit once in-flight work has finished.
+    pub fn request_shutdown(&self) {
+        self.shutdown_notifier.notify_waiters();
     }
 }
 
