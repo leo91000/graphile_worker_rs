@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.6.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.5.12...graphile_worker_crontab_runner-v0.6.0) - 2025-12-06
+
+### Added
+
+- add lifecycle hooks with native async fn syntax
+
 ## [0.5.12](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.5.11...graphile_worker_crontab_runner-v0.5.12) - 2025-10-31
 
 ### Other
