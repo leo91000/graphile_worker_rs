@@ -7,6 +7,7 @@ use graphile_worker_crontab_parser::{parse_crontab, CrontabParseError};
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_ctx::WorkerContext;
 use graphile_worker_extensions::Extensions;
+use graphile_worker_lifecycle_hooks::{LifecycleHooks, TypeErasedHooks};
 use graphile_worker_migrations::migrate;
 use graphile_worker_shutdown_signal::shutdown_signal;
 use graphile_worker_task_handler::{run_task_from_worker_ctx, TaskHandler};
@@ -91,6 +92,9 @@ pub struct WorkerOptions {
 
     /// Custom application state and dependencies
     extensions: Extensions,
+
+    /// Lifecycle hooks for observing and intercepting worker events
+    hooks: TypeErasedHooks,
 }
 
 /// Errors that can occur when initializing a worker.
@@ -198,6 +202,7 @@ impl WorkerOptions {
             use_local_time: self.use_local_time,
             shutdown_signal: shutdown_signal(),
             extensions: self.extensions.into(),
+            hooks: self.hooks,
         };
 
         Ok(worker)
@@ -459,6 +464,38 @@ impl WorkerOptions {
     /// ```
     pub fn add_extension<T: Clone + Send + Sync + Debug + 'static>(mut self, value: T) -> Self {
         self.extensions.insert(value);
+        self
+    }
+
+    /// Adds a lifecycle hook plugin to the worker.
+    ///
+    /// Plugins can observe and intercept various worker events such as
+    /// job execution, worker startup/shutdown, and cron scheduling.
+    /// Multiple plugins can be registered and they execute in registration order.
+    ///
+    /// # Type Parameters
+    /// * `H` - A type implementing the LifecycleHooks trait
+    ///
+    /// # Arguments
+    /// * `hook` - The hook plugin instance to add
+    ///
+    /// # Example
+    /// ```ignore
+    /// use graphile_worker::{WorkerOptions, LifecycleHooks, JobStartContext};
+    ///
+    /// struct LoggingPlugin;
+    ///
+    /// impl LifecycleHooks for LoggingPlugin {
+    ///     async fn on_job_start(&self, ctx: JobStartContext) {
+    ///         println!("Job {} starting", ctx.job.id());
+    ///     }
+    /// }
+    ///
+    /// let options = WorkerOptions::default()
+    ///     .add_plugin(LoggingPlugin);
+    /// ```
+    pub fn add_plugin<H: LifecycleHooks>(mut self, hook: H) -> Self {
+        self.hooks.register(hook);
         self
     }
 }

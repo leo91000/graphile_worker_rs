@@ -254,6 +254,101 @@ let worker = WorkerOptions::default()
     .await?;
 ```
 
+### Lifecycle Hooks
+
+You can observe and intercept job lifecycle events using plugins that implement the `LifecycleHooks` trait. This is useful for logging, metrics, validation, and custom job handling logic.
+
+```rust,ignore
+use std::sync::atomic::{AtomicU64, Ordering};
+use graphile_worker::{
+    LifecycleHooks, HookResult, JobStartContext, JobCompleteContext,
+    JobFailContext, BeforeJobRunContext, WorkerStartContext,
+};
+
+struct MetricsPlugin {
+    jobs_started: AtomicU64,
+    jobs_completed: AtomicU64,
+}
+
+impl LifecycleHooks for MetricsPlugin {
+    async fn on_worker_start(&self, ctx: WorkerStartContext) {
+        println!("Worker {} started", ctx.worker_id);
+    }
+
+    async fn on_job_start(&self, ctx: JobStartContext) {
+        self.jobs_started.fetch_add(1, Ordering::Relaxed);
+        println!("Job {} started", ctx.job.id());
+    }
+
+    async fn on_job_complete(&self, ctx: JobCompleteContext) {
+        self.jobs_completed.fetch_add(1, Ordering::Relaxed);
+        println!("Job {} completed in {:?}", ctx.job.id(), ctx.duration);
+    }
+
+    async fn on_job_fail(&self, ctx: JobFailContext) {
+        println!("Job {} failed: {}", ctx.job.id(), ctx.error);
+    }
+}
+```
+
+#### Intercepting Jobs
+
+The `before_job_run` and `after_job_run` hooks can intercept jobs and change their behavior:
+
+```rust,ignore
+struct ValidationPlugin;
+
+impl LifecycleHooks for ValidationPlugin {
+    async fn before_job_run(&self, ctx: BeforeJobRunContext) -> HookResult {
+        // Skip jobs with a "skip" flag in their payload
+        if ctx.payload.get("skip").and_then(|v| v.as_bool()).unwrap_or(false) {
+            return HookResult::Skip;
+        }
+
+        // Fail jobs with invalid data
+        if ctx.payload.get("invalid").is_some() {
+            return HookResult::Fail("Invalid payload".into());
+        }
+
+        // Continue with normal execution
+        HookResult::Continue
+    }
+}
+```
+
+#### Registering Plugins
+
+Add plugins when configuring the worker:
+
+```rust,ignore
+let worker = WorkerOptions::default()
+    .define_job::<SendEmail>()
+    .add_plugin(MetricsPlugin::new())
+    .add_plugin(ValidationPlugin)
+    .pg_pool(pg_pool)
+    .init()
+    .await?;
+```
+
+Multiple plugins can be registered and they will all receive hook calls in the order they were added.
+
+#### Available Hooks
+
+| Hook | Type | Description |
+|------|------|-------------|
+| `on_worker_init` | Observer | Called when worker is initializing |
+| `on_worker_start` | Observer | Called when worker starts processing |
+| `on_worker_shutdown` | Observer | Called when worker is shutting down |
+| `on_job_fetch` | Observer | Called when a job is fetched from the queue |
+| `on_job_start` | Observer | Called before a job starts executing |
+| `on_job_complete` | Observer | Called after a job completes successfully |
+| `on_job_fail` | Observer | Called when a job fails (will retry) |
+| `on_job_permanently_fail` | Observer | Called when a job exceeds max attempts |
+| `on_cron_tick` | Observer | Called on each cron scheduler tick |
+| `on_cron_job_scheduled` | Observer | Called when a cron job is scheduled |
+| `before_job_run` | Interceptor | Can skip, fail, or continue job execution |
+| `after_job_run` | Interceptor | Can modify the job result after execution |
+
 ## Job Management Utilities
 
 The `WorkerUtils` class provides methods for managing jobs:
@@ -297,7 +392,7 @@ utils.cleanup(&[
   - PostgreSQL `LISTEN`/`NOTIFY` for immediate job notifications
   - `SKIP LOCKED` for efficient job fetching
 - **Robust job processing**:
-  - Parallel processing with customizable concurrency 
+  - Parallel processing with customizable concurrency
   - Serialized execution via named queues
   - Automatic retries with exponential backoff
   - Customizable retry counts (default: 25 attempts over ~3 days)
@@ -306,6 +401,7 @@ utils.cleanup(&[
   - Job prioritization
   - Crontab-like recurring tasks
   - Task deduplication via `job_key`
+- **Lifecycle hooks**: Observe and intercept job events for logging, metrics, and validation
 - **Type safety**: End-to-end type checking of job payloads
 - **Minimal overhead**: Direct serialization of task payloads
 

@@ -59,6 +59,7 @@ pub use crate::job_spec::*;
 pub use graphile_worker_crontab_parser::parse_crontab;
 pub use graphile_worker_ctx::*;
 pub use graphile_worker_job::*;
+pub use graphile_worker_lifecycle_hooks::*;
 pub use graphile_worker_task_handler::*;
 
 pub use builder::{WorkerBuildError, WorkerOptions};
