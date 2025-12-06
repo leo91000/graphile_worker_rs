@@ -3,9 +3,10 @@ use std::sync::Arc;
 
 use graphile_worker::{
     AfterJobRunContext, BeforeJobRunContext, BeforeJobScheduleContext, HookResult,
-    IntoTaskHandlerResult, JobCompleteContext, JobFailContext, JobPermanentlyFailContext,
-    JobScheduleResult, JobSpec, JobStartContext, LifecycleHooks, TaskHandler, Worker,
-    WorkerContext, WorkerShutdownContext, WorkerStartContext,
+    IntoTaskHandlerResult, JobCompleteContext, JobFailContext, JobFetchContext,
+    JobPermanentlyFailContext, JobScheduleResult, JobSpec, JobStartContext, LifecycleHooks,
+    TaskHandler, Worker, WorkerContext, WorkerInitContext, WorkerShutdownContext,
+    WorkerStartContext,
 };
 use serde::{Deserialize, Serialize};
 use tokio::{
@@ -19,8 +20,10 @@ mod helpers;
 
 #[derive(Debug, Default)]
 struct HookCounters {
+    worker_init: AtomicU32,
     worker_start: AtomicU32,
     worker_shutdown: AtomicU32,
+    job_fetch: AtomicU32,
     job_start: AtomicU32,
     job_complete: AtomicU32,
     job_fail: AtomicU32,
@@ -47,12 +50,20 @@ impl TestHooksPlugin {
 }
 
 impl LifecycleHooks for TestHooksPlugin {
+    async fn on_worker_init(&self, _ctx: WorkerInitContext) {
+        self.counters.worker_init.fetch_add(1, Ordering::SeqCst);
+    }
+
     async fn on_worker_start(&self, _ctx: WorkerStartContext) {
         self.counters.worker_start.fetch_add(1, Ordering::SeqCst);
     }
 
     async fn on_worker_shutdown(&self, _ctx: WorkerShutdownContext) {
         self.counters.worker_shutdown.fetch_add(1, Ordering::SeqCst);
+    }
+
+    async fn on_job_fetch(&self, _ctx: JobFetchContext) {
+        self.counters.job_fetch.fetch_add(1, Ordering::SeqCst);
     }
 
     async fn on_job_start(&self, _ctx: JobStartContext) {
@@ -181,6 +192,7 @@ async fn test_observer_hooks_are_called() {
         )
         .await;
 
+        assert_eq!(counters.job_fetch.load(Ordering::SeqCst), 1);
         assert_eq!(counters.before_job_run.load(Ordering::SeqCst), 1);
         assert_eq!(counters.job_start.load(Ordering::SeqCst), 1);
         assert_eq!(counters.job_complete.load(Ordering::SeqCst), 1);
