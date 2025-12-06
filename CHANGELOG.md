@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.9.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.7...graphile_worker-v0.9.0) - 2025-12-06
+
+### Added
+
+- add before_job_schedule hook for payload transformation
+- add lifecycle hooks with native async fn syntax
+
+### Other
+
+- add unit tests to improve patch coverage
+- add coverage for HookResult::Retry, after_job_run, on_job_permanently_fail
+- *(deps)* update rust crate uuid to 1.19.0 ([#325](https://github.com/leo91000/graphile_worker_rs/pull/325))
+- *(deps)* update all non-major dependencies ([#323](https://github.com/leo91000/graphile_worker_rs/pull/323))
+- *(deps)* update actions/checkout action to v6
+- *(deps)* update rust crate syn to 2.0.111 ([#322](https://github.com/leo91000/graphile_worker_rs/pull/322))
+- *(deps)* update rust crate syn to 2.0.110 ([#320](https://github.com/leo91000/graphile_worker_rs/pull/320))
+- *(deps)* update rust crate quote to 1.0.42 ([#319](https://github.com/leo91000/graphile_worker_rs/pull/319))
+- *(deps)* update rust crate syn to 2.0.109 ([#318](https://github.com/leo91000/graphile_worker_rs/pull/318))
+- *(deps)* update rust crate tokio-util to 0.7.17 ([#315](https://github.com/leo91000/graphile_worker_rs/pull/315))
+
 ## [0.8.7](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.6...graphile_worker-v0.8.7) - 2025-10-31
 
 ### Other

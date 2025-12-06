@@ -1,6 +1,6 @@
 [package]
 name = "graphile_worker_migrations"
-version = "0.4.9"
+version = "0.4.10"
 edition = "2021"
 license-file = "LICENSE.md"
 description = "Migrations package for graphile_worker, a high performance Rust/PostgreSQL job queue"

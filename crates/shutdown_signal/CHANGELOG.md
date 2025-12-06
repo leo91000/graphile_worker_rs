@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.8](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_shutdown_signal-v0.3.7...graphile_worker_shutdown_signal-v0.3.8) - 2025-12-06
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.3.7](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_shutdown_signal-v0.3.6...graphile_worker_shutdown_signal-v0.3.7) - 2025-10-31
 
 ### Other
