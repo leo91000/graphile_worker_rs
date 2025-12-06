@@ -13,6 +13,14 @@ pub enum GraphileWorkerError {
     /// An error occurred while serializing or deserializing JSON data
     #[error("Error while serializing params: {0}")]
     JsonSerializeError(#[from] serde_json::Error),
+
+    /// Job scheduling was skipped by a before_job_schedule hook
+    #[error("Job scheduling was skipped by hook")]
+    JobScheduleSkipped,
+
+    /// Job scheduling failed due to a before_job_schedule hook
+    #[error("Job scheduling failed: {0}")]
+    JobScheduleFailed(String),
 }
 
 /// A Result type alias for GraphileWorkerError.

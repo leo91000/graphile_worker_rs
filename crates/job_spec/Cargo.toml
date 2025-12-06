@@ -1,0 +1,17 @@
+[package]
+name = "graphile_worker_job_spec"
+version = "0.1.0"
+edition = "2021"
+license-file = "LICENSE.md"
+description = "Job specification types for graphile_worker, a high performance Rust/PostgreSQL job queue"
+homepage = "https://docs.rs/graphile_worker"
+documentation = "https://docs.rs/graphile_worker"
+repository = "https://github.com/leo91000/graphile_worker/crates/job_spec"
+keywords = []
+categories = []
+readme = "README.md"
+
+[dependencies]
+chrono.workspace = true
+derive_builder.workspace = true
+getset.workspace = true

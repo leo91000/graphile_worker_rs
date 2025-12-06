@@ -1,3 +1,8 @@
+use std::sync::Arc;
+
+use graphile_worker_lifecycle_hooks::{
+    BeforeJobScheduleContext, JobScheduleResult, TypeErasedHooks,
+};
 use graphile_worker_migrations::{migrate, MigrateError};
 use graphile_worker_task_handler::TaskHandler;
 use indoc::formatdoc;
@@ -121,6 +126,9 @@ pub struct WorkerUtils {
 
     /// SQL-escaped schema name where Graphile Worker tables are located
     escaped_schema: String,
+
+    /// Optional lifecycle hooks for intercepting job scheduling
+    hooks: Option<Arc<TypeErasedHooks>>,
 }
 
 impl WorkerUtils {
@@ -136,7 +144,53 @@ impl WorkerUtils {
         Self {
             pg_pool,
             escaped_schema,
+            hooks: None,
         }
+    }
+
+    /// Creates a new instance of WorkerUtils with lifecycle hooks.
+    pub fn with_hooks(
+        pg_pool: PgPool,
+        escaped_schema: String,
+        hooks: Arc<TypeErasedHooks>,
+    ) -> Self {
+        Self {
+            pg_pool,
+            escaped_schema,
+            hooks: Some(hooks),
+        }
+    }
+
+    async fn invoke_before_job_schedule(
+        &self,
+        identifier: &str,
+        payload: serde_json::Value,
+        spec: &JobSpec,
+    ) -> Result<serde_json::Value, GraphileWorkerError> {
+        let Some(hooks) = &self.hooks else {
+            return Ok(payload);
+        };
+
+        let mut current_payload = payload;
+        for hook in &hooks.before_job_schedule {
+            let ctx = BeforeJobScheduleContext {
+                identifier: identifier.to_string(),
+                payload: current_payload,
+                spec: spec.clone(),
+            };
+            match hook(ctx).await {
+                JobScheduleResult::Continue(new_payload) => {
+                    current_payload = new_payload;
+                }
+                JobScheduleResult::Skip => {
+                    return Err(GraphileWorkerError::JobScheduleSkipped);
+                }
+                JobScheduleResult::Fail(msg) => {
+                    return Err(GraphileWorkerError::JobScheduleFailed(msg));
+                }
+            }
+        }
+        Ok(current_payload)
     }
 
     /// Adds a job to the queue with type safety.
@@ -177,6 +231,9 @@ impl WorkerUtils {
     ) -> Result<Job, GraphileWorkerError> {
         let identifier = T::IDENTIFIER;
         let payload = serde_json::to_value(payload)?;
+        let payload = self
+            .invoke_before_job_schedule(identifier, payload, &spec)
+            .await?;
         add_job(
             &self.pg_pool,
             &self.escaped_schema,
@@ -225,6 +282,9 @@ impl WorkerUtils {
         P: Serialize,
     {
         let payload = serde_json::to_value(payload)?;
+        let payload = self
+            .invoke_before_job_schedule(identifier, payload, &spec)
+            .await?;
         add_job(
             &self.pg_pool,
             &self.escaped_schema,

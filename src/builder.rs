@@ -16,6 +16,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 
@@ -202,7 +203,7 @@ impl WorkerOptions {
             use_local_time: self.use_local_time,
             shutdown_signal: shutdown_signal(),
             extensions: self.extensions.into(),
-            hooks: self.hooks,
+            hooks: Arc::new(self.hooks),
         };
 
         Ok(worker)

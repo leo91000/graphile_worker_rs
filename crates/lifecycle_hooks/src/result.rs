@@ -6,5 +6,20 @@ pub enum HookResult {
     Continue,
     Skip,
     Fail(String),
-    Retry { delay: Duration },
+    Retry {
+        delay: Duration,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum JobScheduleResult {
+    Continue(serde_json::Value),
+    Skip,
+    Fail(String),
+}
+
+impl Default for JobScheduleResult {
+    fn default() -> Self {
+        JobScheduleResult::Continue(serde_json::Value::Null)
+    }
 }

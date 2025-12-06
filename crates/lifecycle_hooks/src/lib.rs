@@ -12,6 +12,8 @@ pub use traits::LifecycleHooks;
 
 pub type ObserverFn<Ctx> = Box<dyn Fn(Ctx) -> BoxFuture<'static, ()> + Send + Sync>;
 pub type InterceptorFn<Ctx> = Box<dyn Fn(Ctx) -> BoxFuture<'static, HookResult> + Send + Sync>;
+pub type ScheduleTransformerFn =
+    Box<dyn Fn(BeforeJobScheduleContext) -> BoxFuture<'static, JobScheduleResult> + Send + Sync>;
 
 #[derive(Default)]
 pub struct TypeErasedHooks {
@@ -27,6 +29,7 @@ pub struct TypeErasedHooks {
     pub on_cron_job_scheduled: Vec<ObserverFn<CronJobScheduledContext>>,
     pub before_job_run: Vec<InterceptorFn<BeforeJobRunContext>>,
     pub after_job_run: Vec<InterceptorFn<AfterJobRunContext>>,
+    pub before_job_schedule: Vec<ScheduleTransformerFn>,
 }
 
 impl TypeErasedHooks {
@@ -99,10 +102,16 @@ impl TypeErasedHooks {
             Box::pin(async move { h.before_job_run(ctx).await })
         }));
 
-        let h = hook;
+        let h = hook.clone();
         self.after_job_run.push(Box::new(move |ctx| {
             let h = h.clone();
             Box::pin(async move { h.after_job_run(ctx).await })
+        }));
+
+        let h = hook;
+        self.before_job_schedule.push(Box::new(move |ctx| {
+            let h = h.clone();
+            Box::pin(async move { h.before_job_schedule(ctx).await })
         }));
     }
 }
