@@ -109,4 +109,24 @@ mod tests {
     fn should_build_unset_job_spec_without_panic() {
         let _ = JobSpecBuilder::new().build();
     }
+
+    #[test]
+    fn test_job_spec_new() {
+        let spec = JobSpec::new();
+        assert_eq!(spec.queue_name(), &None);
+        assert_eq!(spec.priority(), &None);
+    }
+
+    #[test]
+    fn test_job_spec_from_option_some() {
+        let spec = JobSpec::builder().priority(5).build();
+        let result: JobSpec = Some(spec).into();
+        assert_eq!(result.priority(), &Some(5));
+    }
+
+    #[test]
+    fn test_job_spec_from_option_none() {
+        let result: JobSpec = None.into();
+        assert_eq!(result.priority(), &None);
+    }
 }
