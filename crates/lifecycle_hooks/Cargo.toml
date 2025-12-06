@@ -15,6 +15,7 @@ readme = "README.md"
 graphile_worker_job = { path = "../job", version = "0.1.7" }
 graphile_worker_extensions = { path = "../extensions", version = "0.1.5" }
 graphile_worker_crontab_types = { path = "../crontab_types", version = "0.5.8" }
+graphile_worker_job_spec = { path = "../job_spec", version = "0.1.0" }
 chrono.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true

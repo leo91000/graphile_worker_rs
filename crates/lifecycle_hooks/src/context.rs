@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_extensions::ReadOnlyExtensions;
 use graphile_worker_job::Job;
+use graphile_worker_job_spec::JobSpec;
 use sqlx::PgPool;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,4 +95,11 @@ pub struct CronTickContext {
 pub struct CronJobScheduledContext {
     pub crontab: Crontab,
     pub scheduled_at: DateTime<Utc>,
+}
+
+#[derive(Clone)]
+pub struct BeforeJobScheduleContext {
+    pub identifier: String,
+    pub payload: serde_json::Value,
+    pub spec: JobSpec,
 }

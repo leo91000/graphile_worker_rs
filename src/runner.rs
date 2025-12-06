@@ -75,7 +75,7 @@ pub struct Worker {
     /// Extensions that can modify worker behavior
     pub(crate) extensions: ReadOnlyExtensions,
     /// Lifecycle hooks for observing and intercepting worker events
-    pub(crate) hooks: TypeErasedHooks,
+    pub(crate) hooks: Arc<TypeErasedHooks>,
 }
 
 /// Errors that can occur during worker runtime.
@@ -353,7 +353,11 @@ impl Worker {
     /// A new `WorkerUtils` instance configured with this worker's database connection
     /// pool and schema.
     pub fn create_utils(&self) -> WorkerUtils {
-        WorkerUtils::new(self.pg_pool.clone(), self.escaped_schema.clone())
+        WorkerUtils::with_hooks(
+            self.pg_pool.clone(),
+            self.escaped_schema.clone(),
+            self.hooks.clone(),
+        )
     }
 }
 
