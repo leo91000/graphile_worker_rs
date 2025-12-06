@@ -2,9 +2,10 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 use graphile_worker::{
-    BeforeJobRunContext, BeforeJobScheduleContext, HookResult, IntoTaskHandlerResult,
-    JobCompleteContext, JobFailContext, JobScheduleResult, JobSpec, JobStartContext,
-    LifecycleHooks, TaskHandler, Worker, WorkerContext, WorkerShutdownContext, WorkerStartContext,
+    AfterJobRunContext, BeforeJobRunContext, BeforeJobScheduleContext, HookResult,
+    IntoTaskHandlerResult, JobCompleteContext, JobFailContext, JobPermanentlyFailContext,
+    JobScheduleResult, JobSpec, JobStartContext, LifecycleHooks, TaskHandler, Worker,
+    WorkerContext, WorkerShutdownContext, WorkerStartContext,
 };
 use serde::{Deserialize, Serialize};
 use tokio::{
@@ -1119,6 +1120,240 @@ async fn test_before_job_schedule_and_before_job_run_both_called() {
             1,
             "Job should have completed"
         );
+
+        worker_fut.abort();
+    })
+    .await;
+}
+
+#[derive(Debug, Default)]
+struct ExtendedHookCounters {
+    before_job_run: AtomicU32,
+    after_job_run: AtomicU32,
+    job_permanently_fail: AtomicU32,
+    retry_requested: AtomicU32,
+}
+
+#[derive(Clone)]
+struct ExtendedHooksPlugin {
+    counters: Arc<ExtendedHookCounters>,
+}
+
+impl ExtendedHooksPlugin {
+    fn new() -> Self {
+        Self {
+            counters: Arc::new(ExtendedHookCounters::default()),
+        }
+    }
+
+    fn counters(&self) -> Arc<ExtendedHookCounters> {
+        self.counters.clone()
+    }
+}
+
+impl LifecycleHooks for ExtendedHooksPlugin {
+    async fn before_job_run(&self, ctx: BeforeJobRunContext) -> HookResult {
+        self.counters.before_job_run.fetch_add(1, Ordering::SeqCst);
+
+        let should_retry = ctx
+            .payload
+            .get("retry")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        if should_retry {
+            self.counters.retry_requested.fetch_add(1, Ordering::SeqCst);
+            return HookResult::Retry {
+                delay: Duration::from_secs(1),
+            };
+        }
+
+        HookResult::Continue
+    }
+
+    async fn after_job_run(&self, _ctx: AfterJobRunContext) -> HookResult {
+        self.counters.after_job_run.fetch_add(1, Ordering::SeqCst);
+        HookResult::Continue
+    }
+
+    async fn on_job_permanently_fail(&self, _ctx: JobPermanentlyFailContext) {
+        self.counters
+            .job_permanently_fail
+            .fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+#[tokio::test]
+async fn test_before_job_run_retry() {
+    with_test_db(|test_db| async move {
+        let utils = test_db.worker_utils();
+        utils.migrate().await.expect("Failed to migrate");
+
+        let plugin = ExtendedHooksPlugin::new();
+        let counters = plugin.counters();
+
+        let worker_fut = spawn_local({
+            let test_pool = test_db.test_pool.clone();
+            async move {
+                Worker::options()
+                    .pg_pool(test_pool)
+                    .concurrency(2)
+                    .define_job::<TestJob>()
+                    .add_plugin(plugin)
+                    .init()
+                    .await
+                    .expect("Failed to create worker")
+                    .run()
+                    .await
+                    .expect("Failed to run worker");
+            }
+        });
+
+        utils
+            .add_job(
+                TestJob {
+                    value: 1,
+                    skip: false,
+                    force_fail: false,
+                    should_error: false,
+                },
+                JobSpec::default(),
+            )
+            .await
+            .expect("Failed to add job");
+
+        utils
+            .add_raw_job(
+                "test_hooks_job",
+                serde_json::json!({
+                    "value": 2,
+                    "retry": true
+                }),
+                JobSpec::default(),
+            )
+            .await
+            .expect("Failed to add job");
+
+        let c = counters.clone();
+        wait_for_condition(
+            || c.retry_requested.load(Ordering::SeqCst) >= 1,
+            5,
+            "Retry should have been requested",
+        )
+        .await;
+
+        sleep(Duration::from_millis(200)).await;
+
+        assert_eq!(counters.before_job_run.load(Ordering::SeqCst), 2);
+        assert_eq!(counters.retry_requested.load(Ordering::SeqCst), 1);
+
+        worker_fut.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn test_after_job_run_hook() {
+    with_test_db(|test_db| async move {
+        let utils = test_db.worker_utils();
+        utils.migrate().await.expect("Failed to migrate");
+
+        let plugin = ExtendedHooksPlugin::new();
+        let counters = plugin.counters();
+
+        let worker_fut = spawn_local({
+            let test_pool = test_db.test_pool.clone();
+            async move {
+                Worker::options()
+                    .pg_pool(test_pool)
+                    .concurrency(2)
+                    .define_job::<TestJob>()
+                    .add_plugin(plugin)
+                    .init()
+                    .await
+                    .expect("Failed to create worker")
+                    .run()
+                    .await
+                    .expect("Failed to run worker");
+            }
+        });
+
+        utils
+            .add_job(
+                TestJob {
+                    value: 1,
+                    skip: false,
+                    force_fail: false,
+                    should_error: false,
+                },
+                JobSpec::default(),
+            )
+            .await
+            .expect("Failed to add job");
+
+        let c = counters.clone();
+        wait_for_condition(
+            || c.after_job_run.load(Ordering::SeqCst) >= 1,
+            5,
+            "after_job_run should have been called",
+        )
+        .await;
+
+        assert_eq!(counters.before_job_run.load(Ordering::SeqCst), 1);
+        assert_eq!(counters.after_job_run.load(Ordering::SeqCst), 1);
+
+        worker_fut.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn test_on_job_permanently_fail_hook() {
+    with_test_db(|test_db| async move {
+        let utils = test_db.worker_utils();
+        utils.migrate().await.expect("Failed to migrate");
+
+        let plugin = ExtendedHooksPlugin::new();
+        let counters = plugin.counters();
+
+        let worker_fut = spawn_local({
+            let test_pool = test_db.test_pool.clone();
+            async move {
+                Worker::options()
+                    .pg_pool(test_pool)
+                    .concurrency(2)
+                    .define_job::<TestJob>()
+                    .add_plugin(plugin)
+                    .init()
+                    .await
+                    .expect("Failed to create worker")
+                    .run()
+                    .await
+                    .expect("Failed to run worker");
+            }
+        });
+
+        utils
+            .add_raw_job(
+                "test_hooks_job",
+                serde_json::json!({
+                    "value": 1,
+                    "should_error": true
+                }),
+                JobSpec::builder().max_attempts(1).build(),
+            )
+            .await
+            .expect("Failed to add job");
+
+        let c = counters.clone();
+        wait_for_condition(
+            || c.job_permanently_fail.load(Ordering::SeqCst) >= 1,
+            5,
+            "on_job_permanently_fail should have been called",
+        )
+        .await;
+
+        assert_eq!(counters.job_permanently_fail.load(Ordering::SeqCst), 1);
 
         worker_fut.abort();
     })
