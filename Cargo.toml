@@ -68,6 +68,7 @@ graphile_worker_migrations = { path = "./crates/migrations", version = "0.4.9", 
 graphile_worker_task_handler = { path = "./crates/task_handler", version = "0.5.7" }
 graphile_worker_shutdown_signal = { path = "./crates/shutdown_signal", version = "0.3.7" }
 graphile_worker_extensions = { path = "./crates/extensions", version = "0.1.5" }
+graphile_worker_lifecycle_hooks = { path = "./crates/lifecycle_hooks", version = "0.1.0" }
 chrono = { version = "0.4.42", features = ["serde"] }
 futures = "0.3.31"
 getset = "0.1.6"

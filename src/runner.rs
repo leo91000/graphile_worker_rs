@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
 
@@ -15,6 +16,11 @@ use graphile_worker_crontab_types::Crontab;
 use graphile_worker_ctx::WorkerContext;
 use graphile_worker_extensions::ReadOnlyExtensions;
 use graphile_worker_job::Job;
+use graphile_worker_lifecycle_hooks::{
+    AfterJobRunContext, BeforeJobRunContext, HookResult, InterceptorFn, JobCompleteContext,
+    JobFailContext, JobFetchContext, JobPermanentlyFailContext, JobStartContext, ObserverFn,
+    ShutdownReason, TypeErasedHooks, WorkerShutdownContext, WorkerStartContext,
+};
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
 use tracing::{debug, error, info, trace, warn};
@@ -68,6 +74,8 @@ pub struct Worker {
     pub(crate) shutdown_signal: ShutdownSignal,
     /// Extensions that can modify worker behavior
     pub(crate) extensions: ReadOnlyExtensions,
+    /// Lifecycle hooks for observing and intercepting worker events
+    pub(crate) hooks: TypeErasedHooks,
 }
 
 /// Errors that can occur during worker runtime.
@@ -88,6 +96,26 @@ pub enum WorkerRuntimeError {
 }
 
 impl Worker {
+    async fn invoke_observer<Ctx: Clone>(&self, hooks: &[ObserverFn<Ctx>], ctx: Ctx) {
+        for hook in hooks {
+            hook(ctx.clone()).await;
+        }
+    }
+
+    async fn invoke_interceptor<Ctx: Clone>(
+        &self,
+        hooks: &[InterceptorFn<Ctx>],
+        ctx: Ctx,
+    ) -> HookResult {
+        for hook in hooks {
+            match hook(ctx.clone()).await {
+                HookResult::Continue => continue,
+                other => return other,
+            }
+        }
+        HookResult::Continue
+    }
+
     /// Creates a new `WorkerOptions` builder with default settings.
     ///
     /// This is the starting point for configuring and creating a new worker.
@@ -146,10 +174,37 @@ impl Worker {
     /// - `Ok(())` if the worker shuts down gracefully
     /// - `Err(WorkerRuntimeError)` if an error occurs during worker execution
     pub async fn run(&self) -> Result<(), WorkerRuntimeError> {
+        self.invoke_observer(
+            &self.hooks.on_worker_start,
+            WorkerStartContext {
+                pool: self.pg_pool.clone(),
+                worker_id: self.worker_id.clone(),
+                extensions: self.extensions.clone(),
+            },
+        )
+        .await;
+
         let job_runner = self.job_runner();
         let crontab_scheduler = self.crontab_scheduler();
 
-        try_join!(crontab_scheduler, job_runner)?;
+        let result = try_join!(crontab_scheduler, job_runner);
+
+        let reason = match &result {
+            Ok(_) => ShutdownReason::Graceful,
+            Err(_) => ShutdownReason::Error,
+        };
+
+        self.invoke_observer(
+            &self.hooks.on_worker_shutdown,
+            WorkerShutdownContext {
+                pool: self.pg_pool.clone(),
+                worker_id: self.worker_id.clone(),
+                reason,
+            },
+        )
+        .await;
+
+        result?;
 
         Ok(())
     }
@@ -184,23 +239,24 @@ impl Worker {
         job_stream
             .for_each_concurrent(self.concurrency, |mut job| async move {
                 loop {
-                    let result = run_and_release_job(&job, self, &StreamSource::RunOnce).await;
+                    let job_id = *job.id();
+                    let has_queue = job.job_queue_id().is_some();
+                    let result =
+                        run_and_release_job(Arc::new(job), self, &StreamSource::RunOnce).await;
 
                     match result {
                         Ok(_) => {
-                            info!(job_id = job.id(), "Job processed");
+                            info!(job_id, "Job processed");
                         }
                         Err(e) => {
                             error!("Error while processing job : {:?}", e);
                         }
                     };
 
-                    // If the job has a queue, we need to fetch another job because the job_signal will not trigger
-                    // Is there a simpler way to do this ?
-                    if job.job_queue_id().is_none() {
+                    if !has_queue {
                         break;
                     }
-                    info!(job_id = job.id(), "Job has queue, fetching another job");
+                    info!(job_id, "Job has queue, fetching another job");
                     let new_job = get_job(
                         self.pg_pool(),
                         self.task_details(),
@@ -279,6 +335,8 @@ impl Worker {
             self.crontabs(),
             *self.use_local_time(),
             self.shutdown_signal.clone(),
+            &self.hooks.on_cron_tick,
+            &self.hooks.on_cron_job_scheduled,
         )
         .await?;
 
@@ -346,11 +404,24 @@ async fn process_one_job(
 
     match job {
         Some(job) => {
-            run_and_release_job(&job, worker, &source).await?;
-            Ok(Some(job))
+            let job = Arc::new(job);
+
+            worker
+                .invoke_observer(
+                    &worker.hooks.on_job_fetch,
+                    JobFetchContext {
+                        job: job.clone(),
+                        worker_id: worker.worker_id().clone(),
+                    },
+                )
+                .await;
+
+            run_and_release_job(job.clone(), worker, &source).await?;
+            Ok(Some(
+                Arc::try_unwrap(job).unwrap_or_else(|arc| (*arc).clone()),
+            ))
         }
         None => {
-            // TODO: Retry one time because maybe synchronization issue
             trace!(source = ?source, "No job found");
             Ok(None)
         }
@@ -365,26 +436,103 @@ async fn process_one_job(
 ///
 /// # Arguments
 ///
-/// * `job` - The job to process
+/// * `job` - The job to process (wrapped in Arc for efficient sharing)
 /// * `worker` - The worker instance that provides access to task handlers
 /// * `source` - The source of the job request (signal, run_once, etc.)
 ///
 /// # Returns
 ///
 /// A `Result` containing:
-/// - `Ok(&'a Job)` if the job was processed and released successfully
+/// - `Ok(())` if the job was processed and released successfully
 /// - `Err(ProcessJobError)` if an error occurred during processing or releasing
-async fn run_and_release_job<'a>(
-    job: &'a Job,
+async fn run_and_release_job(
+    job: Arc<Job>,
     worker: &Worker,
     source: &StreamSource,
-) -> Result<&'a Job, ProcessJobError> {
-    let job_result = run_job(job, worker, source).await;
-    release_job(job_result, job, worker).await.map_err(|e| {
-        error!("Release job error : {:?}", e);
-        e
-    })?;
-    Ok(job)
+) -> Result<(), ProcessJobError> {
+    let before_result = worker
+        .invoke_interceptor(
+            &worker.hooks.before_job_run,
+            BeforeJobRunContext {
+                job: job.clone(),
+                worker_id: worker.worker_id().clone(),
+                payload: job.payload().clone(),
+            },
+        )
+        .await;
+
+    let (job_result, duration) = match before_result {
+        HookResult::Continue => {
+            worker
+                .invoke_observer(
+                    &worker.hooks.on_job_start,
+                    JobStartContext {
+                        job: job.clone(),
+                        worker_id: worker.worker_id().clone(),
+                    },
+                )
+                .await;
+
+            let start = Instant::now();
+            let job_result = run_job(&job, worker, source).await;
+            let duration = start.elapsed();
+
+            let result_for_hook = job_result
+                .as_ref()
+                .map(|_| ())
+                .map_err(|e| format!("{e:?}"));
+            let after_result = worker
+                .invoke_interceptor(
+                    &worker.hooks.after_job_run,
+                    AfterJobRunContext {
+                        job: job.clone(),
+                        worker_id: worker.worker_id().clone(),
+                        result: result_for_hook,
+                        duration,
+                    },
+                )
+                .await;
+
+            match after_result {
+                HookResult::Continue => (job_result, duration),
+                HookResult::Skip => (Ok(()), duration),
+                HookResult::Fail(msg) => (Err(RunJobError::TaskError(msg)), duration),
+                HookResult::Retry { delay: _ } => (
+                    Err(RunJobError::TaskError("Retry requested by hook".into())),
+                    duration,
+                ),
+            }
+        }
+        HookResult::Skip => {
+            debug!(job_id = job.id(), "Job skipped by before_job_run hook");
+            (Ok(()), Duration::ZERO)
+        }
+        HookResult::Fail(msg) => {
+            debug!(
+                job_id = job.id(),
+                "Job failed by before_job_run hook: {}", msg
+            );
+            (Err(RunJobError::TaskError(msg)), Duration::ZERO)
+        }
+        HookResult::Retry { delay: _ } => {
+            debug!(
+                job_id = job.id(),
+                "Job retry requested by before_job_run hook"
+            );
+            (
+                Err(RunJobError::TaskError("Retry requested by hook".into())),
+                Duration::ZERO,
+            )
+        }
+    };
+
+    release_job(job_result, job, worker, duration)
+        .await
+        .map_err(|e| {
+            error!("Release job error : {:?}", e);
+            e
+        })?;
+    Ok(())
 }
 
 /// Errors that can occur during the execution of a job's task handler.
@@ -527,8 +675,9 @@ pub struct ReleaseJobError {
 /// # Arguments
 ///
 /// * `job_result` - The result of executing the job's task handler
-/// * `job` - The job that was executed
+/// * `job` - The job that was executed (wrapped in Arc)
 /// * `worker` - The worker instance that provides access to the database
+/// * `duration` - How long the job took to execute
 ///
 /// # Returns
 ///
@@ -537,15 +686,15 @@ pub struct ReleaseJobError {
 /// - `Err(ReleaseJobError)` if an error occurred while updating the database
 async fn release_job(
     job_result: Result<(), RunJobError>,
-    job: &Job,
+    job: Arc<Job>,
     worker: &Worker,
+    duration: Duration,
 ) -> Result<(), ReleaseJobError> {
     match job_result {
         Ok(_) => {
-            // The job was successful - mark it as completed
             complete_job(
                 worker.pg_pool(),
-                job,
+                &job,
                 worker.worker_id(),
                 worker.escaped_schema(),
             )
@@ -554,11 +703,23 @@ async fn release_job(
                 job_id: *job.id(),
                 source: e,
             })?;
+
+            worker
+                .invoke_observer(
+                    &worker.hooks.on_job_complete,
+                    JobCompleteContext {
+                        job,
+                        worker_id: worker.worker_id().clone(),
+                        duration,
+                    },
+                )
+                .await;
         }
         Err(e) => {
-            // The job failed - log the error and mark it as failed
-            if job.attempts() >= job.max_attempts() {
-                // This was the last attempt - log as an error
+            let error_str = format!("{e:?}");
+            let will_retry = job.attempts() < job.max_attempts();
+
+            if !will_retry {
                 error!(
                     error = ?e,
                     task_id = job.task_id(),
@@ -566,8 +727,18 @@ async fn release_job(
                     job_id = job.id(),
                     "Job max attempts reached"
                 );
+
+                worker
+                    .invoke_observer(
+                        &worker.hooks.on_job_permanently_fail,
+                        JobPermanentlyFailContext {
+                            job: job.clone(),
+                            worker_id: worker.worker_id().clone(),
+                            error: error_str.clone(),
+                        },
+                    )
+                    .await;
             } else {
-                // The job will be retried - log as a warning
                 warn!(
                     error = ?e,
                     task_id = job.task_id(),
@@ -575,15 +746,26 @@ async fn release_job(
                     job_id = job.id(),
                     "Failed task"
                 );
+
+                worker
+                    .invoke_observer(
+                        &worker.hooks.on_job_fail,
+                        JobFailContext {
+                            job: job.clone(),
+                            worker_id: worker.worker_id().clone(),
+                            error: error_str.clone(),
+                            will_retry,
+                        },
+                    )
+                    .await;
             }
 
-            // Mark the job as failed in the database
             fail_job(
                 worker.pg_pool(),
-                job,
+                &job,
                 worker.escaped_schema(),
                 worker.worker_id(),
-                &format!("{e:?}"),
+                &error_str,
                 None,
             )
             .await
