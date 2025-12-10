@@ -9,7 +9,7 @@ use graphile_worker_ctx::WorkerContext;
 use graphile_worker_extensions::Extensions;
 use graphile_worker_lifecycle_hooks::{LifecycleHooks, TypeErasedHooks};
 use graphile_worker_migrations::migrate;
-use graphile_worker_shutdown_signal::shutdown_signal;
+use graphile_worker_shutdown_signal::{shutdown_signal, ShutdownSignal};
 use graphile_worker_task_handler::{run_task_from_worker_ctx, TaskHandler};
 use rand::RngCore;
 use sqlx::postgres::PgPoolOptions;
@@ -19,6 +19,32 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
+use tokio::sync::Notify;
+
+/// Creates a shutdown signal that can be triggered manually via the returned notifier.
+fn manual_shutdown_signal_pair() -> (ShutdownSignal, Arc<Notify>) {
+    let notify = Arc::new(Notify::new());
+    let notify_for_signal = notify.clone();
+    let signal = async move {
+        notify_for_signal.notified().await;
+    }
+    .boxed()
+    .shared();
+
+    (signal, notify)
+}
+
+/// Resolves as soon as either of the provided shutdown signals completes.
+fn combine_shutdown_signals(left: ShutdownSignal, right: ShutdownSignal) -> ShutdownSignal {
+    async move {
+        tokio::select! {
+            _ = left => (),
+            _ = right => (),
+        }
+    }
+    .boxed()
+    .shared()
+}
 
 /// Configuration options for initializing a Graphile Worker instance.
 ///
@@ -96,6 +122,10 @@ pub struct WorkerOptions {
 
     /// Lifecycle hooks for observing and intercepting worker events
     hooks: TypeErasedHooks,
+
+    /// Whether to automatically install OS-level shutdown signal listeners.
+    /// Defaults to `true` when not explicitly configured.
+    listen_os_shutdown_signals: Option<bool>,
 }
 
 /// Errors that can occur when initializing a worker.
@@ -159,6 +189,8 @@ impl WorkerOptions {
     /// # }
     /// ```
     pub async fn init(self) -> Result<Worker, WorkerBuildError> {
+        let listen_os_shutdown_signals = self.listen_os_shutdown_signals.unwrap_or(true);
+
         let pg_pool = match self.pg_pool {
             Some(pg_pool) => pg_pool,
             None => {
@@ -190,6 +222,13 @@ impl WorkerOptions {
         let mut random_bytes = [0u8; 9];
         rand::rng().fill_bytes(&mut random_bytes);
 
+        let (manual_signal, shutdown_notifier) = manual_shutdown_signal_pair();
+        let shutdown_signal = if listen_os_shutdown_signals {
+            combine_shutdown_signals(manual_signal, shutdown_signal())
+        } else {
+            manual_signal
+        };
+
         let worker = Worker {
             worker_id: format!("graphile_worker_{}", hex::encode(random_bytes)),
             concurrency: self.concurrency.unwrap_or_else(num_cpus::get),
@@ -201,7 +240,8 @@ impl WorkerOptions {
             forbidden_flags: self.forbidden_flags,
             crontabs: self.crontabs.unwrap_or_default(),
             use_local_time: self.use_local_time,
-            shutdown_signal: shutdown_signal(),
+            shutdown_signal,
+            shutdown_notifier,
             extensions: self.extensions.into(),
             hooks: Arc::new(self.hooks),
         };
@@ -421,6 +461,19 @@ impl WorkerOptions {
     /// across multiple worker instances, especially in distributed deployments.
     pub fn use_local_time(mut self, value: bool) -> Self {
         self.use_local_time = value;
+        self
+    }
+
+    /// Controls whether the worker installs OS-level shutdown signal handlers.
+    ///
+    /// By default Graphile Worker listens to signals like SIGINT/SIGTERM to
+    /// trigger a graceful shutdown. Embedding applications that already manage
+    /// signal handling can disable this behavior by setting the value to `false`.
+    ///
+    /// # Arguments
+    /// * `value` - `true` to install the default OS signal listeners, `false` to skip them
+    pub fn listen_os_shutdown_signals(mut self, value: bool) -> Self {
+        self.listen_os_shutdown_signals = Some(value);
         self
     }
 
