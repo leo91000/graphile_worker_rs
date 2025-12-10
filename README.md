@@ -95,6 +95,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+#### Custom shutdown handling
+
+Graphile Worker installs OS-level signal handlers (like `SIGINT`/`SIGTERM`) so
+it can shut down gracefully when you press Ctrl+C. If your application already
+owns the shutdown lifecycle, disable the built-in listeners and call
+`Worker::request_shutdown()` when your orchestrator asks the worker to stop:
+
+```rust,ignore
+let worker = graphile_worker::WorkerOptions::default()
+    .listen_os_shutdown_signals(false) // prevent installing Ctrl+C handlers
+    // ... other configuration
+    .init()
+    .await?;
+
+tokio::pin! {
+    let run_loop = worker.run();
+}
+
+tokio::select! {
+    // Main worker loop
+    result = &mut run_loop => result?,
+    // Notify the worker when the host framework wants to stop
+    () = on_shutdown() => {
+        worker.request_shutdown();
+        (&mut run_loop).await; // drain gracefully before returning
+    }
+}
+```
+
 ### 3. Schedule Jobs
 
 #### Option A: Schedule a job via SQL

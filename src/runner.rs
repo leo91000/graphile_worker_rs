@@ -23,6 +23,7 @@ use graphile_worker_lifecycle_hooks::{
 };
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
+use tokio::sync::Notify;
 use tracing::{debug, error, info, trace, warn};
 
 use crate::builder::WorkerOptions;
@@ -72,6 +73,9 @@ pub struct Worker {
     pub(crate) use_local_time: bool,
     /// Signal that can be triggered to gracefully shut down the worker
     pub(crate) shutdown_signal: ShutdownSignal,
+    /// Internal notifier used to request shutdown programmatically
+    #[getset(skip)]
+    pub(crate) shutdown_notifier: Arc<Notify>,
     /// Extensions that can modify worker behavior
     pub(crate) extensions: ReadOnlyExtensions,
     /// Lifecycle hooks for observing and intercepting worker events
@@ -358,6 +362,14 @@ impl Worker {
             self.escaped_schema.clone(),
             self.hooks.clone(),
         )
+    }
+
+    /// Requests a graceful shutdown of the worker.
+    ///
+    /// Wakes all internal listeners waiting on the shutdown signal so that
+    /// `run`/`run_once` loops exit once in-flight work has finished.
+    pub fn request_shutdown(&self) {
+        self.shutdown_notifier.notify_waiters();
     }
 }
 
