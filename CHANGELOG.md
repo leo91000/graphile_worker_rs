@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.9.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.9.1...graphile_worker-v0.9.2) - 2025-12-12
+
+### Other
+
+- *(deps)* update all non-major dependencies ([#333](https://github.com/leo91000/graphile_worker_rs/pull/333))
+
 ## [0.9.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.9.0...graphile_worker-v0.9.1) - 2025-12-12
 
 ### Fixed
