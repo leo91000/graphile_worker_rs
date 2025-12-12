@@ -18,6 +18,10 @@
   },
   packageRules: [
     {
+      matchPackageNames: ['opentelemetry-30', 'tracing-opentelemetry-30'],
+      enabled: false,
+    },
+    {
       matchUpdateTypes: [
         'major',
       ],
