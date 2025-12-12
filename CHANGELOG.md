@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.9.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.9.0...graphile_worker-v0.9.1) - 2025-12-12
+
+### Fixed
+
+- use explicit feature flags in tracing module
+
+### Other
+
+- Add OpenTelemetry tracing
+
 ## [0.9.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.8.7...graphile_worker-v0.9.0) - 2025-12-06
 
 ### Added
