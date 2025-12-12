@@ -28,8 +28,8 @@ use tracing::{debug, error, info, trace, warn, Instrument, Span};
 
 use crate::builder::WorkerOptions;
 use crate::sql::complete_job::complete_job;
-use crate::{sql::fail_job::fail_job, streams::StreamSource};
 use crate::tracing::link_to_job_create_span;
+use crate::{sql::fail_job::fail_job, streams::StreamSource};
 
 /// Type alias for task handler functions.
 ///

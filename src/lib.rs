@@ -52,9 +52,9 @@ pub mod streams;
 pub mod utils;
 
 pub mod context_ext;
+mod tracing;
 /// Utility functions for job management
 pub mod worker_utils;
-mod tracing;
 
 pub use crate::job_spec::*;
 pub use graphile_worker_crontab_parser::parse_crontab;

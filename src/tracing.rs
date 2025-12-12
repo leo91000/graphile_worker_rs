@@ -1,19 +1,21 @@
 pub(crate) use functions::{add_tracing_info, link_to_job_create_span};
 
-#[cfg(not(any(feature = "opentelemetry_0_30", feature = "opentelemetry",)))]
+#[cfg(not(any(feature = "opentelemetry_0_30", feature = "opentelemetry_0_31")))]
 mod functions {
     pub(crate) fn add_tracing_info(_payload: &mut serde_json::Value) {}
     pub(crate) fn link_to_job_create_span(_payload: serde_json::Value) {}
 }
 
-#[cfg(any(feature = "opentelemetry_0_30", feature = "opentelemetry",))]
+#[cfg(any(feature = "opentelemetry_0_30", feature = "opentelemetry_0_31"))]
 mod functions {
-    use opentelemetry::trace::TraceContextExt;
     #[cfg(feature = "opentelemetry_0_30")]
     use opentelemetry_30 as opentelemetry;
-    use tracing::Span;
     #[cfg(feature = "opentelemetry_0_30")]
     use tracing_opentelemetry_30 as tracing_opentelemetry;
+
+    use opentelemetry::trace::TraceContextExt;
+    use tracing::Span;
+    use tracing_opentelemetry::OpenTelemetrySpanExt;
 
     #[derive(Debug, serde::Serialize, serde::Deserialize)]
     struct TraceInfo {
@@ -24,9 +26,6 @@ mod functions {
 
     pub(crate) fn add_tracing_info(payload: &mut serde_json::Value) {
         if let Some(payload) = payload.as_object_mut() {
-            use opentelemetry::trace::TraceContextExt;
-            use tracing_opentelemetry::OpenTelemetrySpanExt;
-
             let context = Span::current().context();
             let span = context.span();
             let span_context = span.span_context();
@@ -62,7 +61,7 @@ mod functions {
             Err(_) => return,
         };
 
-        use opentelemetry::trace::{SpanContext, TraceFlags, TraceId, SpanId, TraceState};
+        use opentelemetry::trace::{SpanContext, SpanId, TraceFlags, TraceId, TraceState};
         use tracing_opentelemetry::OpenTelemetrySpanExt;
 
         let trace_id = TraceId::from_hex(&trace_info.trace_id);
@@ -74,13 +73,8 @@ mod functions {
             _ => return,
         };
 
-        let span_context = SpanContext::new(
-            trace_id,
-            span_id,
-            trace_flags,
-            true,
-            TraceState::default(),
-        );
+        let span_context =
+            SpanContext::new(trace_id, span_id, trace_flags, true, TraceState::default());
 
         Span::current().add_link(span_context);
     }
