@@ -1,8 +1,9 @@
-use std::{num::NonZeroUsize, time::Duration};
+use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
 use futures::{stream, Stream};
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use sqlx::{postgres::PgListener, PgPool};
+use tokio::sync::RwLock;
 use tracing::error;
 
 use crate::{
@@ -134,7 +135,7 @@ pub async fn job_signal_stream(
 ///
 /// * `pg_pool` - PostgreSQL connection pool
 /// * `shutdown_signal` - Signal that completes when the worker should shut down
-/// * `task_details` - Mapping of task IDs to their string identifiers
+/// * `task_details` - Mapping of task IDs to their string identifiers (behind RwLock for refresh support)
 /// * `escaped_schema` - Database schema name (properly escaped for SQL)
 /// * `worker_id` - Unique identifier for this worker
 /// * `forbidden_flags` - List of job flags that this worker will not process
@@ -145,7 +146,7 @@ pub async fn job_signal_stream(
 pub fn job_stream(
     pg_pool: PgPool,
     shutdown_signal: ShutdownSignal,
-    task_details: TaskDetails,
+    task_details: Arc<RwLock<TaskDetails>>,
     escaped_schema: String,
     worker_id: String,
     forbidden_flags: Vec<String>,
@@ -158,9 +159,10 @@ pub fn job_stream(
         let forbidden_flags = forbidden_flags.clone();
 
         let job_fut = async move {
+            let task_details_guard = task_details.read().await;
             let job = get_job(
                 &pg_pool,
-                &task_details,
+                &task_details_guard,
                 &escaped_schema,
                 &worker_id,
                 &forbidden_flags,
