@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.9.4](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.9.3...graphile_worker-v0.9.4) - 2025-12-22
+
+### Fixed
+
+- preserve task identifiers for horizontal scaling in GcTaskIdentifiers
+
 ## [0.9.3](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.9.2...graphile_worker-v0.9.3) - 2025-12-22
 
 ### Fixed
