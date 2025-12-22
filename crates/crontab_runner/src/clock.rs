@@ -1,8 +1,6 @@
 use chrono::{DateTime, Local};
 use std::future::Future;
 
-use crate::utils::DURATION_ZERO;
-
 pub trait Clock: Send + Sync {
     fn now(&self) -> DateTime<Local>;
 
@@ -19,11 +17,8 @@ impl Clock for SystemClock {
 
     async fn sleep_until(&self, datetime: DateTime<Local>) {
         let dur = datetime - Local::now();
-        if dur < *DURATION_ZERO {
-            return;
-        }
-
-        tokio::time::sleep(dur.to_std().unwrap()).await;
+        let Ok(std_dur) = dur.to_std() else { return };
+        tokio::time::sleep(std_dur).await;
     }
 }
 
