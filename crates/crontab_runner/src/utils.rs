@@ -14,12 +14,3 @@ pub(crate) fn round_date_minute<Tz: TimeZone>(
     }
     datetime
 }
-
-pub(crate) async fn sleep_until<Tz: TimeZone>(datetime: DateTime<Tz>) {
-    let dur = datetime.with_timezone(&Local) - Local::now();
-    if dur < *DURATION_ZERO {
-        return;
-    }
-
-    tokio::time::sleep(dur.to_std().unwrap()).await;
-}
