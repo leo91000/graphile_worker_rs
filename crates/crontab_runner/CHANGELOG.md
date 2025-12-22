@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.6.0...graphile_worker_crontab_runner-v0.6.1) - 2025-12-22
+
+### Fixed
+
+- resolve crontab_runner infinite loop on clock skew
+
+### Other
+
+- use let-else for cleaner duration handling
+- add integration tests for CronRunner with MockClock
+
 ## [0.6.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.5.12...graphile_worker_crontab_runner-v0.6.0) - 2025-12-06
 
 ### Added
