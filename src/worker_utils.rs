@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::sql::task_identifiers::{get_tasks_details, TaskDetails};
 use crate::tracing::add_tracing_info;
 use crate::{errors::GraphileWorkerError, sql::add_job::add_job, DbJob, Job, JobSpec};
 use graphile_worker_lifecycle_hooks::{
@@ -10,6 +11,7 @@ use graphile_worker_task_handler::TaskHandler;
 use indoc::formatdoc;
 use serde::Serialize;
 use sqlx::{PgExecutor, PgPool};
+use tokio::sync::RwLock;
 use tracing::Span;
 
 /// Types of database cleanup tasks that can be performed on the Graphile Worker schema.
@@ -130,6 +132,9 @@ pub struct WorkerUtils {
 
     /// Optional lifecycle hooks for intercepting job scheduling
     hooks: Option<Arc<TypeErasedHooks>>,
+
+    /// Shared task details for refreshing after GcTaskIdentifiers cleanup
+    task_details: Option<Arc<RwLock<TaskDetails>>>,
 }
 
 impl WorkerUtils {
@@ -146,20 +151,24 @@ impl WorkerUtils {
             pg_pool,
             escaped_schema,
             hooks: None,
+            task_details: None,
         }
     }
 
-    /// Creates a new instance of WorkerUtils with lifecycle hooks.
-    pub fn with_hooks(
-        pg_pool: PgPool,
-        escaped_schema: String,
-        hooks: Arc<TypeErasedHooks>,
-    ) -> Self {
-        Self {
-            pg_pool,
-            escaped_schema,
-            hooks: Some(hooks),
-        }
+    /// Adds lifecycle hooks to this WorkerUtils instance.
+    pub fn with_hooks(mut self, hooks: Arc<TypeErasedHooks>) -> Self {
+        self.hooks = Some(hooks);
+        self
+    }
+
+    /// Adds task details to this WorkerUtils instance.
+    ///
+    /// When task_details is provided, cleanup operations that include `GcTaskIdentifiers`
+    /// will automatically refresh the task details to ensure the worker can still pick
+    /// up jobs after task identifiers are garbage collected.
+    pub fn with_task_details(mut self, task_details: Arc<RwLock<TaskDetails>>) -> Self {
+        self.task_details = Some(task_details);
+        self
     }
 
     async fn invoke_before_job_schedule(
@@ -476,6 +485,10 @@ impl WorkerUtils {
     /// Executes the specified cleanup tasks, which helps keep
     /// the database size manageable and improves query performance.
     ///
+    /// When `GcTaskIdentifiers` is included in the tasks and this `WorkerUtils` instance
+    /// was created with task details (via `with_task_details`), the task details will be
+    /// automatically refreshed after cleanup to ensure the worker can still pick up jobs.
+    ///
     /// # Arguments
     /// * `tasks` - Array of cleanup tasks to perform
     ///
@@ -497,9 +510,30 @@ impl WorkerUtils {
     /// # }
     /// ```
     pub async fn cleanup(&self, tasks: &[CleanupTask]) -> Result<(), GraphileWorkerError> {
+        let has_gc_task_identifiers = tasks
+            .iter()
+            .any(|t| matches!(t, CleanupTask::GcTaskIdentifiers));
+
+        if has_gc_task_identifiers {
+            if let Some(task_details) = &self.task_details {
+                let mut guard = task_details.write().await;
+                let task_names = guard.task_names();
+
+                for task in tasks {
+                    task.execute(&self.pg_pool, &self.escaped_schema).await?;
+                }
+
+                let refreshed =
+                    get_tasks_details(&self.pg_pool, &self.escaped_schema, task_names).await?;
+                *guard = refreshed;
+                return Ok(());
+            }
+        }
+
         for task in tasks {
             task.execute(&self.pg_pool, &self.escaped_schema).await?;
         }
+
         Ok(())
     }
 

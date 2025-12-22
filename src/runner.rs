@@ -23,7 +23,7 @@ use graphile_worker_lifecycle_hooks::{
 };
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
-use tokio::sync::Notify;
+use tokio::sync::{Notify, RwLock};
 use tracing::{debug, error, info, trace, warn, Instrument, Span};
 
 use crate::builder::WorkerOptions;
@@ -64,8 +64,8 @@ pub struct Worker {
     pub(crate) pg_pool: sqlx::PgPool,
     /// Database schema name (properly escaped for SQL)
     pub(crate) escaped_schema: String,
-    /// Mapping of task IDs to their string identifiers
-    pub(crate) task_details: TaskDetails,
+    /// Mapping of task IDs to their string identifiers (behind RwLock for refresh support)
+    pub(crate) task_details: Arc<RwLock<TaskDetails>>,
     /// List of job flags that this worker will not process
     pub(crate) forbidden_flags: Vec<String>,
     /// List of cron job definitions to be scheduled
@@ -262,15 +262,17 @@ impl Worker {
                         break;
                     }
                     info!(job_id, "Job has queue, fetching another job");
+                    let task_details_guard = self.task_details.read().await;
                     let new_job = get_job(
                         self.pg_pool(),
-                        self.task_details(),
+                        &task_details_guard,
                         self.escaped_schema(),
                         self.worker_id(),
                         self.forbidden_flags(),
                     )
                     .await
                     .unwrap_or(None);
+                    drop(task_details_guard);
                     let Some(new_job) = new_job else {
                         break;
                     };
@@ -358,11 +360,9 @@ impl Worker {
     /// A new `WorkerUtils` instance configured with this worker's database connection
     /// pool and schema.
     pub fn create_utils(&self) -> WorkerUtils {
-        WorkerUtils::with_hooks(
-            self.pg_pool.clone(),
-            self.escaped_schema.clone(),
-            self.hooks.clone(),
-        )
+        WorkerUtils::new(self.pg_pool.clone(), self.escaped_schema.clone())
+            .with_hooks(self.hooks.clone())
+            .with_task_details(self.task_details.clone())
     }
 
     /// Requests a graceful shutdown of the worker.
@@ -406,9 +406,10 @@ async fn process_one_job(
     worker: &Worker,
     source: StreamSource,
 ) -> Result<Option<Job>, ProcessJobError> {
+    let task_details_guard = worker.task_details.read().await;
     let job = get_job(
         worker.pg_pool(),
-        worker.task_details(),
+        &task_details_guard,
         worker.escaped_schema(),
         worker.worker_id(),
         worker.forbidden_flags(),
@@ -418,6 +419,7 @@ async fn process_one_job(
         error!("Could not get job : {:?}", e);
         e
     })?;
+    drop(task_details_guard);
 
     match job {
         Some(job) => {
@@ -606,10 +608,12 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
     let task_id = job.task_id();
 
     // Look up the task identifier (string) from the task ID (integer)
-    let task_identifier = worker
-        .task_details()
+    let task_details_guard = worker.task_details.read().await;
+    let task_identifier = task_details_guard
         .get(task_id)
-        .ok_or_else(|| RunJobError::IdentifierNotFound(*task_id))?;
+        .ok_or_else(|| RunJobError::IdentifierNotFound(*task_id))?
+        .clone();
+    drop(task_details_guard);
 
     let span = Span::current();
     span.record("otel.name", task_identifier.as_str());
@@ -618,8 +622,8 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
     // Find the handler function for this task identifier
     let task_fn = worker
         .jobs()
-        .get(task_identifier)
-        .ok_or_else(|| RunJobError::FnNotFound(task_identifier.into()))?;
+        .get(&task_identifier)
+        .ok_or_else(|| RunJobError::FnNotFound(task_identifier.clone()))?;
 
     debug!(source = ?source, job_id = job.id(), task_identifier, task_id, "Found task");
     let payload = job.payload().to_string();
