@@ -510,11 +510,11 @@ impl WorkerUtils {
     /// # }
     /// ```
     pub async fn cleanup(&self, tasks: &[CleanupTask]) -> Result<(), GraphileWorkerError> {
-        let has_gc_task_identifiers = tasks
+        let should_refresh_task_identifiers = tasks
             .iter()
             .any(|t| matches!(t, CleanupTask::GcTaskIdentifiers));
 
-        if has_gc_task_identifiers {
+        if should_refresh_task_identifiers {
             if let Some(task_details) = &self.task_details {
                 let mut guard = task_details.write().await;
                 let task_names = guard.task_names();
