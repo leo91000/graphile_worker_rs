@@ -8,16 +8,18 @@ use graphile_worker_shutdown_signal::ShutdownSignal;
 use sqlx::PgExecutor;
 use tracing::{debug, warn};
 
+pub use crate::clock::mock::MockClock;
+pub use crate::clock::Clock;
 pub use crate::sql::KnownCrontab;
 pub use crate::sql::ScheduleCronJobError;
 use crate::{
-    clock::{Clock, SystemClock},
+    clock::SystemClock,
     sql::{schedule_cron_jobs, CrontabJob},
     utils::{round_date_minute, ONE_MINUTE},
 };
 
 mod backfill;
-mod clock;
+pub mod clock;
 mod sql;
 mod utils;
 
@@ -38,7 +40,7 @@ pub async fn cron_main<'e>(
         .await
 }
 
-pub(crate) struct CronRunner<'a, E, C = SystemClock> {
+pub struct CronRunner<'a, E, C = SystemClock> {
     executor: E,
     escaped_schema: &'a str,
     crontabs: &'a [Crontab],
@@ -81,8 +83,6 @@ impl<'a, E, C: Clock> CronRunner<'a, E, C> {
         self
     }
 
-    #[cfg(test)]
-    #[allow(dead_code)]
     pub fn with_clock<C2: Clock>(self, clock: C2) -> CronRunner<'a, E, C2> {
         CronRunner {
             executor: self.executor,

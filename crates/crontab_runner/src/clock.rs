@@ -3,14 +3,14 @@ use std::future::Future;
 
 use crate::utils::DURATION_ZERO;
 
-pub(crate) trait Clock: Send + Sync {
+pub trait Clock: Send + Sync {
     fn now(&self) -> DateTime<Local>;
 
     fn sleep_until(&self, datetime: DateTime<Local>) -> impl Future<Output = ()> + Send;
 }
 
 #[derive(Clone, Copy, Default)]
-pub(crate) struct SystemClock;
+pub struct SystemClock;
 
 impl Clock for SystemClock {
     fn now(&self) -> DateTime<Local> {
@@ -27,13 +27,12 @@ impl Clock for SystemClock {
     }
 }
 
-#[cfg(test)]
-pub(crate) mod mock {
+pub mod mock {
     use super::*;
     use std::sync::{Arc, Mutex};
     use tokio::sync::Notify;
 
-    pub(crate) struct MockClock {
+    pub struct MockClock {
         current_time: Arc<Mutex<DateTime<Local>>>,
         wake_notify: Arc<Notify>,
     }
@@ -53,7 +52,7 @@ pub(crate) mod mock {
 
         pub fn advance(&self, duration: chrono::Duration) {
             let mut time = self.current_time.lock().unwrap();
-            *time = *time + duration;
+            *time += duration;
             drop(time);
             self.wake_notify.notify_waiters();
         }
@@ -72,6 +71,16 @@ pub(crate) mod mock {
                 }
                 self.wake_notify.notified().await;
             }
+        }
+    }
+
+    impl Clock for Arc<MockClock> {
+        fn now(&self) -> DateTime<Local> {
+            MockClock::now(self)
+        }
+
+        async fn sleep_until(&self, datetime: DateTime<Local>) {
+            MockClock::sleep_until(self, datetime).await
         }
     }
 }

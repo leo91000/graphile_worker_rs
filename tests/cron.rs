@@ -1,14 +1,32 @@
+use std::sync::Arc;
+
 use chrono::{Duration, DurationRound, Local};
+use futures::FutureExt;
+use graphile_worker::parse_crontab;
 use graphile_worker::IntoTaskHandlerResult;
 use graphile_worker::Worker;
+use graphile_worker_crontab_runner::{CronRunner, MockClock};
+use graphile_worker_shutdown_signal::ShutdownSignal;
 use serde::{Deserialize, Serialize};
 use sqlx::query;
+use tokio::sync::Notify;
 use tokio::{task::spawn_local, time::Instant};
 
 use crate::helpers::{with_test_db, StaticCounter};
 use graphile_worker::{TaskHandler, WorkerContext};
 
 mod helpers;
+
+fn create_shutdown_signal() -> (ShutdownSignal, Arc<Notify>) {
+    let notify = Arc::new(Notify::new());
+    let notify_clone = notify.clone();
+    let signal: ShutdownSignal = async move {
+        notify_clone.notified().await;
+    }
+    .boxed()
+    .shared();
+    (signal, notify)
+}
 
 #[tokio::test]
 async fn register_identifiers() {
@@ -274,6 +292,216 @@ async fn backfills_if_identifier_already_registered_25h_ago() {
         assert!(jobs.iter().all(|job| &job.task_identifier == "do_it"));
 
         worker_handle.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn cron_runner_schedules_job_on_tick() {
+    with_test_db(|test_db| async move {
+        test_db
+            .worker_utils()
+            .migrate()
+            .await
+            .expect("Failed to migrate");
+
+        let initial_time = Local::now();
+        let clock = Arc::new(MockClock::new(initial_time));
+        let (shutdown_signal, shutdown_notify) = create_shutdown_signal();
+
+        let crontabs = parse_crontab("* * * * * test_task").expect("Failed to parse crontab");
+
+        let test_pool = test_db.test_pool.clone();
+        let clock_for_runner = clock.clone();
+        let runner_handle = spawn_local(async move {
+            CronRunner::new(&test_pool, "graphile_worker", &crontabs)
+                .with_clock(clock_for_runner)
+                .run(shutdown_signal)
+                .await
+        });
+
+        tokio::task::yield_now().await;
+
+        clock.advance(Duration::minutes(2));
+
+        let start = Instant::now();
+        loop {
+            let jobs = test_db.get_jobs().await;
+            if !jobs.is_empty() {
+                assert_eq!(jobs[0].task_identifier, "test_task");
+                break;
+            }
+            if start.elapsed().as_secs() > 5 {
+                panic!("Job should have been scheduled by now");
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        }
+
+        shutdown_notify.notify_one();
+        runner_handle.await.ok();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn cron_runner_catches_up_after_clock_jump() {
+    with_test_db(|test_db| async move {
+        test_db
+            .worker_utils()
+            .migrate()
+            .await
+            .expect("Failed to migrate");
+
+        let initial_time = Local::now();
+        let clock = Arc::new(MockClock::new(initial_time));
+        let (shutdown_signal, shutdown_notify) = create_shutdown_signal();
+
+        let crontabs = parse_crontab("* * * * * catchup_task").expect("Failed to parse crontab");
+
+        let test_pool = test_db.test_pool.clone();
+        let clock_for_runner = clock.clone();
+        let runner_handle = spawn_local(async move {
+            CronRunner::new(&test_pool, "graphile_worker", &crontabs)
+                .with_clock(clock_for_runner)
+                .run(shutdown_signal)
+                .await
+        });
+
+        tokio::task::yield_now().await;
+
+        clock.advance(Duration::minutes(5));
+
+        let start = Instant::now();
+        loop {
+            let jobs = test_db.get_jobs().await;
+            if jobs.len() >= 4 {
+                assert!(jobs.iter().all(|j| j.task_identifier == "catchup_task"));
+                break;
+            }
+            if start.elapsed().as_secs() > 5 {
+                let jobs = test_db.get_jobs().await;
+                panic!(
+                    "Expected at least 4 jobs after 5 minute clock jump, got {}",
+                    jobs.len()
+                );
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        }
+
+        shutdown_notify.notify_one();
+        runner_handle.await.ok();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn cron_runner_calls_hooks() {
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    with_test_db(|test_db| async move {
+        test_db
+            .worker_utils()
+            .migrate()
+            .await
+            .expect("Failed to migrate");
+
+        let initial_time = Local::now();
+        let clock = Arc::new(MockClock::new(initial_time));
+        let (shutdown_signal, shutdown_notify) = create_shutdown_signal();
+
+        let crontabs = parse_crontab("* * * * * hook_task").expect("Failed to parse crontab");
+
+        static TICK_COUNT: AtomicU32 = AtomicU32::new(0);
+        static SCHEDULED_COUNT: AtomicU32 = AtomicU32::new(0);
+
+        let on_tick: graphile_worker::ObserverFn<graphile_worker::CronTickContext> =
+            Box::new(|_ctx| {
+                Box::pin(async {
+                    TICK_COUNT.fetch_add(1, Ordering::SeqCst);
+                })
+            });
+
+        let on_scheduled: graphile_worker::ObserverFn<graphile_worker::CronJobScheduledContext> =
+            Box::new(|_ctx| {
+                Box::pin(async {
+                    SCHEDULED_COUNT.fetch_add(1, Ordering::SeqCst);
+                })
+            });
+
+        let tick_hooks = [on_tick];
+        let scheduled_hooks = [on_scheduled];
+
+        let test_pool = test_db.test_pool.clone();
+        let clock_for_runner = clock.clone();
+        let runner_handle = spawn_local(async move {
+            CronRunner::new(&test_pool, "graphile_worker", &crontabs)
+                .on_cron_tick(&tick_hooks)
+                .on_cron_job_scheduled(&scheduled_hooks)
+                .with_clock(clock_for_runner)
+                .run(shutdown_signal)
+                .await
+        });
+
+        tokio::task::yield_now().await;
+
+        clock.advance(Duration::minutes(3));
+
+        let start = Instant::now();
+        loop {
+            let tick_count = TICK_COUNT.load(Ordering::SeqCst);
+            let scheduled_count = SCHEDULED_COUNT.load(Ordering::SeqCst);
+            if tick_count >= 2 && scheduled_count >= 2 {
+                break;
+            }
+            if start.elapsed().as_secs() > 5 {
+                panic!(
+                    "Expected hooks to be called. tick_count={}, scheduled_count={}",
+                    tick_count, scheduled_count
+                );
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        }
+
+        shutdown_notify.notify_one();
+        runner_handle.await.ok();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn cron_runner_shutdown_cleanly() {
+    with_test_db(|test_db| async move {
+        test_db
+            .worker_utils()
+            .migrate()
+            .await
+            .expect("Failed to migrate");
+
+        let initial_time = Local::now();
+        let clock = Arc::new(MockClock::new(initial_time));
+        let (shutdown_signal, shutdown_notify) = create_shutdown_signal();
+
+        let crontabs = parse_crontab("* * * * * shutdown_task").expect("Failed to parse crontab");
+
+        let test_pool = test_db.test_pool.clone();
+        let clock_for_runner = clock.clone();
+        let runner_handle = spawn_local(async move {
+            CronRunner::new(&test_pool, "graphile_worker", &crontabs)
+                .with_clock(clock_for_runner)
+                .run(shutdown_signal)
+                .await
+        });
+
+        tokio::task::yield_now().await;
+
+        shutdown_notify.notify_one();
+
+        let result = runner_handle.await;
+        assert!(result.is_ok(), "Runner should complete without error");
+        assert!(
+            result.unwrap().is_ok(),
+            "Runner should return Ok on shutdown"
+        );
     })
     .await;
 }
