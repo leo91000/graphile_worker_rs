@@ -133,6 +133,17 @@ impl TestDatabase {
         rows.into_iter().map(|row| row.get("identifier")).collect()
     }
 
+    pub async fn get_task_id(&self, identifier: &str) -> i32 {
+        let row =
+            sqlx::query("select id from graphile_worker._private_tasks where identifier = $1")
+                .bind(identifier)
+                .fetch_one(&self.test_pool)
+                .await
+                .expect("Failed to get task id");
+
+        row.get("id")
+    }
+
     pub async fn make_jobs_run_now(&self, task_identifier: &str) {
         sqlx::query(
             r#"

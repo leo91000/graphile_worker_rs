@@ -1,8 +1,11 @@
 use chrono::Utc;
-use graphile_worker::{worker_utils::CleanupTask, JobSpec};
+use graphile_worker::{
+    worker_utils::CleanupTask, IntoTaskHandlerResult, JobSpec, TaskHandler, WorkerContext,
+};
 use indoc::formatdoc;
+use serde::{Deserialize, Serialize};
 
-use crate::helpers::with_test_db;
+use crate::helpers::{with_test_db, StaticCounter};
 
 mod helpers;
 
@@ -217,6 +220,79 @@ async fn cleanup_with_gc_task_identifiers() {
                 vec
             },
             "Only relevant task identifiers should remain after cleanup"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn gc_task_identifiers_refreshes_task_details() {
+    static CALL_COUNT: StaticCounter = StaticCounter::new();
+
+    #[derive(Serialize, Deserialize)]
+    struct RefreshTestJob;
+
+    impl TaskHandler for RefreshTestJob {
+        const IDENTIFIER: &'static str = "refresh_test_job";
+
+        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+            CALL_COUNT.increment().await;
+        }
+    }
+
+    with_test_db(|test_db| async move {
+        let worker = test_db
+            .create_worker_options()
+            .define_job::<RefreshTestJob>()
+            .init()
+            .await
+            .expect("Failed to create worker");
+
+        let utils = worker.create_utils();
+
+        utils
+            .add_job(RefreshTestJob, JobSpec::default())
+            .await
+            .expect("Failed to add first job");
+
+        worker.run_once().await.expect("Failed to run worker");
+        assert_eq!(CALL_COUNT.get().await, 1, "First job should have run");
+
+        let jobs_after_first_run = test_db.get_jobs().await;
+        assert!(jobs_after_first_run.is_empty(), "Job should be completed");
+
+        let task_id_before = test_db.get_task_id("refresh_test_job").await;
+
+        utils
+            .cleanup(&[CleanupTask::GcTaskIdentifiers])
+            .await
+            .expect("Failed to cleanup");
+
+        let task_id_after = test_db.get_task_id("refresh_test_job").await;
+        assert_ne!(
+            task_id_before, task_id_after,
+            "Task ID should change after cleanup (old deleted, new created during refresh)"
+        );
+
+        utils
+            .add_job(RefreshTestJob, JobSpec::default())
+            .await
+            .expect("Failed to add second job");
+
+        worker
+            .run_once()
+            .await
+            .expect("Failed to run worker second time");
+        assert_eq!(
+            CALL_COUNT.get().await,
+            2,
+            "Second job should have run (task_details was refreshed)"
+        );
+
+        let jobs_after_second_run = test_db.get_jobs().await;
+        assert!(
+            jobs_after_second_run.is_empty(),
+            "Second job should be completed"
         );
     })
     .await;
