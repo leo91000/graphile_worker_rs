@@ -168,7 +168,13 @@ async fn test_observer_hooks_are_called() {
             }
         });
 
-        sleep(Duration::from_millis(100)).await;
+        let c = counters.clone();
+        wait_for_condition(
+            || c.worker_start.load(Ordering::SeqCst) >= 1,
+            5,
+            "Worker should have started",
+        )
+        .await;
         assert_eq!(counters.worker_start.load(Ordering::SeqCst), 1);
 
         utils
