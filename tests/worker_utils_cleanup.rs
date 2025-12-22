@@ -226,7 +226,7 @@ async fn cleanup_with_gc_task_identifiers() {
 }
 
 #[tokio::test]
-async fn gc_task_identifiers_refreshes_task_details() {
+async fn gc_task_identifiers_preserves_known_identifiers_for_horizontal_scaling() {
     static CALL_COUNT: StaticCounter = StaticCounter::new();
 
     #[derive(Serialize, Deserialize)]
@@ -269,9 +269,9 @@ async fn gc_task_identifiers_refreshes_task_details() {
             .expect("Failed to cleanup");
 
         let task_id_after = test_db.get_task_id("refresh_test_job").await;
-        assert_ne!(
+        assert_eq!(
             task_id_before, task_id_after,
-            "Task ID should change after cleanup (old deleted, new created during refresh)"
+            "Task ID should stay the same (preserved for horizontal scaling safety)"
         );
 
         utils
@@ -283,11 +283,7 @@ async fn gc_task_identifiers_refreshes_task_details() {
             .run_once()
             .await
             .expect("Failed to run worker second time");
-        assert_eq!(
-            CALL_COUNT.get().await,
-            2,
-            "Second job should have run (task_details was refreshed)"
-        );
+        assert_eq!(CALL_COUNT.get().await, 2, "Second job should have run");
 
         let jobs_after_second_run = test_db.get_jobs().await;
         assert!(

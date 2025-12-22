@@ -18,10 +18,13 @@ use tracing::Span;
 ///
 /// These tasks help maintain database performance by removing unused records and
 /// reducing database size over time.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CleanupTask {
     /// Removes task identifier records that are no longer referenced by any jobs.
     /// This helps keep the `_private_tasks` table clean and smaller.
+    ///
+    /// **Note**: When using `WorkerUtils::cleanup()` from a worker, task identifiers
+    /// that the worker knows about will be preserved to support horizontal scaling.
     GcTaskIdentifiers,
 
     /// Removes job queue records that are no longer referenced by any jobs.
@@ -34,18 +37,11 @@ pub enum CleanupTask {
 }
 
 impl CleanupTask {
-    /// Executes the cleanup task on the database.
-    ///
-    /// # Arguments
-    /// * `executor` - A PostgreSQL executor to run the query on
-    /// * `escaped_schema` - The escaped name of the schema where Graphile Worker tables are stored
-    ///
-    /// # Returns
-    /// * `Result<(), GraphileWorkerError>` - Ok if the task completed successfully
-    pub async fn execute<'e>(
+    pub(crate) async fn execute<'e>(
         &self,
         executor: impl PgExecutor<'e>,
         escaped_schema: &str,
+        task_identifiers_to_keep: &[String],
     ) -> Result<(), GraphileWorkerError> {
         match self {
             CleanupTask::DeletePermenantlyFailedJobs => {
@@ -54,10 +50,8 @@ impl CleanupTask {
                         delete from {escaped_schema}._private_jobs jobs
                             where attempts = max_attempts
                             and locked_at is null;
-                    "#,
-                    escaped_schema = escaped_schema
+                    "#
                 );
-
                 sqlx::query(&sql).execute(executor).await?;
             }
             CleanupTask::GcTaskIdentifiers => {
@@ -66,12 +60,14 @@ impl CleanupTask {
                         delete from {escaped_schema}._private_tasks tasks
                         where tasks.id not in (
                             select jobs.task_id from {escaped_schema}._private_jobs jobs
-                        );
-                    "#,
-                    escaped_schema = escaped_schema
+                        )
+                        and tasks.identifier <> all ($1::text[]);
+                    "#
                 );
-
-                sqlx::query(&sql).execute(executor).await?;
+                sqlx::query(&sql)
+                    .bind(task_identifiers_to_keep)
+                    .execute(executor)
+                    .await?;
             }
             CleanupTask::GcJobQueues => {
                 let sql = formatdoc!(
@@ -80,14 +76,9 @@ impl CleanupTask {
                         where job_queues.id not in (
                             select jobs.job_queue_id from {escaped_schema}._private_jobs jobs
                         );
-                    "#,
-                    escaped_schema = escaped_schema
+                    "#
                 );
-
-                sqlx::query(&sql)
-                    .execute(executor)
-                    .await
-                    .expect("Failed to run gc_job_queues");
+                sqlx::query(&sql).execute(executor).await?;
             }
         }
 
@@ -486,8 +477,9 @@ impl WorkerUtils {
     /// the database size manageable and improves query performance.
     ///
     /// When `GcTaskIdentifiers` is included in the tasks and this `WorkerUtils` instance
-    /// was created with task details (via `with_task_details`), the task details will be
-    /// automatically refreshed after cleanup to ensure the worker can still pick up jobs.
+    /// was created with task details (via `with_task_details`), the task identifiers
+    /// known to this worker will be preserved (not deleted), supporting horizontal scaling.
+    /// Additionally, task details will be refreshed after cleanup.
     ///
     /// # Arguments
     /// * `tasks` - Array of cleanup tasks to perform
@@ -510,17 +502,18 @@ impl WorkerUtils {
     /// # }
     /// ```
     pub async fn cleanup(&self, tasks: &[CleanupTask]) -> Result<(), GraphileWorkerError> {
-        let should_refresh_task_identifiers = tasks
+        let has_gc_task_identifiers = tasks
             .iter()
             .any(|t| matches!(t, CleanupTask::GcTaskIdentifiers));
 
-        if should_refresh_task_identifiers {
+        if has_gc_task_identifiers {
             if let Some(task_details) = &self.task_details {
                 let mut guard = task_details.write().await;
                 let task_names = guard.task_names();
 
                 for task in tasks {
-                    task.execute(&self.pg_pool, &self.escaped_schema).await?;
+                    task.execute(&self.pg_pool, &self.escaped_schema, &task_names)
+                        .await?;
                 }
 
                 let refreshed =
@@ -531,7 +524,8 @@ impl WorkerUtils {
         }
 
         for task in tasks {
-            task.execute(&self.pg_pool, &self.escaped_schema).await?;
+            task.execute(&self.pg_pool, &self.escaped_schema, &[])
+                .await?;
         }
 
         Ok(())
