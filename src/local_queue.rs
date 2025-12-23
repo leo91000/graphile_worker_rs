@@ -180,6 +180,18 @@ impl LocalQueue {
             }
         }
 
+        if config.size == 0 {
+            panic!("local_queue.size must be greater than 0");
+        }
+
+        if config.size > i32::MAX as usize {
+            panic!(
+                "local_queue.size ({}) must not exceed i32::MAX ({})",
+                config.size,
+                i32::MAX
+            );
+        }
+
         let queue = Arc::new(Self {
             inner: LocalQueueInner {
                 mode: RwLock::new(LocalQueueMode::Starting),
