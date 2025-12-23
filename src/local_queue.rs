@@ -150,6 +150,7 @@ struct LocalQueueInner {
     fetch_in_progress: AtomicBool,
     fetch_again: AtomicBool,
     refetch_delay: RefetchDelayState,
+    state_notify: Notify,
 }
 
 pub struct LocalQueue {
@@ -206,6 +207,7 @@ impl LocalQueue {
                 fetch_in_progress: AtomicBool::new(false),
                 fetch_again: AtomicBool::new(false),
                 refetch_delay: RefetchDelayState::default(),
+                state_notify: Notify::new(),
             },
             config,
             pg_pool,
@@ -254,18 +256,12 @@ impl LocalQueue {
                 break;
             }
 
-            if mode != LocalQueueMode::Polling {
-                tokio::time::sleep(Duration::from_millis(50)).await;
-                continue;
-            }
+            let can_fetch = mode == LocalQueueMode::Polling
+                && !this.inner.fetch_in_progress.load(Ordering::SeqCst)
+                && !this.inner.refetch_delay.active.load(Ordering::SeqCst);
 
-            if this.inner.fetch_in_progress.load(Ordering::SeqCst) {
-                tokio::time::sleep(Duration::from_millis(50)).await;
-                continue;
-            }
-
-            if this.inner.refetch_delay.active.load(Ordering::SeqCst) {
-                tokio::time::sleep(Duration::from_millis(50)).await;
+            if !can_fetch {
+                this.inner.state_notify.notified().await;
                 continue;
             }
 
@@ -281,7 +277,10 @@ impl LocalQueue {
                     .swap(false, Ordering::SeqCst);
 
                 if !should_fetch_again && !refetch_delay_wants_fetch {
-                    tokio::time::sleep(this.poll_interval).await;
+                    tokio::select! {
+                        _ = tokio::time::sleep(this.poll_interval) => {}
+                        _ = this.inner.state_notify.notified() => {}
+                    }
                 }
             } else if mode == LocalQueueMode::Polling && !this.continuous {
                 Self::set_mode(&this, LocalQueueMode::Released).await;
@@ -306,6 +305,7 @@ impl LocalQueue {
                 .fetch_on_complete
                 .store(true, Ordering::SeqCst);
             this.inner.fetch_in_progress.store(false, Ordering::SeqCst);
+            this.inner.state_notify.notify_one();
             return;
         }
 
@@ -325,6 +325,7 @@ impl LocalQueue {
         drop(task_details);
 
         this.inner.fetch_in_progress.store(false, Ordering::SeqCst);
+        this.inner.state_notify.notify_one();
 
         match result {
             Ok(jobs) => {
@@ -417,6 +418,7 @@ impl LocalQueue {
             .refetch_delay
             .active
             .store(false, Ordering::SeqCst);
+        this.inner.state_notify.notify_one();
 
         if aborted {
             let count = this.inner.refetch_delay.counter.load(Ordering::SeqCst);
@@ -618,6 +620,7 @@ impl LocalQueue {
             LocalQueueMode::Polling => {
                 if self.inner.fetch_in_progress.load(Ordering::SeqCst) {
                     self.inner.fetch_again.store(true, Ordering::SeqCst);
+                    self.inner.state_notify.notify_one();
                 }
             }
             LocalQueueMode::Waiting | LocalQueueMode::TtlExpired => {}
@@ -638,6 +641,7 @@ impl LocalQueue {
             .active
             .store(false, Ordering::SeqCst);
         self.inner.refetch_delay.abort_notify.notify_waiters();
+        self.inner.state_notify.notify_waiters();
 
         debug!("LocalQueue releasing, returning jobs to database");
 
@@ -683,5 +687,7 @@ impl LocalQueue {
                 new_mode: new_mode.as_str().to_string(),
             })
             .await;
+
+        this.inner.state_notify.notify_waiters();
     }
 }
