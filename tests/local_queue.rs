@@ -666,9 +666,8 @@ async fn local_queue_distributes_jobs_to_concurrent_workers() {
             }
         });
 
-        let start_time = Instant::now();
         while CONCURRENT_CALL_COUNT.get().await < 10 {
-            if start_time.elapsed().as_secs() > 10 {
+            if start.elapsed().as_secs() > 10 {
                 panic!(
                     "All jobs should have been executed by now, got {}",
                     CONCURRENT_CALL_COUNT.get().await
