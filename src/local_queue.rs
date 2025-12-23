@@ -100,8 +100,6 @@ pub enum LocalQueueError {
     ReturnJobsError(String),
     #[error("Database error: {0}")]
     DatabaseError(#[from] crate::errors::GraphileWorkerError),
-    #[error("Multiple errors occurred during shutdown: {0:?}")]
-    AggregateError(Vec<String>),
 }
 
 struct RefetchDelayState {
