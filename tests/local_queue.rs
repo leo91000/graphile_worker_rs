@@ -19,18 +19,18 @@ struct LocalQueueJob {
     id: u32,
 }
 
+static LOCAL_QUEUE_JOB_CALL_COUNT: StaticCounter = StaticCounter::new();
+
+impl TaskHandler for LocalQueueJob {
+    const IDENTIFIER: &'static str = "local_queue_job";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        LOCAL_QUEUE_JOB_CALL_COUNT.increment().await;
+    }
+}
+
 #[tokio::test]
 async fn local_queue_processes_jobs_correctly() {
-    static CALL_COUNT: StaticCounter = StaticCounter::new();
-
-    impl TaskHandler for LocalQueueJob {
-        const IDENTIFIER: &'static str = "local_queue_job";
-
-        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-            CALL_COUNT.increment().await;
-        }
-    }
-
     with_test_db(|test_db| async move {
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
@@ -59,7 +59,7 @@ async fn local_queue_processes_jobs_correctly() {
                 .expect("Failed to add job");
 
             let start_time = Instant::now();
-            while CALL_COUNT.get().await < i {
+            while LOCAL_QUEUE_JOB_CALL_COUNT.get().await < i {
                 if start_time.elapsed().as_secs() > 5 {
                     panic!("Job should have been executed by now");
                 }
@@ -67,7 +67,7 @@ async fn local_queue_processes_jobs_correctly() {
             }
 
             assert_eq!(
-                CALL_COUNT.get().await,
+                LOCAL_QUEUE_JOB_CALL_COUNT.get().await,
                 i,
                 "Job should have been executed {} times",
                 i
@@ -76,7 +76,7 @@ async fn local_queue_processes_jobs_correctly() {
 
         sleep(Duration::from_secs(1)).await;
         assert_eq!(
-            CALL_COUNT.get().await,
+            LOCAL_QUEUE_JOB_CALL_COUNT.get().await,
             5,
             "All 5 jobs should have been executed"
         );
@@ -91,18 +91,18 @@ struct BatchJob {
     id: u32,
 }
 
+static BATCH_CALL_COUNT: StaticCounter = StaticCounter::new();
+
+impl TaskHandler for BatchJob {
+    const IDENTIFIER: &'static str = "batch_job";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        BATCH_CALL_COUNT.increment().await;
+    }
+}
+
 #[tokio::test]
 async fn local_queue_batch_fetches_jobs() {
-    static BATCH_CALL_COUNT: StaticCounter = StaticCounter::new();
-
-    impl TaskHandler for BatchJob {
-        const IDENTIFIER: &'static str = "batch_job";
-
-        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-            BATCH_CALL_COUNT.increment().await;
-        }
-    }
-
     with_test_db(|test_db| async move {
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
@@ -158,19 +158,19 @@ struct ShutdownJob {
     id: u32,
 }
 
+static SHUTDOWN_CALL_COUNT: StaticCounter = StaticCounter::new();
+
+impl TaskHandler for ShutdownJob {
+    const IDENTIFIER: &'static str = "shutdown_job";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        sleep(Duration::from_secs(10)).await;
+        SHUTDOWN_CALL_COUNT.increment().await;
+    }
+}
+
 #[tokio::test]
 async fn local_queue_returns_jobs_on_shutdown() {
-    static SHUTDOWN_CALL_COUNT: StaticCounter = StaticCounter::new();
-
-    impl TaskHandler for ShutdownJob {
-        const IDENTIFIER: &'static str = "shutdown_job";
-
-        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-            sleep(Duration::from_secs(10)).await;
-            SHUTDOWN_CALL_COUNT.increment().await;
-        }
-    }
-
     with_test_db(|test_db| async move {
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
@@ -244,18 +244,18 @@ struct FlaggedJob {
     id: u32,
 }
 
+static FLAGGED_CALL_COUNT: StaticCounter = StaticCounter::new();
+
+impl TaskHandler for FlaggedJob {
+    const IDENTIFIER: &'static str = "flagged_job";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        FLAGGED_CALL_COUNT.increment().await;
+    }
+}
+
 #[tokio::test]
 async fn local_queue_with_forbidden_flags_uses_direct_fetch() {
-    static FLAGGED_CALL_COUNT: StaticCounter = StaticCounter::new();
-
-    impl TaskHandler for FlaggedJob {
-        const IDENTIFIER: &'static str = "flagged_job";
-
-        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-            FLAGGED_CALL_COUNT.increment().await;
-        }
-    }
-
     with_test_db(|test_db| async move {
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
@@ -331,18 +331,18 @@ struct RunOnceJob {
     id: u32,
 }
 
+static RUN_ONCE_CALL_COUNT: StaticCounter = StaticCounter::new();
+
+impl TaskHandler for RunOnceJob {
+    const IDENTIFIER: &'static str = "run_once_job";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        RUN_ONCE_CALL_COUNT.increment().await;
+    }
+}
+
 #[tokio::test]
 async fn local_queue_works_with_run_once() {
-    static RUN_ONCE_CALL_COUNT: StaticCounter = StaticCounter::new();
-
-    impl TaskHandler for RunOnceJob {
-        const IDENTIFIER: &'static str = "run_once_job";
-
-        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-            RUN_ONCE_CALL_COUNT.increment().await;
-        }
-    }
-
     with_test_db(|test_db| async move {
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
@@ -385,19 +385,19 @@ struct TtlExpiryJob {
     id: u32,
 }
 
+static TTL_CALL_COUNT: StaticCounter = StaticCounter::new();
+
+impl TaskHandler for TtlExpiryJob {
+    const IDENTIFIER: &'static str = "ttl_expiry_job";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        sleep(Duration::from_secs(30)).await;
+        TTL_CALL_COUNT.increment().await;
+    }
+}
+
 #[tokio::test]
 async fn local_queue_returns_jobs_on_ttl_expiry() {
-    static TTL_CALL_COUNT: StaticCounter = StaticCounter::new();
-
-    impl TaskHandler for TtlExpiryJob {
-        const IDENTIFIER: &'static str = "ttl_expiry_job";
-
-        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-            sleep(Duration::from_secs(30)).await;
-            TTL_CALL_COUNT.increment().await;
-        }
-    }
-
     with_test_db(|test_db| async move {
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
@@ -471,18 +471,18 @@ struct RefetchDelayJob {
     id: u32,
 }
 
+static REFETCH_DELAY_CALL_COUNT: StaticCounter = StaticCounter::new();
+
+impl TaskHandler for RefetchDelayJob {
+    const IDENTIFIER: &'static str = "refetch_delay_job";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        REFETCH_DELAY_CALL_COUNT.increment().await;
+    }
+}
+
 #[tokio::test]
 async fn local_queue_refetch_delay_triggers_when_below_threshold() {
-    static REFETCH_DELAY_CALL_COUNT: StaticCounter = StaticCounter::new();
-
-    impl TaskHandler for RefetchDelayJob {
-        const IDENTIFIER: &'static str = "refetch_delay_job";
-
-        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-            REFETCH_DELAY_CALL_COUNT.increment().await;
-        }
-    }
-
     with_test_db(|test_db| async move {
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
@@ -547,18 +547,18 @@ struct SmallQueueJob {
     id: u32,
 }
 
+static SMALL_QUEUE_CALL_COUNT: StaticCounter = StaticCounter::new();
+
+impl TaskHandler for SmallQueueJob {
+    const IDENTIFIER: &'static str = "small_queue_job";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        SMALL_QUEUE_CALL_COUNT.increment().await;
+    }
+}
+
 #[tokio::test]
 async fn local_queue_with_size_one() {
-    static SMALL_QUEUE_CALL_COUNT: StaticCounter = StaticCounter::new();
-
-    impl TaskHandler for SmallQueueJob {
-        const IDENTIFIER: &'static str = "small_queue_job";
-
-        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-            SMALL_QUEUE_CALL_COUNT.increment().await;
-        }
-    }
-
     with_test_db(|test_db| async move {
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
@@ -614,19 +614,19 @@ struct ConcurrentDistributionJob {
     id: u32,
 }
 
+static CONCURRENT_CALL_COUNT: StaticCounter = StaticCounter::new();
+
+impl TaskHandler for ConcurrentDistributionJob {
+    const IDENTIFIER: &'static str = "concurrent_distribution_job";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        sleep(Duration::from_millis(100)).await;
+        CONCURRENT_CALL_COUNT.increment().await;
+    }
+}
+
 #[tokio::test]
 async fn local_queue_distributes_jobs_to_concurrent_workers() {
-    static CONCURRENT_CALL_COUNT: StaticCounter = StaticCounter::new();
-
-    impl TaskHandler for ConcurrentDistributionJob {
-        const IDENTIFIER: &'static str = "concurrent_distribution_job";
-
-        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-            sleep(Duration::from_millis(100)).await;
-            CONCURRENT_CALL_COUNT.increment().await;
-        }
-    }
-
     with_test_db(|test_db| async move {
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
@@ -686,19 +686,19 @@ struct ModeTransitionJob {
     id: u32,
 }
 
+static MODE_TRANSITION_CALL_COUNT: StaticCounter = StaticCounter::new();
+
+impl TaskHandler for ModeTransitionJob {
+    const IDENTIFIER: &'static str = "mode_transition_job";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        sleep(Duration::from_millis(50)).await;
+        MODE_TRANSITION_CALL_COUNT.increment().await;
+    }
+}
+
 #[tokio::test]
 async fn local_queue_transitions_modes_correctly() {
-    static MODE_TRANSITION_CALL_COUNT: StaticCounter = StaticCounter::new();
-
-    impl TaskHandler for ModeTransitionJob {
-        const IDENTIFIER: &'static str = "mode_transition_job";
-
-        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-            sleep(Duration::from_millis(50)).await;
-            MODE_TRANSITION_CALL_COUNT.increment().await;
-        }
-    }
-
     with_test_db(|test_db| async move {
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
@@ -772,18 +772,18 @@ struct EmptyQueueJob {
     id: u32,
 }
 
+static EMPTY_QUEUE_CALL_COUNT: StaticCounter = StaticCounter::new();
+
+impl TaskHandler for EmptyQueueJob {
+    const IDENTIFIER: &'static str = "empty_queue_job";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        EMPTY_QUEUE_CALL_COUNT.increment().await;
+    }
+}
+
 #[tokio::test]
 async fn local_queue_handles_empty_queue_gracefully() {
-    static EMPTY_QUEUE_CALL_COUNT: StaticCounter = StaticCounter::new();
-
-    impl TaskHandler for EmptyQueueJob {
-        const IDENTIFIER: &'static str = "empty_queue_job";
-
-        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-            EMPTY_QUEUE_CALL_COUNT.increment().await;
-        }
-    }
-
     with_test_db(|test_db| async move {
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
@@ -844,18 +844,18 @@ struct LargeBatchJob {
     id: u32,
 }
 
+static LARGE_BATCH_CALL_COUNT: StaticCounter = StaticCounter::new();
+
+impl TaskHandler for LargeBatchJob {
+    const IDENTIFIER: &'static str = "large_batch_job";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        LARGE_BATCH_CALL_COUNT.increment().await;
+    }
+}
+
 #[tokio::test]
 async fn local_queue_handles_large_batch() {
-    static LARGE_BATCH_CALL_COUNT: StaticCounter = StaticCounter::new();
-
-    impl TaskHandler for LargeBatchJob {
-        const IDENTIFIER: &'static str = "large_batch_job";
-
-        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-            LARGE_BATCH_CALL_COUNT.increment().await;
-        }
-    }
-
     with_test_db(|test_db| async move {
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
@@ -911,18 +911,18 @@ struct RefetchDelayWithJobsJob {
     id: u32,
 }
 
+static REFETCH_WITH_JOBS_CALL_COUNT: StaticCounter = StaticCounter::new();
+
+impl TaskHandler for RefetchDelayWithJobsJob {
+    const IDENTIFIER: &'static str = "refetch_delay_with_jobs_job";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        REFETCH_WITH_JOBS_CALL_COUNT.increment().await;
+    }
+}
+
 #[tokio::test]
 async fn local_queue_processes_jobs_with_refetch_delay() {
-    static REFETCH_WITH_JOBS_CALL_COUNT: StaticCounter = StaticCounter::new();
-
-    impl TaskHandler for RefetchDelayWithJobsJob {
-        const IDENTIFIER: &'static str = "refetch_delay_with_jobs_job";
-
-        async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-            REFETCH_WITH_JOBS_CALL_COUNT.increment().await;
-        }
-    }
-
     with_test_db(|test_db| async move {
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
