@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use graphile_worker::{
@@ -1389,7 +1389,7 @@ struct LocalQueueHookCounters {
     refetch_delay_start: AtomicU32,
     refetch_delay_expired: AtomicU32,
     last_mode_change: std::sync::Mutex<Option<(LocalQueueMode, LocalQueueMode)>>,
-    last_jobs_count: AtomicU32,
+    last_jobs_count: AtomicUsize,
 }
 
 #[derive(Clone)]
@@ -1426,7 +1426,7 @@ impl LifecycleHooks for LocalQueueHooksPlugin {
             .fetch_add(1, Ordering::SeqCst);
         self.counters
             .last_jobs_count
-            .store(ctx.jobs_count as u32, Ordering::SeqCst);
+            .store(ctx.jobs_count, Ordering::SeqCst);
     }
 
     async fn on_local_queue_return_jobs(&self, _ctx: LocalQueueReturnJobsContext) {
