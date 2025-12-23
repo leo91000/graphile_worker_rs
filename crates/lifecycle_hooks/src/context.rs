@@ -15,6 +15,15 @@ pub enum ShutdownReason {
     Graceful,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalQueueMode {
+    Starting,
+    Polling,
+    Waiting,
+    TtlExpired,
+    Released,
+}
+
 #[derive(Clone)]
 pub struct WorkerInitContext {
     pub pool: PgPool,
@@ -112,8 +121,8 @@ pub struct LocalQueueInitContext {
 #[derive(Clone)]
 pub struct LocalQueueSetModeContext {
     pub worker_id: String,
-    pub old_mode: String,
-    pub new_mode: String,
+    pub old_mode: LocalQueueMode,
+    pub new_mode: LocalQueueMode,
 }
 
 #[derive(Clone)]

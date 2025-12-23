@@ -5,10 +5,12 @@ use std::time::Duration;
 
 use graphile_worker_job::Job;
 use graphile_worker_lifecycle_hooks::{
-    LocalQueueGetJobsCompleteContext, LocalQueueInitContext, LocalQueueRefetchDelayAbortContext,
-    LocalQueueRefetchDelayExpiredContext, LocalQueueRefetchDelayStartContext,
-    LocalQueueReturnJobsContext, LocalQueueSetModeContext, TypeErasedHooks,
+    LocalQueueGetJobsCompleteContext, LocalQueueInitContext,
+    LocalQueueRefetchDelayAbortContext, LocalQueueRefetchDelayExpiredContext,
+    LocalQueueRefetchDelayStartContext, LocalQueueReturnJobsContext, LocalQueueSetModeContext,
+    TypeErasedHooks,
 };
+pub use graphile_worker_lifecycle_hooks::LocalQueueMode;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use rand::Rng;
 use sqlx::PgPool;
@@ -23,27 +25,6 @@ use crate::sql::task_identifiers::TaskDetails;
 
 const DEFAULT_LOCAL_QUEUE_SIZE: usize = 100;
 const DEFAULT_LOCAL_QUEUE_TTL: Duration = Duration::from_secs(5 * 60);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LocalQueueMode {
-    Starting,
-    Polling,
-    Waiting,
-    TtlExpired,
-    Released,
-}
-
-impl LocalQueueMode {
-    fn as_str(&self) -> &'static str {
-        match self {
-            LocalQueueMode::Starting => "starting",
-            LocalQueueMode::Polling => "polling",
-            LocalQueueMode::Waiting => "waiting",
-            LocalQueueMode::TtlExpired => "ttl_expired",
-            LocalQueueMode::Released => "released",
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct RefetchDelayConfig {
@@ -683,8 +664,8 @@ impl LocalQueue {
         this.hooks
             .emit_local_queue_set_mode(LocalQueueSetModeContext {
                 worker_id: this.worker_id.clone(),
-                old_mode: old_mode.as_str().to_string(),
-                new_mode: new_mode.as_str().to_string(),
+                old_mode,
+                new_mode,
             })
             .await;
 
