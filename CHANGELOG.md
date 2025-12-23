@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.9.5](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.9.4...graphile_worker-v0.9.5) - 2025-12-23
+
+### Fixed
+
+- *(renovate)* use matchDepNames for cargo aliases
+
+### Other
+
+- Use correct version numbers for opentelemetry_0_30 feature
+
 ## [0.9.4](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.9.3...graphile_worker-v0.9.4) - 2025-12-22
 
 ### Fixed
