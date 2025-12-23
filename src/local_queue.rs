@@ -217,10 +217,6 @@ impl LocalQueue {
             hooks: hooks.clone(),
         });
 
-        hooks.emit_local_queue_init(LocalQueueInitContext {
-            worker_id: worker_id.clone(),
-        });
-
         let queue_clone = Arc::clone(&queue);
         tokio::spawn(async move {
             Self::run(queue_clone).await;
@@ -240,6 +236,12 @@ impl LocalQueue {
     }
 
     async fn run(this: Arc<Self>) {
+        this.hooks
+            .emit_local_queue_init(LocalQueueInitContext {
+                worker_id: this.worker_id.clone(),
+            })
+            .await;
+
         Self::set_mode(&this, LocalQueueMode::Polling).await;
         Self::schedule_fetch(this).await;
     }
@@ -333,7 +335,8 @@ impl LocalQueue {
                     .emit_local_queue_get_jobs_complete(LocalQueueGetJobsCompleteContext {
                         worker_id: this.worker_id.clone(),
                         jobs_count: job_count,
-                    });
+                    })
+                    .await;
 
                 let fetched_max = job_count >= this.config.size;
 
@@ -393,7 +396,8 @@ impl LocalQueue {
                 duration,
                 threshold: config.threshold,
                 abort_threshold,
-            });
+            })
+            .await;
 
         let this_clone = Arc::clone(&this);
         tokio::spawn(async move {
@@ -429,15 +433,16 @@ impl LocalQueue {
                     worker_id: this.worker_id.clone(),
                     count,
                     abort_threshold,
-                });
+                })
+                .await;
         } else {
             trace!("LocalQueue refetch delay expired");
 
-            this.hooks.emit_local_queue_refetch_delay_expired(
-                LocalQueueRefetchDelayExpiredContext {
+            this.hooks
+                .emit_local_queue_refetch_delay_expired(LocalQueueRefetchDelayExpiredContext {
                     worker_id: this.worker_id.clone(),
-                },
-            );
+                })
+                .await;
         }
     }
 
@@ -527,7 +532,8 @@ impl LocalQueue {
                     .emit_local_queue_return_jobs(LocalQueueReturnJobsContext {
                         worker_id: this.worker_id.clone(),
                         jobs_count,
-                    });
+                    })
+                    .await;
             }
         }
     }
@@ -653,7 +659,8 @@ impl LocalQueue {
                 .emit_local_queue_return_jobs(LocalQueueReturnJobsContext {
                     worker_id: self.worker_id.clone(),
                     jobs_count,
-                });
+                })
+                .await;
         }
 
         Ok(())
@@ -674,6 +681,7 @@ impl LocalQueue {
                 worker_id: this.worker_id.clone(),
                 old_mode: old_mode.as_str().to_string(),
                 new_mode: new_mode.as_str().to_string(),
-            });
+            })
+            .await;
     }
 }
