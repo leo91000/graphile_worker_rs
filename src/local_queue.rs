@@ -319,7 +319,7 @@ impl LocalQueue {
             &this.escaped_schema,
             &this.worker_id,
             &[],
-            this.config.size as i32,
+            this.config.size.try_into().unwrap_or(i32::MAX),
         )
         .await;
         drop(task_details);
