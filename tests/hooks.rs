@@ -2,13 +2,12 @@ use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use graphile_worker::{
-    AfterJobRunContext, BeforeJobRunContext, BeforeJobScheduleContext, HookResult,
-    IntoTaskHandlerResult, JobCompleteContext, JobFailContext, JobFetchContext,
-    JobPermanentlyFailContext, JobScheduleResult, JobSpec, JobStartContext, LifecycleHooks,
-    LocalQueueConfig, LocalQueueGetJobsCompleteContext, LocalQueueInitContext, LocalQueueMode,
-    LocalQueueRefetchDelayExpiredContext, LocalQueueRefetchDelayStartContext,
-    LocalQueueReturnJobsContext, LocalQueueSetModeContext, RefetchDelayConfig, TaskHandler, Worker,
-    WorkerContext, WorkerInitContext, WorkerShutdownContext, WorkerStartContext,
+    AfterJobRun, BeforeJobRun, BeforeJobSchedule, HookRegistry, HookResult, IntoTaskHandlerResult,
+    JobComplete, JobFail, JobFetch, JobPermanentlyFail, JobScheduleResult, JobSpec, JobStart,
+    LocalQueueConfig, LocalQueueGetJobsComplete, LocalQueueInit, LocalQueueMode,
+    LocalQueueRefetchDelayExpired, LocalQueueRefetchDelayStart, LocalQueueReturnJobs,
+    LocalQueueSetMode, Plugin, RefetchDelayConfig, TaskHandler, Worker, WorkerContext, WorkerInit,
+    WorkerShutdown, WorkerStart,
 };
 use serde::{Deserialize, Serialize};
 use tokio::{
@@ -51,61 +50,95 @@ impl TestHooksPlugin {
     }
 }
 
-impl LifecycleHooks for TestHooksPlugin {
-    async fn on_worker_init(&self, _ctx: WorkerInitContext) {
-        self.counters.worker_init.fetch_add(1, Ordering::SeqCst);
-    }
+impl Plugin for TestHooksPlugin {
+    fn register(self, hooks: &mut HookRegistry) {
+        let counters = self.counters.clone();
+        hooks.on(WorkerInit, move |_ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.worker_init.fetch_add(1, Ordering::SeqCst);
+            }
+        });
 
-    async fn on_worker_start(&self, _ctx: WorkerStartContext) {
-        self.counters.worker_start.fetch_add(1, Ordering::SeqCst);
-    }
+        let counters = self.counters.clone();
+        hooks.on(WorkerStart, move |_ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.worker_start.fetch_add(1, Ordering::SeqCst);
+            }
+        });
 
-    async fn on_worker_shutdown(&self, _ctx: WorkerShutdownContext) {
-        self.counters.worker_shutdown.fetch_add(1, Ordering::SeqCst);
-    }
+        let counters = self.counters.clone();
+        hooks.on(WorkerShutdown, move |_ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.worker_shutdown.fetch_add(1, Ordering::SeqCst);
+            }
+        });
 
-    async fn on_job_fetch(&self, _ctx: JobFetchContext) {
-        self.counters.job_fetch.fetch_add(1, Ordering::SeqCst);
-    }
+        let counters = self.counters.clone();
+        hooks.on(JobFetch, move |_ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.job_fetch.fetch_add(1, Ordering::SeqCst);
+            }
+        });
 
-    async fn on_job_start(&self, _ctx: JobStartContext) {
-        self.counters.job_start.fetch_add(1, Ordering::SeqCst);
-    }
+        let counters = self.counters.clone();
+        hooks.on(JobStart, move |_ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.job_start.fetch_add(1, Ordering::SeqCst);
+            }
+        });
 
-    async fn on_job_complete(&self, _ctx: JobCompleteContext) {
-        self.counters.job_complete.fetch_add(1, Ordering::SeqCst);
-    }
+        let counters = self.counters.clone();
+        hooks.on(JobComplete, move |_ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.job_complete.fetch_add(1, Ordering::SeqCst);
+            }
+        });
 
-    async fn on_job_fail(&self, _ctx: JobFailContext) {
-        self.counters.job_fail.fetch_add(1, Ordering::SeqCst);
-    }
+        let counters = self.counters.clone();
+        hooks.on(JobFail, move |_ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.job_fail.fetch_add(1, Ordering::SeqCst);
+            }
+        });
 
-    async fn before_job_run(&self, ctx: BeforeJobRunContext) -> HookResult {
-        self.counters.before_job_run.fetch_add(1, Ordering::SeqCst);
+        let counters = self.counters.clone();
+        hooks.on(BeforeJobRun, move |ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.before_job_run.fetch_add(1, Ordering::SeqCst);
 
-        let should_skip = ctx
-            .payload
-            .get("skip")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+                let should_skip = ctx
+                    .payload
+                    .get("skip")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
 
-        let should_fail = ctx
-            .payload
-            .get("force_fail")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+                let should_fail = ctx
+                    .payload
+                    .get("force_fail")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
 
-        if should_skip {
-            self.counters.skipped.fetch_add(1, Ordering::SeqCst);
-            return HookResult::Skip;
-        }
+                if should_skip {
+                    counters.skipped.fetch_add(1, Ordering::SeqCst);
+                    return HookResult::Skip;
+                }
 
-        if should_fail {
-            self.counters.failed_by_hook.fetch_add(1, Ordering::SeqCst);
-            return HookResult::Fail("Forced failure by hook".into());
-        }
+                if should_fail {
+                    counters.failed_by_hook.fetch_add(1, Ordering::SeqCst);
+                    return HookResult::Fail("Forced failure by hook".into());
+                }
 
-        HookResult::Continue
+                HookResult::Continue
+            }
+        });
     }
 }
 
@@ -475,48 +508,54 @@ impl ScheduleHooksPlugin {
     }
 }
 
-impl LifecycleHooks for ScheduleHooksPlugin {
-    async fn before_job_schedule(&self, ctx: BeforeJobScheduleContext) -> JobScheduleResult {
-        self.counters.before_schedule.fetch_add(1, Ordering::SeqCst);
+impl Plugin for ScheduleHooksPlugin {
+    fn register(self, hooks: &mut HookRegistry) {
+        let counters = self.counters.clone();
+        hooks.on(BeforeJobSchedule, move |ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.before_schedule.fetch_add(1, Ordering::SeqCst);
 
-        let should_skip = ctx
-            .payload
-            .get("skip_schedule")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+                let should_skip = ctx
+                    .payload
+                    .get("skip_schedule")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
 
-        let should_fail = ctx
-            .payload
-            .get("fail_schedule")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+                let should_fail = ctx
+                    .payload
+                    .get("fail_schedule")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
 
-        let should_transform = ctx
-            .payload
-            .get("transform")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+                let should_transform = ctx
+                    .payload
+                    .get("transform")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
 
-        if should_skip {
-            self.counters.skipped.fetch_add(1, Ordering::SeqCst);
-            return JobScheduleResult::Skip;
-        }
+                if should_skip {
+                    counters.skipped.fetch_add(1, Ordering::SeqCst);
+                    return JobScheduleResult::Skip;
+                }
 
-        if should_fail {
-            self.counters.failed.fetch_add(1, Ordering::SeqCst);
-            return JobScheduleResult::Fail("Schedule failed by hook".into());
-        }
+                if should_fail {
+                    counters.failed.fetch_add(1, Ordering::SeqCst);
+                    return JobScheduleResult::Fail("Schedule failed by hook".into());
+                }
 
-        if should_transform {
-            self.counters.transformed.fetch_add(1, Ordering::SeqCst);
-            let mut new_payload = ctx.payload.clone();
-            if let Some(obj) = new_payload.as_object_mut() {
-                obj.insert("transformed".into(), serde_json::json!(true));
+                if should_transform {
+                    counters.transformed.fetch_add(1, Ordering::SeqCst);
+                    let mut new_payload = ctx.payload.clone();
+                    if let Some(obj) = new_payload.as_object_mut() {
+                        obj.insert("transformed".into(), serde_json::json!(true));
+                    }
+                    return JobScheduleResult::Continue(new_payload);
+                }
+
+                JobScheduleResult::Continue(ctx.payload)
             }
-            return JobScheduleResult::Continue(new_payload);
-        }
-
-        JobScheduleResult::Continue(ctx.payload)
+        });
     }
 }
 
@@ -786,12 +825,18 @@ impl IdentifierCapturingPlugin {
     }
 }
 
-impl LifecycleHooks for IdentifierCapturingPlugin {
-    async fn before_job_schedule(&self, ctx: BeforeJobScheduleContext) -> JobScheduleResult {
-        *self.counters.captured_identifier.lock().unwrap() = Some(ctx.identifier.clone());
-        *self.counters.captured_spec_queue.lock().unwrap() = ctx.spec.queue_name().clone();
-        *self.counters.captured_spec_priority.lock().unwrap() = *ctx.spec.priority();
-        JobScheduleResult::Continue(ctx.payload)
+impl Plugin for IdentifierCapturingPlugin {
+    fn register(self, hooks: &mut HookRegistry) {
+        let counters = self.counters.clone();
+        hooks.on(BeforeJobSchedule, move |ctx| {
+            let counters = counters.clone();
+            async move {
+                *counters.captured_identifier.lock().unwrap() = Some(ctx.identifier.clone());
+                *counters.captured_spec_queue.lock().unwrap() = ctx.spec.queue_name().clone();
+                *counters.captured_spec_priority.lock().unwrap() = *ctx.spec.priority();
+                JobScheduleResult::Continue(ctx.payload)
+            }
+        });
     }
 }
 
@@ -914,14 +959,20 @@ struct ChainedTransformPlugin1 {
     counters: Arc<ChainedTransformCounters>,
 }
 
-impl LifecycleHooks for ChainedTransformPlugin1 {
-    async fn before_job_schedule(&self, ctx: BeforeJobScheduleContext) -> JobScheduleResult {
-        self.counters.plugin1_calls.fetch_add(1, Ordering::SeqCst);
-        let mut payload = ctx.payload.clone();
-        if let Some(obj) = payload.as_object_mut() {
-            obj.insert("plugin1_processed".into(), serde_json::json!(true));
-        }
-        JobScheduleResult::Continue(payload)
+impl Plugin for ChainedTransformPlugin1 {
+    fn register(self, hooks: &mut HookRegistry) {
+        let counters = self.counters.clone();
+        hooks.on(BeforeJobSchedule, move |ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.plugin1_calls.fetch_add(1, Ordering::SeqCst);
+                let mut payload = ctx.payload.clone();
+                if let Some(obj) = payload.as_object_mut() {
+                    obj.insert("plugin1_processed".into(), serde_json::json!(true));
+                }
+                JobScheduleResult::Continue(payload)
+            }
+        });
     }
 }
 
@@ -930,14 +981,20 @@ struct ChainedTransformPlugin2 {
     counters: Arc<ChainedTransformCounters>,
 }
 
-impl LifecycleHooks for ChainedTransformPlugin2 {
-    async fn before_job_schedule(&self, ctx: BeforeJobScheduleContext) -> JobScheduleResult {
-        self.counters.plugin2_calls.fetch_add(1, Ordering::SeqCst);
-        let mut payload = ctx.payload.clone();
-        if let Some(obj) = payload.as_object_mut() {
-            obj.insert("plugin2_processed".into(), serde_json::json!(true));
-        }
-        JobScheduleResult::Continue(payload)
+impl Plugin for ChainedTransformPlugin2 {
+    fn register(self, hooks: &mut HookRegistry) {
+        let counters = self.counters.clone();
+        hooks.on(BeforeJobSchedule, move |ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.plugin2_calls.fetch_add(1, Ordering::SeqCst);
+                let mut payload = ctx.payload.clone();
+                if let Some(obj) = payload.as_object_mut() {
+                    obj.insert("plugin2_processed".into(), serde_json::json!(true));
+                }
+                JobScheduleResult::Continue(payload)
+            }
+        });
     }
 }
 
@@ -1000,18 +1057,20 @@ async fn test_before_job_schedule_multiple_plugins_chain_transforms() {
 #[derive(Clone)]
 struct SkippingFirstPlugin;
 
-impl LifecycleHooks for SkippingFirstPlugin {
-    async fn before_job_schedule(&self, ctx: BeforeJobScheduleContext) -> JobScheduleResult {
-        let should_skip = ctx
-            .payload
-            .get("skip_in_first")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+impl Plugin for SkippingFirstPlugin {
+    fn register(self, hooks: &mut HookRegistry) {
+        hooks.on(BeforeJobSchedule, move |ctx| async move {
+            let should_skip = ctx
+                .payload
+                .get("skip_in_first")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
 
-        if should_skip {
-            return JobScheduleResult::Skip;
-        }
-        JobScheduleResult::Continue(ctx.payload)
+            if should_skip {
+                return JobScheduleResult::Skip;
+            }
+            JobScheduleResult::Continue(ctx.payload)
+        });
     }
 }
 
@@ -1020,10 +1079,16 @@ struct SecondPluginCounter {
     calls: Arc<AtomicU32>,
 }
 
-impl LifecycleHooks for SecondPluginCounter {
-    async fn before_job_schedule(&self, ctx: BeforeJobScheduleContext) -> JobScheduleResult {
-        self.calls.fetch_add(1, Ordering::SeqCst);
-        JobScheduleResult::Continue(ctx.payload)
+impl Plugin for SecondPluginCounter {
+    fn register(self, hooks: &mut HookRegistry) {
+        let calls = self.calls.clone();
+        hooks.on(BeforeJobSchedule, move |ctx| {
+            let calls = calls.clone();
+            async move {
+                calls.fetch_add(1, Ordering::SeqCst);
+                JobScheduleResult::Continue(ctx.payload)
+            }
+        });
     }
 }
 
@@ -1171,35 +1236,47 @@ impl ExtendedHooksPlugin {
     }
 }
 
-impl LifecycleHooks for ExtendedHooksPlugin {
-    async fn before_job_run(&self, ctx: BeforeJobRunContext) -> HookResult {
-        self.counters.before_job_run.fetch_add(1, Ordering::SeqCst);
+impl Plugin for ExtendedHooksPlugin {
+    fn register(self, hooks: &mut HookRegistry) {
+        let counters = self.counters.clone();
+        hooks.on(BeforeJobRun, move |ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.before_job_run.fetch_add(1, Ordering::SeqCst);
 
-        let should_retry = ctx
-            .payload
-            .get("retry")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+                let should_retry = ctx
+                    .payload
+                    .get("retry")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
 
-        if should_retry {
-            self.counters.retry_requested.fetch_add(1, Ordering::SeqCst);
-            return HookResult::Retry {
-                delay: Duration::from_secs(1),
-            };
-        }
+                if should_retry {
+                    counters.retry_requested.fetch_add(1, Ordering::SeqCst);
+                    return HookResult::Retry {
+                        delay: Duration::from_secs(1),
+                    };
+                }
 
-        HookResult::Continue
-    }
+                HookResult::Continue
+            }
+        });
 
-    async fn after_job_run(&self, _ctx: AfterJobRunContext) -> HookResult {
-        self.counters.after_job_run.fetch_add(1, Ordering::SeqCst);
-        HookResult::Continue
-    }
+        let counters = self.counters.clone();
+        hooks.on(AfterJobRun, move |_ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.after_job_run.fetch_add(1, Ordering::SeqCst);
+                HookResult::Continue
+            }
+        });
 
-    async fn on_job_permanently_fail(&self, _ctx: JobPermanentlyFailContext) {
-        self.counters
-            .job_permanently_fail
-            .fetch_add(1, Ordering::SeqCst);
+        let counters = self.counters.clone();
+        hooks.on(JobPermanentlyFail, move |_ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.job_permanently_fail.fetch_add(1, Ordering::SeqCst);
+            }
+        });
     }
 }
 
@@ -1409,42 +1486,61 @@ impl LocalQueueHooksPlugin {
     }
 }
 
-impl LifecycleHooks for LocalQueueHooksPlugin {
-    async fn on_local_queue_init(&self, _ctx: LocalQueueInitContext) {
-        self.counters.init.fetch_add(1, Ordering::SeqCst);
-    }
+impl Plugin for LocalQueueHooksPlugin {
+    fn register(self, hooks: &mut HookRegistry) {
+        let counters = self.counters.clone();
+        hooks.on(LocalQueueInit, move |_ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.init.fetch_add(1, Ordering::SeqCst);
+            }
+        });
 
-    async fn on_local_queue_set_mode(&self, ctx: LocalQueueSetModeContext) {
-        self.counters.set_mode.fetch_add(1, Ordering::SeqCst);
-        *self.counters.last_mode_change.lock().unwrap() = Some((ctx.old_mode, ctx.new_mode));
-    }
+        let counters = self.counters.clone();
+        hooks.on(LocalQueueSetMode, move |ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.set_mode.fetch_add(1, Ordering::SeqCst);
+                *counters.last_mode_change.lock().unwrap() = Some((ctx.old_mode, ctx.new_mode));
+            }
+        });
 
-    async fn on_local_queue_get_jobs_complete(&self, ctx: LocalQueueGetJobsCompleteContext) {
-        self.counters
-            .get_jobs_complete
-            .fetch_add(1, Ordering::SeqCst);
-        self.counters
-            .last_jobs_count
-            .store(ctx.jobs_count, Ordering::SeqCst);
-    }
+        let counters = self.counters.clone();
+        hooks.on(LocalQueueGetJobsComplete, move |ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.get_jobs_complete.fetch_add(1, Ordering::SeqCst);
+                counters
+                    .last_jobs_count
+                    .store(ctx.jobs_count, Ordering::SeqCst);
+            }
+        });
 
-    async fn on_local_queue_return_jobs(&self, _ctx: LocalQueueReturnJobsContext) {
-        self.counters.return_jobs.fetch_add(1, Ordering::SeqCst);
-    }
+        let counters = self.counters.clone();
+        hooks.on(LocalQueueReturnJobs, move |_ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.return_jobs.fetch_add(1, Ordering::SeqCst);
+            }
+        });
 
-    async fn on_local_queue_refetch_delay_start(&self, _ctx: LocalQueueRefetchDelayStartContext) {
-        self.counters
-            .refetch_delay_start
-            .fetch_add(1, Ordering::SeqCst);
-    }
+        let counters = self.counters.clone();
+        hooks.on(LocalQueueRefetchDelayStart, move |_ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.refetch_delay_start.fetch_add(1, Ordering::SeqCst);
+            }
+        });
 
-    async fn on_local_queue_refetch_delay_expired(
-        &self,
-        _ctx: LocalQueueRefetchDelayExpiredContext,
-    ) {
-        self.counters
-            .refetch_delay_expired
-            .fetch_add(1, Ordering::SeqCst);
+        let counters = self.counters.clone();
+        hooks.on(LocalQueueRefetchDelayExpired, move |_ctx| {
+            let counters = counters.clone();
+            async move {
+                counters
+                    .refetch_delay_expired
+                    .fetch_add(1, Ordering::SeqCst);
+            }
+        });
     }
 }
 

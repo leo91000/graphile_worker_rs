@@ -3,9 +3,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use graphile_worker::{
-    BeforeJobRunContext, HookResult, IntoTaskHandlerResult, JobCompleteContext, JobFailContext,
-    JobStartContext, LifecycleHooks, WorkerContext, WorkerOptions, WorkerShutdownContext,
-    WorkerStartContext,
+    BeforeJobRun, HookRegistry, HookResult, IntoTaskHandlerResult, JobComplete, JobFail, JobStart,
+    Plugin, WorkerContext, WorkerOptions, WorkerShutdown, WorkerStart,
 };
 use graphile_worker_task_handler::TaskHandler;
 use serde::{Deserialize, Serialize};
@@ -39,91 +38,123 @@ impl MetricsPlugin {
             jobs_failed: AtomicU64::new(0),
         }
     }
-
-    fn print_stats(&self) {
-        println!(
-            "Stats: started={}, completed={}, failed={}",
-            self.jobs_started.load(Ordering::Relaxed),
-            self.jobs_completed.load(Ordering::Relaxed),
-            self.jobs_failed.load(Ordering::Relaxed)
-        );
-    }
 }
 
-impl LifecycleHooks for MetricsPlugin {
-    async fn on_worker_start(&self, ctx: WorkerStartContext) {
-        println!("[MetricsPlugin] Worker {} started", ctx.worker_id);
-    }
+impl Plugin for MetricsPlugin {
+    fn register(self, hooks: &mut HookRegistry) {
+        hooks.on(WorkerStart, async |ctx| {
+            println!("[MetricsPlugin] Worker {} started", ctx.worker_id);
+        });
 
-    async fn on_worker_shutdown(&self, ctx: WorkerShutdownContext) {
-        println!(
-            "[MetricsPlugin] Worker {} shutting down (reason: {:?})",
-            ctx.worker_id, ctx.reason
-        );
-        self.print_stats();
-    }
+        let jobs_started = Arc::new(self.jobs_started);
+        let jobs_completed = Arc::new(self.jobs_completed);
+        let jobs_failed = Arc::new(self.jobs_failed);
 
-    async fn on_job_start(&self, ctx: JobStartContext) {
-        self.jobs_started.fetch_add(1, Ordering::Relaxed);
-        println!(
-            "[MetricsPlugin] Job {} started (task: {})",
-            ctx.job.id(),
-            ctx.job.task_identifier()
-        );
-    }
+        {
+            let jobs_started = jobs_started.clone();
+            let jobs_completed = jobs_completed.clone();
+            let jobs_failed = jobs_failed.clone();
+            hooks.on(WorkerShutdown, move |ctx| {
+                let jobs_started = jobs_started.clone();
+                let jobs_completed = jobs_completed.clone();
+                let jobs_failed = jobs_failed.clone();
+                async move {
+                    println!(
+                        "[MetricsPlugin] Worker {} shutting down (reason: {:?})",
+                        ctx.worker_id, ctx.reason
+                    );
+                    println!(
+                        "Stats: started={}, completed={}, failed={}",
+                        jobs_started.load(Ordering::Relaxed),
+                        jobs_completed.load(Ordering::Relaxed),
+                        jobs_failed.load(Ordering::Relaxed)
+                    );
+                }
+            });
+        }
 
-    async fn on_job_complete(&self, ctx: JobCompleteContext) {
-        self.jobs_completed.fetch_add(1, Ordering::Relaxed);
-        println!(
-            "[MetricsPlugin] Job {} completed in {:?}",
-            ctx.job.id(),
-            ctx.duration
-        );
-    }
+        {
+            let jobs_started = jobs_started.clone();
+            hooks.on(JobStart, move |ctx| {
+                let jobs_started = jobs_started.clone();
+                async move {
+                    jobs_started.fetch_add(1, Ordering::Relaxed);
+                    println!(
+                        "[MetricsPlugin] Job {} started (task: {})",
+                        ctx.job.id(),
+                        ctx.job.task_identifier()
+                    );
+                }
+            });
+        }
 
-    async fn on_job_fail(&self, ctx: JobFailContext) {
-        self.jobs_failed.fetch_add(1, Ordering::Relaxed);
-        println!(
-            "[MetricsPlugin] Job {} failed: {} (will_retry: {})",
-            ctx.job.id(),
-            ctx.error,
-            ctx.will_retry
-        );
+        {
+            let jobs_completed = jobs_completed.clone();
+            hooks.on(JobComplete, move |ctx| {
+                let jobs_completed = jobs_completed.clone();
+                async move {
+                    jobs_completed.fetch_add(1, Ordering::Relaxed);
+                    println!(
+                        "[MetricsPlugin] Job {} completed in {:?}",
+                        ctx.job.id(),
+                        ctx.duration
+                    );
+                }
+            });
+        }
+
+        {
+            let jobs_failed = jobs_failed.clone();
+            hooks.on(JobFail, move |ctx| {
+                let jobs_failed = jobs_failed.clone();
+                async move {
+                    jobs_failed.fetch_add(1, Ordering::Relaxed);
+                    println!(
+                        "[MetricsPlugin] Job {} failed: {} (will_retry: {})",
+                        ctx.job.id(),
+                        ctx.error,
+                        ctx.will_retry
+                    );
+                }
+            });
+        }
     }
 }
 
 struct ValidationPlugin;
 
-impl LifecycleHooks for ValidationPlugin {
-    async fn before_job_run(&self, ctx: BeforeJobRunContext) -> HookResult {
-        let should_skip = ctx
-            .payload
-            .get("skip")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        let should_fail = ctx
-            .payload
-            .get("force_fail")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+impl Plugin for ValidationPlugin {
+    fn register(self, hooks: &mut HookRegistry) {
+        hooks.on(BeforeJobRun, async |ctx| {
+            let should_skip = ctx
+                .payload
+                .get("skip")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let should_fail = ctx
+                .payload
+                .get("force_fail")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
 
-        if should_skip {
-            println!(
-                "[ValidationPlugin] Skipping job {} due to skip flag",
-                ctx.job.id()
-            );
-            return HookResult::Skip;
-        }
+            if should_skip {
+                println!(
+                    "[ValidationPlugin] Skipping job {} due to skip flag",
+                    ctx.job.id()
+                );
+                return HookResult::Skip;
+            }
 
-        if should_fail {
-            println!(
-                "[ValidationPlugin] Failing job {} due to force_fail flag",
-                ctx.job.id()
-            );
-            return HookResult::Fail("Forced failure by validation plugin".into());
-        }
+            if should_fail {
+                println!(
+                    "[ValidationPlugin] Failing job {} due to force_fail flag",
+                    ctx.job.id()
+                );
+                return HookResult::Fail("Forced failure by validation plugin".into());
+            }
 
-        HookResult::Continue
+            HookResult::Continue
+        });
     }
 }
 
@@ -161,8 +192,6 @@ async fn main() {
         .connect_with(pg_options)
         .await
         .unwrap();
-
-    let metrics = Arc::new(MetricsPlugin::new());
 
     let worker = WorkerOptions::default()
         .concurrency(2)
@@ -232,6 +261,4 @@ async fn main() {
     println!("  - Job 4: Normal processing\n");
 
     worker.run().await.unwrap();
-
-    metrics.print_stats();
 }
