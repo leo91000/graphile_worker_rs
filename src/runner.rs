@@ -6,6 +6,7 @@ use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
 
 use crate::errors::GraphileWorkerError;
+use crate::local_queue::LocalQueue;
 use crate::sql::{get_job::get_job, task_identifiers::TaskDetails};
 use crate::streams::{job_signal_stream, job_stream};
 use crate::worker_utils::WorkerUtils;
@@ -81,6 +82,9 @@ pub struct Worker {
     pub(crate) extensions: ReadOnlyExtensions,
     /// Lifecycle hooks for observing and intercepting worker events
     pub(crate) hooks: Arc<TypeErasedHooks>,
+    /// Optional local queue for batch-fetching jobs (improves throughput)
+    #[getset(skip)]
+    pub(crate) local_queue: Option<Arc<LocalQueue>>,
 }
 
 /// Errors that can occur during worker runtime.
@@ -296,6 +300,70 @@ impl Worker {
     /// - `Ok(())` if the job runner shuts down gracefully
     /// - `Err(WorkerRuntimeError)` if an error occurs during execution
     async fn job_runner(&self) -> Result<(), WorkerRuntimeError> {
+        match &self.local_queue {
+            Some(local_queue) => {
+                self.job_runner_with_local_queue(Arc::clone(local_queue))
+                    .await
+            }
+            None => self.job_runner_direct().await,
+        }
+    }
+
+    /// Job runner implementation using LocalQueue for batch-fetching jobs.
+    async fn job_runner_with_local_queue(
+        &self,
+        local_queue: Arc<LocalQueue>,
+    ) -> Result<(), WorkerRuntimeError> {
+        let job_signal = job_signal_stream(
+            self.pg_pool.clone(),
+            self.poll_interval,
+            self.shutdown_signal.clone(),
+            self.concurrency,
+        )
+        .await?;
+
+        debug!("Listening for jobs with LocalQueue...");
+        job_signal
+            .map(Ok::<_, ProcessJobError>)
+            .try_for_each_concurrent(self.concurrency, |source| {
+                let local_queue = Arc::clone(&local_queue);
+                async move {
+                    if matches!(source, StreamSource::PgListener) {
+                        local_queue.pulse(1).await;
+                    }
+
+                    let job = LocalQueue::get_job(&local_queue, &self.forbidden_flags).await;
+
+                    if let Some(job) = job {
+                        let job = Arc::new(job);
+
+                        self.invoke_observer(
+                            &self.hooks.on_job_fetch,
+                            JobFetchContext {
+                                job: job.clone(),
+                                worker_id: self.worker_id().clone(),
+                            },
+                        )
+                        .await;
+
+                        run_and_release_job(job.clone(), self, &source).await?;
+                        debug!(job_id = job.id(), "Job processed");
+                    }
+
+                    Ok(())
+                }
+            })
+            .await?;
+
+        if let Err(e) = local_queue.release().await {
+            warn!(error = %e, "Error releasing LocalQueue");
+        }
+
+        Ok(())
+    }
+
+    /// Job runner implementation without LocalQueue (direct database queries).
+    async fn job_runner_direct(&self) -> Result<(), WorkerRuntimeError> {
         let job_signal = job_signal_stream(
             self.pg_pool.clone(),
             self.poll_interval,

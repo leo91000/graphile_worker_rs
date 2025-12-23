@@ -5,8 +5,10 @@ use graphile_worker::{
     AfterJobRunContext, BeforeJobRunContext, BeforeJobScheduleContext, HookResult,
     IntoTaskHandlerResult, JobCompleteContext, JobFailContext, JobFetchContext,
     JobPermanentlyFailContext, JobScheduleResult, JobSpec, JobStartContext, LifecycleHooks,
-    TaskHandler, Worker, WorkerContext, WorkerInitContext, WorkerShutdownContext,
-    WorkerStartContext,
+    LocalQueueConfig, LocalQueueGetJobsCompleteContext, LocalQueueInitContext,
+    LocalQueueRefetchDelayExpiredContext, LocalQueueRefetchDelayStartContext,
+    LocalQueueReturnJobsContext, LocalQueueSetModeContext, RefetchDelayConfig, TaskHandler, Worker,
+    WorkerContext, WorkerInitContext, WorkerShutdownContext, WorkerStartContext,
 };
 use serde::{Deserialize, Serialize};
 use tokio::{
@@ -1372,6 +1374,342 @@ async fn test_on_job_permanently_fail_hook() {
         .await;
 
         assert_eq!(counters.job_permanently_fail.load(Ordering::SeqCst), 1);
+
+        worker_fut.abort();
+    })
+    .await;
+}
+
+#[derive(Debug, Default)]
+struct LocalQueueHookCounters {
+    init: AtomicU32,
+    set_mode: AtomicU32,
+    get_jobs_complete: AtomicU32,
+    return_jobs: AtomicU32,
+    refetch_delay_start: AtomicU32,
+    refetch_delay_expired: AtomicU32,
+    last_mode_change: std::sync::Mutex<Option<(String, String)>>,
+    last_jobs_count: AtomicU32,
+}
+
+#[derive(Clone)]
+struct LocalQueueHooksPlugin {
+    counters: Arc<LocalQueueHookCounters>,
+}
+
+impl LocalQueueHooksPlugin {
+    fn new() -> Self {
+        Self {
+            counters: Arc::new(LocalQueueHookCounters::default()),
+        }
+    }
+
+    fn counters(&self) -> Arc<LocalQueueHookCounters> {
+        self.counters.clone()
+    }
+}
+
+impl LifecycleHooks for LocalQueueHooksPlugin {
+    async fn on_local_queue_init(&self, _ctx: LocalQueueInitContext) {
+        self.counters.init.fetch_add(1, Ordering::SeqCst);
+    }
+
+    async fn on_local_queue_set_mode(&self, ctx: LocalQueueSetModeContext) {
+        self.counters.set_mode.fetch_add(1, Ordering::SeqCst);
+        *self.counters.last_mode_change.lock().unwrap() =
+            Some((ctx.old_mode.clone(), ctx.new_mode.clone()));
+    }
+
+    async fn on_local_queue_get_jobs_complete(&self, ctx: LocalQueueGetJobsCompleteContext) {
+        self.counters
+            .get_jobs_complete
+            .fetch_add(1, Ordering::SeqCst);
+        self.counters
+            .last_jobs_count
+            .store(ctx.jobs_count as u32, Ordering::SeqCst);
+    }
+
+    async fn on_local_queue_return_jobs(&self, _ctx: LocalQueueReturnJobsContext) {
+        self.counters.return_jobs.fetch_add(1, Ordering::SeqCst);
+    }
+
+    async fn on_local_queue_refetch_delay_start(&self, _ctx: LocalQueueRefetchDelayStartContext) {
+        self.counters
+            .refetch_delay_start
+            .fetch_add(1, Ordering::SeqCst);
+    }
+
+    async fn on_local_queue_refetch_delay_expired(
+        &self,
+        _ctx: LocalQueueRefetchDelayExpiredContext,
+    ) {
+        self.counters
+            .refetch_delay_expired
+            .fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct LocalQueueTestJob {
+    id: u32,
+}
+
+impl TaskHandler for LocalQueueTestJob {
+    const IDENTIFIER: &'static str = "local_queue_test_job";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        Ok::<(), String>(())
+    }
+}
+
+#[tokio::test]
+async fn test_local_queue_init_hook() {
+    with_test_db(|test_db| async move {
+        let utils = test_db.worker_utils();
+        utils.migrate().await.expect("Failed to migrate");
+
+        let plugin = LocalQueueHooksPlugin::new();
+        let counters = plugin.counters();
+
+        let worker_fut = spawn_local({
+            let test_pool = test_db.test_pool.clone();
+            async move {
+                Worker::options()
+                    .pg_pool(test_pool)
+                    .concurrency(2)
+                    .local_queue(LocalQueueConfig::default().with_size(10))
+                    .define_job::<LocalQueueTestJob>()
+                    .add_plugin(plugin)
+                    .init()
+                    .await
+                    .expect("Failed to create worker")
+                    .run()
+                    .await
+                    .expect("Failed to run worker");
+            }
+        });
+
+        sleep(Duration::from_millis(200)).await;
+
+        assert_eq!(
+            counters.init.load(Ordering::SeqCst),
+            1,
+            "LocalQueue init hook should be called once"
+        );
+
+        worker_fut.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn test_local_queue_set_mode_hook() {
+    with_test_db(|test_db| async move {
+        let utils = test_db.worker_utils();
+        utils.migrate().await.expect("Failed to migrate");
+
+        let plugin = LocalQueueHooksPlugin::new();
+        let counters = plugin.counters();
+
+        let worker_fut = spawn_local({
+            let test_pool = test_db.test_pool.clone();
+            async move {
+                Worker::options()
+                    .pg_pool(test_pool)
+                    .concurrency(2)
+                    .local_queue(LocalQueueConfig::default().with_size(10))
+                    .define_job::<LocalQueueTestJob>()
+                    .add_plugin(plugin)
+                    .init()
+                    .await
+                    .expect("Failed to create worker")
+                    .run()
+                    .await
+                    .expect("Failed to run worker");
+            }
+        });
+
+        sleep(Duration::from_millis(200)).await;
+
+        assert!(
+            counters.set_mode.load(Ordering::SeqCst) >= 1,
+            "LocalQueue set_mode hook should be called at least once (starting -> polling)"
+        );
+
+        let last_mode = counters.last_mode_change.lock().unwrap().clone();
+        assert!(last_mode.is_some(), "Should have recorded a mode change");
+
+        worker_fut.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn test_local_queue_get_jobs_complete_hook() {
+    with_test_db(|test_db| async move {
+        let utils = test_db.worker_utils();
+        utils.migrate().await.expect("Failed to migrate");
+
+        let plugin = LocalQueueHooksPlugin::new();
+        let counters = plugin.counters();
+
+        for i in 1..=5 {
+            utils
+                .add_job(LocalQueueTestJob { id: i }, JobSpec::default())
+                .await
+                .expect("Failed to add job");
+        }
+
+        let worker_fut = spawn_local({
+            let test_pool = test_db.test_pool.clone();
+            async move {
+                Worker::options()
+                    .pg_pool(test_pool)
+                    .concurrency(2)
+                    .local_queue(LocalQueueConfig::default().with_size(10))
+                    .define_job::<LocalQueueTestJob>()
+                    .add_plugin(plugin)
+                    .init()
+                    .await
+                    .expect("Failed to create worker")
+                    .run()
+                    .await
+                    .expect("Failed to run worker");
+            }
+        });
+
+        let c = counters.clone();
+        wait_for_condition(
+            || c.get_jobs_complete.load(Ordering::SeqCst) >= 1,
+            5,
+            "get_jobs_complete hook should be called",
+        )
+        .await;
+
+        assert!(
+            counters.last_jobs_count.load(Ordering::SeqCst) >= 1,
+            "Should have fetched at least one job"
+        );
+
+        worker_fut.abort();
+    })
+    .await;
+}
+
+#[derive(Serialize, Deserialize)]
+struct SlowLocalQueueJob {
+    id: u32,
+}
+
+impl TaskHandler for SlowLocalQueueJob {
+    const IDENTIFIER: &'static str = "slow_local_queue_job";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        sleep(Duration::from_secs(10)).await;
+        Ok::<(), String>(())
+    }
+}
+
+#[tokio::test]
+async fn test_local_queue_return_jobs_hook() {
+    with_test_db(|test_db| async move {
+        let utils = test_db.worker_utils();
+        utils.migrate().await.expect("Failed to migrate");
+
+        let plugin = LocalQueueHooksPlugin::new();
+        let counters = plugin.counters();
+
+        for i in 1..=10 {
+            utils
+                .add_job(SlowLocalQueueJob { id: i }, JobSpec::default())
+                .await
+                .expect("Failed to add job");
+        }
+
+        let worker = Arc::new(
+            Worker::options()
+                .pg_pool(test_db.test_pool.clone())
+                .concurrency(2)
+                .local_queue(LocalQueueConfig::default().with_size(20))
+                .listen_os_shutdown_signals(false)
+                .define_job::<SlowLocalQueueJob>()
+                .add_plugin(plugin)
+                .init()
+                .await
+                .expect("Failed to create worker"),
+        );
+
+        let worker_for_run = Arc::clone(&worker);
+        let worker_fut = spawn_local(async move {
+            let _ = worker_for_run.run().await;
+        });
+
+        sleep(Duration::from_millis(300)).await;
+
+        worker.request_shutdown();
+
+        let c = counters.clone();
+        wait_for_condition(
+            || c.return_jobs.load(Ordering::SeqCst) >= 1,
+            10,
+            "return_jobs hook should be called on shutdown",
+        )
+        .await;
+
+        worker_fut.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn test_local_queue_refetch_delay_hooks() {
+    with_test_db(|test_db| async move {
+        let utils = test_db.worker_utils();
+        utils.migrate().await.expect("Failed to migrate");
+
+        let plugin = LocalQueueHooksPlugin::new();
+        let counters = plugin.counters();
+
+        let worker_fut = spawn_local({
+            let test_pool = test_db.test_pool.clone();
+            async move {
+                Worker::options()
+                    .pg_pool(test_pool)
+                    .concurrency(2)
+                    .local_queue(
+                        LocalQueueConfig::default()
+                            .with_size(10)
+                            .with_refetch_delay(
+                                RefetchDelayConfig::default()
+                                    .with_duration(Duration::from_millis(50))
+                                    .with_threshold(0),
+                            ),
+                    )
+                    .define_job::<LocalQueueTestJob>()
+                    .add_plugin(plugin)
+                    .init()
+                    .await
+                    .expect("Failed to create worker")
+                    .run()
+                    .await
+                    .expect("Failed to run worker");
+            }
+        });
+
+        sleep(Duration::from_millis(500)).await;
+
+        assert!(
+            counters.refetch_delay_start.load(Ordering::SeqCst) >= 1,
+            "refetch_delay_start hook should be called"
+        );
+
+        let c = counters.clone();
+        wait_for_condition(
+            || c.refetch_delay_expired.load(Ordering::SeqCst) >= 1,
+            5,
+            "refetch_delay_expired hook should be called",
+        )
+        .await;
 
         worker_fut.abort();
     })
