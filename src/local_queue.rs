@@ -16,6 +16,7 @@ use rand::Rng;
 use sqlx::PgPool;
 use thiserror::Error;
 use tokio::sync::{oneshot, Mutex, Notify, RwLock};
+use tokio::task::AbortHandle;
 use tracing::{debug, error, trace, warn};
 
 use crate::sql::batch_get_jobs::batch_get_jobs;
@@ -130,6 +131,7 @@ struct LocalQueueInner {
     fetch_again: AtomicBool,
     refetch_delay: RefetchDelayState,
     state_notify: Notify,
+    ttl_timer_handle: Mutex<Option<AbortHandle>>,
 }
 
 pub struct LocalQueue {
@@ -187,6 +189,7 @@ impl LocalQueue {
                 fetch_again: AtomicBool::new(false),
                 refetch_delay: RefetchDelayState::default(),
                 state_notify: Notify::new(),
+                ttl_timer_handle: Mutex::new(None),
             },
             config,
             pg_pool,
@@ -467,7 +470,7 @@ impl LocalQueue {
         if !job_queue.is_empty() {
             drop(job_queue);
             Self::set_mode(&this, LocalQueueMode::Waiting).await;
-            Self::start_ttl_timer(this);
+            Self::start_ttl_timer(this).await;
         } else {
             drop(job_queue);
             trace!(job_count, "All fetched jobs distributed to workers");
@@ -478,17 +481,25 @@ impl LocalQueue {
         }
     }
 
-    fn start_ttl_timer(this: Arc<Self>) {
+    async fn start_ttl_timer(this: Arc<Self>) {
         let ttl = this.config.ttl;
 
-        tokio::spawn(async move {
+        let mut handle_guard = this.inner.ttl_timer_handle.lock().await;
+        if let Some(existing_handle) = handle_guard.take() {
+            existing_handle.abort();
+        }
+
+        let this_clone = Arc::clone(&this);
+        let join_handle = tokio::spawn(async move {
             tokio::time::sleep(ttl).await;
 
-            let mode = *this.inner.mode.read().await;
+            let mode = *this_clone.inner.mode.read().await;
             if mode == LocalQueueMode::Waiting {
-                Self::set_mode_ttl_expired(this).await;
+                Self::set_mode_ttl_expired(this_clone).await;
             }
         });
+
+        *handle_guard = Some(join_handle.abort_handle());
     }
 
     async fn set_mode_ttl_expired(this: Arc<Self>) {
