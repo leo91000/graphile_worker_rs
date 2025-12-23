@@ -4,6 +4,7 @@ use sqlx::{query_as, PgExecutor};
 use crate::errors::Result;
 use graphile_worker_job::{DbJob, Job};
 
+use super::job_query_helpers::{get_flag_clause, get_queue_clause, get_update_queue_clause};
 use super::task_identifiers::TaskDetails;
 
 pub async fn get_job<'e>(
@@ -53,44 +54,4 @@ pub async fn get_job<'e>(
         let task_identifier = task_details.get_identifier(job.id(), job.task_id());
         Job::from_db_job(job, task_identifier)
     }))
-}
-
-fn get_flag_clause(flags_to_skip: &[String], param_ord: u8) -> String {
-    if !flags_to_skip.is_empty() {
-        return format!("and ((flags ?| ${param_ord}::text[]) is not true)");
-    }
-    "".into()
-}
-
-fn get_queue_clause(escaped_schema: &str) -> String {
-    format!(
-        r#"
-            and (
-                jobs.job_queue_id is null
-                or 
-                jobs.job_queue_id in (
-                    select id 
-                    from {escaped_schema}._private_job_queues as job_queues
-                    where job_queues.is_available = true
-                    for update
-                    skip locked
-                )
-            )
-        "#
-    )
-}
-
-fn get_update_queue_clause(escaped_schema: &str, param_ord: u8) -> String {
-    format!(
-        r#",
-            q as (
-                update {escaped_schema}._private_job_queues as job_queues
-                    set
-                        locked_by = ${param_ord},
-                        locked_at = now()
-                from j
-                where job_queues.id = j.job_queue_id
-            )
-        "#
-    )
 }
