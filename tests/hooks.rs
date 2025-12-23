@@ -5,7 +5,7 @@ use graphile_worker::{
     AfterJobRunContext, BeforeJobRunContext, BeforeJobScheduleContext, HookResult,
     IntoTaskHandlerResult, JobCompleteContext, JobFailContext, JobFetchContext,
     JobPermanentlyFailContext, JobScheduleResult, JobSpec, JobStartContext, LifecycleHooks,
-    LocalQueueConfig, LocalQueueGetJobsCompleteContext, LocalQueueInitContext,
+    LocalQueueConfig, LocalQueueGetJobsCompleteContext, LocalQueueInitContext, LocalQueueMode,
     LocalQueueRefetchDelayExpiredContext, LocalQueueRefetchDelayStartContext,
     LocalQueueReturnJobsContext, LocalQueueSetModeContext, RefetchDelayConfig, TaskHandler, Worker,
     WorkerContext, WorkerInitContext, WorkerShutdownContext, WorkerStartContext,
@@ -1388,7 +1388,7 @@ struct LocalQueueHookCounters {
     return_jobs: AtomicU32,
     refetch_delay_start: AtomicU32,
     refetch_delay_expired: AtomicU32,
-    last_mode_change: std::sync::Mutex<Option<(String, String)>>,
+    last_mode_change: std::sync::Mutex<Option<(LocalQueueMode, LocalQueueMode)>>,
     last_jobs_count: AtomicU32,
 }
 
