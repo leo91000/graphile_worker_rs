@@ -3,9 +3,7 @@ use std::sync::Arc;
 use crate::sql::task_identifiers::{get_tasks_details, TaskDetails};
 use crate::tracing::add_tracing_info;
 use crate::{errors::GraphileWorkerError, sql::add_job::add_job, DbJob, Job, JobSpec};
-use graphile_worker_lifecycle_hooks::{
-    BeforeJobScheduleContext, JobScheduleResult, TypeErasedHooks,
-};
+use graphile_worker_lifecycle_hooks::{BeforeJobScheduleContext, HookRegistry, JobScheduleResult};
 use graphile_worker_migrations::{migrate, MigrateError};
 use graphile_worker_task_handler::TaskHandler;
 use indoc::formatdoc;
@@ -122,7 +120,7 @@ pub struct WorkerUtils {
     escaped_schema: String,
 
     /// Optional lifecycle hooks for intercepting job scheduling
-    hooks: Option<Arc<TypeErasedHooks>>,
+    hooks: Option<Arc<HookRegistry>>,
 
     /// Shared task details for refreshing after GcTaskIdentifiers cleanup
     task_details: Option<Arc<RwLock<TaskDetails>>>,
@@ -147,7 +145,7 @@ impl WorkerUtils {
     }
 
     /// Adds lifecycle hooks to this WorkerUtils instance.
-    pub fn with_hooks(mut self, hooks: Arc<TypeErasedHooks>) -> Self {
+    pub fn with_hooks(mut self, hooks: Arc<HookRegistry>) -> Self {
         self.hooks = Some(hooks);
         self
     }
@@ -173,7 +171,7 @@ impl WorkerUtils {
         };
 
         let mut current_payload = payload;
-        for hook in &hooks.before_job_schedule {
+        for hook in hooks.before_job_schedule_handlers() {
             let ctx = BeforeJobScheduleContext {
                 identifier: identifier.to_string(),
                 payload: current_payload,

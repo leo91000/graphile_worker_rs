@@ -6,9 +6,9 @@ use std::time::Duration;
 use graphile_worker_job::Job;
 pub use graphile_worker_lifecycle_hooks::LocalQueueMode;
 use graphile_worker_lifecycle_hooks::{
-    LocalQueueGetJobsCompleteContext, LocalQueueInitContext, LocalQueueRefetchDelayAbortContext,
-    LocalQueueRefetchDelayExpiredContext, LocalQueueRefetchDelayStartContext,
-    LocalQueueReturnJobsContext, LocalQueueSetModeContext, TypeErasedHooks,
+    HookRegistry, LocalQueueGetJobsCompleteContext, LocalQueueInitContext,
+    LocalQueueRefetchDelayAbortContext, LocalQueueRefetchDelayExpiredContext,
+    LocalQueueRefetchDelayStartContext, LocalQueueReturnJobsContext, LocalQueueSetModeContext,
 };
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use rand::Rng;
@@ -142,7 +142,7 @@ pub struct LocalQueue {
     task_details: Arc<RwLock<TaskDetails>>,
     poll_interval: Duration,
     continuous: bool,
-    hooks: Arc<TypeErasedHooks>,
+    hooks: Arc<HookRegistry>,
 }
 
 pub struct LocalQueueParams {
@@ -154,7 +154,7 @@ pub struct LocalQueueParams {
     pub poll_interval: Duration,
     pub continuous: bool,
     pub shutdown_signal: Option<ShutdownSignal>,
-    pub hooks: Arc<TypeErasedHooks>,
+    pub hooks: Arc<HookRegistry>,
 }
 
 impl LocalQueue {
@@ -232,7 +232,7 @@ impl LocalQueue {
 
     async fn run(this: Arc<Self>) {
         this.hooks
-            .emit_local_queue_init(LocalQueueInitContext {
+            .emit(LocalQueueInitContext {
                 worker_id: this.worker_id.clone(),
             })
             .await;
@@ -326,7 +326,7 @@ impl LocalQueue {
                 debug!(job_count, "LocalQueue fetched jobs from database");
 
                 this.hooks
-                    .emit_local_queue_get_jobs_complete(LocalQueueGetJobsCompleteContext {
+                    .emit(LocalQueueGetJobsCompleteContext {
                         worker_id: this.worker_id.clone(),
                         jobs_count: job_count,
                     })
@@ -385,7 +385,7 @@ impl LocalQueue {
         );
 
         this.hooks
-            .emit_local_queue_refetch_delay_start(LocalQueueRefetchDelayStartContext {
+            .emit(LocalQueueRefetchDelayStartContext {
                 worker_id: this.worker_id.clone(),
                 duration,
                 threshold: config.threshold,
@@ -424,7 +424,7 @@ impl LocalQueue {
             trace!("LocalQueue refetch delay aborted");
 
             this.hooks
-                .emit_local_queue_refetch_delay_abort(LocalQueueRefetchDelayAbortContext {
+                .emit(LocalQueueRefetchDelayAbortContext {
                     worker_id: this.worker_id.clone(),
                     count,
                     abort_threshold,
@@ -434,7 +434,7 @@ impl LocalQueue {
             trace!("LocalQueue refetch delay expired");
 
             this.hooks
-                .emit_local_queue_refetch_delay_expired(LocalQueueRefetchDelayExpiredContext {
+                .emit(LocalQueueRefetchDelayExpiredContext {
                     worker_id: this.worker_id.clone(),
                 })
                 .await;
@@ -532,7 +532,7 @@ impl LocalQueue {
                 error!(error = %e, "Failed to return jobs after TTL expiry");
             } else {
                 this.hooks
-                    .emit_local_queue_return_jobs(LocalQueueReturnJobsContext {
+                    .emit(LocalQueueReturnJobsContext {
                         worker_id: this.worker_id.clone(),
                         jobs_count,
                     })
@@ -661,7 +661,7 @@ impl LocalQueue {
                 .map_err(|e| LocalQueueError::ReturnJobsError(e.to_string()))?;
 
             self.hooks
-                .emit_local_queue_return_jobs(LocalQueueReturnJobsContext {
+                .emit(LocalQueueReturnJobsContext {
                     worker_id: self.worker_id.clone(),
                     jobs_count,
                 })
@@ -682,7 +682,7 @@ impl LocalQueue {
         drop(mode);
 
         this.hooks
-            .emit_local_queue_set_mode(LocalQueueSetModeContext {
+            .emit(LocalQueueSetModeContext {
                 worker_id: this.worker_id.clone(),
                 old_mode,
                 new_mode,

@@ -1,312 +1,94 @@
 mod context;
+mod event;
+mod events;
+mod plugin;
+mod registry;
 mod result;
-mod traits;
 
-use std::sync::Arc;
+use std::any::{Any, TypeId};
+use std::collections::HashMap;
 
 use futures::future::BoxFuture;
 
 pub use context::*;
+pub use event::{Event, HookOutput};
+pub use events::*;
+pub use plugin::Plugin;
+pub use registry::HookRegistry;
 pub use result::*;
-pub use traits::LifecycleHooks;
 
-pub type ObserverFn<Ctx> = Box<dyn Fn(Ctx) -> BoxFuture<'static, ()> + Send + Sync>;
-pub type InterceptorFn<Ctx> = Box<dyn Fn(Ctx) -> BoxFuture<'static, HookResult> + Send + Sync>;
-pub type ScheduleTransformerFn =
-    Box<dyn Fn(BeforeJobScheduleContext) -> BoxFuture<'static, JobScheduleResult> + Send + Sync>;
+use event::InterceptorFn;
+pub use event::ObserverFn;
+
+type HandlerVec<Ctx, Out> = Vec<Box<dyn Fn(Ctx) -> BoxFuture<'static, Out> + Send + Sync>>;
 
 #[derive(Default)]
-pub struct TypeErasedHooks {
-    pub on_worker_init: Vec<ObserverFn<WorkerInitContext>>,
-    pub on_worker_start: Vec<ObserverFn<WorkerStartContext>>,
-    pub on_worker_shutdown: Vec<ObserverFn<WorkerShutdownContext>>,
-    pub on_job_fetch: Vec<ObserverFn<JobFetchContext>>,
-    pub on_job_start: Vec<ObserverFn<JobStartContext>>,
-    pub on_job_complete: Vec<ObserverFn<JobCompleteContext>>,
-    pub on_job_fail: Vec<ObserverFn<JobFailContext>>,
-    pub on_job_permanently_fail: Vec<ObserverFn<JobPermanentlyFailContext>>,
-    pub on_cron_tick: Vec<ObserverFn<CronTickContext>>,
-    pub on_cron_job_scheduled: Vec<ObserverFn<CronJobScheduledContext>>,
-    pub on_local_queue_init: Vec<ObserverFn<LocalQueueInitContext>>,
-    pub on_local_queue_set_mode: Vec<ObserverFn<LocalQueueSetModeContext>>,
-    pub on_local_queue_get_jobs_complete: Vec<ObserverFn<LocalQueueGetJobsCompleteContext>>,
-    pub on_local_queue_return_jobs: Vec<ObserverFn<LocalQueueReturnJobsContext>>,
-    pub on_local_queue_refetch_delay_start: Vec<ObserverFn<LocalQueueRefetchDelayStartContext>>,
-    pub on_local_queue_refetch_delay_abort: Vec<ObserverFn<LocalQueueRefetchDelayAbortContext>>,
-    pub on_local_queue_refetch_delay_expired: Vec<ObserverFn<LocalQueueRefetchDelayExpiredContext>>,
-    pub before_job_run: Vec<InterceptorFn<BeforeJobRunContext>>,
-    pub after_job_run: Vec<InterceptorFn<AfterJobRunContext>>,
-    pub before_job_schedule: Vec<ScheduleTransformerFn>,
+pub(crate) struct TypeErasedHooks {
+    handlers: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
 }
 
 impl TypeErasedHooks {
-    pub fn register<H: LifecycleHooks>(&mut self, hook: H) {
-        let hook = Arc::new(hook);
-
-        let h = hook.clone();
-        self.on_worker_init.push(Box::new(move |ctx| {
-            let h = h.clone();
-            Box::pin(async move { h.on_worker_init(ctx).await })
-        }));
-
-        let h = hook.clone();
-        self.on_worker_start.push(Box::new(move |ctx| {
-            let h = h.clone();
-            Box::pin(async move { h.on_worker_start(ctx).await })
-        }));
-
-        let h = hook.clone();
-        self.on_worker_shutdown.push(Box::new(move |ctx| {
-            let h = h.clone();
-            Box::pin(async move { h.on_worker_shutdown(ctx).await })
-        }));
-
-        let h = hook.clone();
-        self.on_job_fetch.push(Box::new(move |ctx| {
-            let h = h.clone();
-            Box::pin(async move { h.on_job_fetch(ctx).await })
-        }));
-
-        let h = hook.clone();
-        self.on_job_start.push(Box::new(move |ctx| {
-            let h = h.clone();
-            Box::pin(async move { h.on_job_start(ctx).await })
-        }));
-
-        let h = hook.clone();
-        self.on_job_complete.push(Box::new(move |ctx| {
-            let h = h.clone();
-            Box::pin(async move { h.on_job_complete(ctx).await })
-        }));
-
-        let h = hook.clone();
-        self.on_job_fail.push(Box::new(move |ctx| {
-            let h = h.clone();
-            Box::pin(async move { h.on_job_fail(ctx).await })
-        }));
-
-        let h = hook.clone();
-        self.on_job_permanently_fail.push(Box::new(move |ctx| {
-            let h = h.clone();
-            Box::pin(async move { h.on_job_permanently_fail(ctx).await })
-        }));
-
-        let h = hook.clone();
-        self.on_cron_tick.push(Box::new(move |ctx| {
-            let h = h.clone();
-            Box::pin(async move { h.on_cron_tick(ctx).await })
-        }));
-
-        let h = hook.clone();
-        self.on_cron_job_scheduled.push(Box::new(move |ctx| {
-            let h = h.clone();
-            Box::pin(async move { h.on_cron_job_scheduled(ctx).await })
-        }));
-
-        let h = hook.clone();
-        self.on_local_queue_init.push(Box::new(move |ctx| {
-            let h = h.clone();
-            Box::pin(async move { h.on_local_queue_init(ctx).await })
-        }));
-
-        let h = hook.clone();
-        self.on_local_queue_set_mode.push(Box::new(move |ctx| {
-            let h = h.clone();
-            Box::pin(async move { h.on_local_queue_set_mode(ctx).await })
-        }));
-
-        let h = hook.clone();
-        self.on_local_queue_get_jobs_complete
-            .push(Box::new(move |ctx| {
-                let h = h.clone();
-                Box::pin(async move { h.on_local_queue_get_jobs_complete(ctx).await })
-            }));
-
-        let h = hook.clone();
-        self.on_local_queue_return_jobs.push(Box::new(move |ctx| {
-            let h = h.clone();
-            Box::pin(async move { h.on_local_queue_return_jobs(ctx).await })
-        }));
-
-        let h = hook.clone();
-        self.on_local_queue_refetch_delay_start
-            .push(Box::new(move |ctx| {
-                let h = h.clone();
-                Box::pin(async move { h.on_local_queue_refetch_delay_start(ctx).await })
-            }));
-
-        let h = hook.clone();
-        self.on_local_queue_refetch_delay_abort
-            .push(Box::new(move |ctx| {
-                let h = h.clone();
-                Box::pin(async move { h.on_local_queue_refetch_delay_abort(ctx).await })
-            }));
-
-        let h = hook.clone();
-        self.on_local_queue_refetch_delay_expired
-            .push(Box::new(move |ctx| {
-                let h = h.clone();
-                Box::pin(async move { h.on_local_queue_refetch_delay_expired(ctx).await })
-            }));
-
-        let h = hook.clone();
-        self.before_job_run.push(Box::new(move |ctx| {
-            let h = h.clone();
-            Box::pin(async move { h.before_job_run(ctx).await })
-        }));
-
-        let h = hook.clone();
-        self.after_job_run.push(Box::new(move |ctx| {
-            let h = h.clone();
-            Box::pin(async move { h.after_job_run(ctx).await })
-        }));
-
-        let h = hook;
-        self.before_job_schedule.push(Box::new(move |ctx| {
-            let h = h.clone();
-            Box::pin(async move { h.before_job_schedule(ctx).await })
-        }));
+    pub fn get_handlers<E: Event>(&self) -> Option<&HandlerVec<E::Context, E::Output>> {
+        self.handlers
+            .get(&TypeId::of::<E>())
+            .and_then(|h| h.downcast_ref())
     }
 
-    pub async fn emit_worker_init(&self, ctx: WorkerInitContext) {
-        let futures: Vec<_> = self.on_worker_init.iter().map(|h| h(ctx.clone())).collect();
-        futures::future::join_all(futures).await;
+    pub fn get_handlers_mut<E: Event>(&mut self) -> &mut HandlerVec<E::Context, E::Output> {
+        self.handlers
+            .entry(TypeId::of::<E>())
+            .or_insert_with(|| Box::new(HandlerVec::<E::Context, E::Output>::new()))
+            .downcast_mut()
+            .expect("Handler type mismatch")
     }
 
-    pub async fn emit_worker_start(&self, ctx: WorkerStartContext) {
-        let futures: Vec<_> = self
-            .on_worker_start
-            .iter()
-            .map(|h| h(ctx.clone()))
-            .collect();
-        futures::future::join_all(futures).await;
+    pub async fn emit<C: Emittable>(&self, ctx: C) {
+        ctx.emit_to(self).await
+    }
+}
+
+impl HookRegistry {
+    #[doc(hidden)]
+    pub async fn emit<C: Emittable>(&self, ctx: C) {
+        self.inner.emit(ctx).await
     }
 
-    pub async fn emit_worker_shutdown(&self, ctx: WorkerShutdownContext) {
-        let futures: Vec<_> = self
-            .on_worker_shutdown
-            .iter()
-            .map(|h| h(ctx.clone()))
-            .collect();
-        futures::future::join_all(futures).await;
+    pub fn before_job_run_handlers(&self) -> &[InterceptorFn<BeforeJobRunContext>] {
+        self.inner
+            .get_handlers::<BeforeJobRun>()
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
-    pub async fn emit_job_fetch(&self, ctx: JobFetchContext) {
-        let futures: Vec<_> = self.on_job_fetch.iter().map(|h| h(ctx.clone())).collect();
-        futures::future::join_all(futures).await;
+    pub fn after_job_run_handlers(&self) -> &[InterceptorFn<AfterJobRunContext>] {
+        self.inner
+            .get_handlers::<AfterJobRun>()
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
-    pub async fn emit_job_start(&self, ctx: JobStartContext) {
-        let futures: Vec<_> = self.on_job_start.iter().map(|h| h(ctx.clone())).collect();
-        futures::future::join_all(futures).await;
-    }
-
-    pub async fn emit_job_complete(&self, ctx: JobCompleteContext) {
-        let futures: Vec<_> = self
-            .on_job_complete
-            .iter()
-            .map(|h| h(ctx.clone()))
-            .collect();
-        futures::future::join_all(futures).await;
-    }
-
-    pub async fn emit_job_fail(&self, ctx: JobFailContext) {
-        let futures: Vec<_> = self.on_job_fail.iter().map(|h| h(ctx.clone())).collect();
-        futures::future::join_all(futures).await;
-    }
-
-    pub async fn emit_job_permanently_fail(&self, ctx: JobPermanentlyFailContext) {
-        let futures: Vec<_> = self
-            .on_job_permanently_fail
-            .iter()
-            .map(|h| h(ctx.clone()))
-            .collect();
-        futures::future::join_all(futures).await;
-    }
-
-    pub async fn emit_cron_tick(&self, ctx: CronTickContext) {
-        let futures: Vec<_> = self.on_cron_tick.iter().map(|h| h(ctx.clone())).collect();
-        futures::future::join_all(futures).await;
-    }
-
-    pub async fn emit_cron_job_scheduled(&self, ctx: CronJobScheduledContext) {
-        let futures: Vec<_> = self
-            .on_cron_job_scheduled
-            .iter()
-            .map(|h| h(ctx.clone()))
-            .collect();
-        futures::future::join_all(futures).await;
-    }
-
-    pub async fn emit_local_queue_init(&self, ctx: LocalQueueInitContext) {
-        let futures: Vec<_> = self
-            .on_local_queue_init
-            .iter()
-            .map(|h| h(ctx.clone()))
-            .collect();
-        futures::future::join_all(futures).await;
-    }
-
-    pub async fn emit_local_queue_set_mode(&self, ctx: LocalQueueSetModeContext) {
-        let futures: Vec<_> = self
-            .on_local_queue_set_mode
-            .iter()
-            .map(|h| h(ctx.clone()))
-            .collect();
-        futures::future::join_all(futures).await;
-    }
-
-    pub async fn emit_local_queue_get_jobs_complete(&self, ctx: LocalQueueGetJobsCompleteContext) {
-        let futures: Vec<_> = self
-            .on_local_queue_get_jobs_complete
-            .iter()
-            .map(|h| h(ctx.clone()))
-            .collect();
-        futures::future::join_all(futures).await;
-    }
-
-    pub async fn emit_local_queue_return_jobs(&self, ctx: LocalQueueReturnJobsContext) {
-        let futures: Vec<_> = self
-            .on_local_queue_return_jobs
-            .iter()
-            .map(|h| h(ctx.clone()))
-            .collect();
-        futures::future::join_all(futures).await;
-    }
-
-    pub async fn emit_local_queue_refetch_delay_start(
+    pub fn before_job_schedule_handlers(
         &self,
-        ctx: LocalQueueRefetchDelayStartContext,
-    ) {
-        let futures: Vec<_> = self
-            .on_local_queue_refetch_delay_start
-            .iter()
-            .map(|h| h(ctx.clone()))
-            .collect();
-        futures::future::join_all(futures).await;
+    ) -> &[Box<
+        dyn Fn(BeforeJobScheduleContext) -> BoxFuture<'static, JobScheduleResult> + Send + Sync,
+    >] {
+        self.inner
+            .get_handlers::<BeforeJobSchedule>()
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
-    pub async fn emit_local_queue_refetch_delay_abort(
-        &self,
-        ctx: LocalQueueRefetchDelayAbortContext,
-    ) {
-        let futures: Vec<_> = self
-            .on_local_queue_refetch_delay_abort
-            .iter()
-            .map(|h| h(ctx.clone()))
-            .collect();
-        futures::future::join_all(futures).await;
+    pub fn cron_tick_handlers(&self) -> &[ObserverFn<CronTickContext>] {
+        self.inner
+            .get_handlers::<CronTick>()
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
-    pub async fn emit_local_queue_refetch_delay_expired(
-        &self,
-        ctx: LocalQueueRefetchDelayExpiredContext,
-    ) {
-        let futures: Vec<_> = self
-            .on_local_queue_refetch_delay_expired
-            .iter()
-            .map(|h| h(ctx.clone()))
-            .collect();
-        futures::future::join_all(futures).await;
+    pub fn cron_job_scheduled_handlers(&self) -> &[ObserverFn<CronJobScheduledContext>] {
+        self.inner
+            .get_handlers::<CronJobScheduled>()
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 }

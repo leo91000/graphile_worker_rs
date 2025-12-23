@@ -8,7 +8,7 @@ use graphile_worker_crontab_parser::{parse_crontab, CrontabParseError};
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_ctx::WorkerContext;
 use graphile_worker_extensions::Extensions;
-use graphile_worker_lifecycle_hooks::{LifecycleHooks, TypeErasedHooks};
+use graphile_worker_lifecycle_hooks::{Event, HookRegistry, Plugin};
 use graphile_worker_migrations::migrate;
 use graphile_worker_shutdown_signal::{shutdown_signal, ShutdownSignal};
 use graphile_worker_task_handler::{run_task_from_worker_ctx, TaskHandler};
@@ -122,7 +122,7 @@ pub struct WorkerOptions {
     extensions: Extensions,
 
     /// Lifecycle hooks for observing and intercepting worker events
-    hooks: TypeErasedHooks,
+    hooks: HookRegistry,
 
     /// Whether to automatically install OS-level shutdown signal listeners.
     /// Defaults to `true` when not explicitly configured.
@@ -552,6 +552,44 @@ impl WorkerOptions {
         self
     }
 
+    /// Registers an event handler for a specific lifecycle event.
+    ///
+    /// This method allows registering individual handlers for specific events
+    /// without creating a full plugin. The handler is a closure that receives
+    /// the event context and returns the appropriate output type.
+    ///
+    /// # Type Parameters
+    /// * `E` - The event type to handle
+    ///
+    /// # Arguments
+    /// * `event` - The event marker (e.g., `JobStart`, `BeforeJobRun`)
+    /// * `handler` - The async handler closure
+    ///
+    /// # Example
+    /// ```ignore
+    /// use graphile_worker::{WorkerOptions, JobStart, BeforeJobRun, HookResult};
+    ///
+    /// let options = WorkerOptions::default()
+    ///     .on(JobStart, |ctx| async move {
+    ///         println!("Job {} starting", ctx.job.id());
+    ///     })
+    ///     .on(BeforeJobRun, |ctx| async move {
+    ///         if ctx.payload.get("skip").and_then(|v| v.as_bool()).unwrap_or(false) {
+    ///             return HookResult::Skip;
+    ///         }
+    ///         HookResult::Continue
+    ///     });
+    /// ```
+    pub fn on<E, F, Fut>(mut self, event: E, handler: F) -> Self
+    where
+        E: Event,
+        F: Fn(E::Context) -> Fut + Send + Sync + Clone + 'static,
+        Fut: std::future::Future<Output = E::Output> + Send + 'static,
+    {
+        self.hooks.on(event, handler);
+        self
+    }
+
     /// Adds a lifecycle hook plugin to the worker.
     ///
     /// Plugins can observe and intercept various worker events such as
@@ -559,28 +597,30 @@ impl WorkerOptions {
     /// Multiple plugins can be registered and they execute in registration order.
     ///
     /// # Type Parameters
-    /// * `H` - A type implementing the LifecycleHooks trait
+    /// * `P` - A type implementing the Plugin trait
     ///
     /// # Arguments
-    /// * `hook` - The hook plugin instance to add
+    /// * `plugin` - The plugin instance to add
     ///
     /// # Example
     /// ```ignore
-    /// use graphile_worker::{WorkerOptions, LifecycleHooks, JobStartContext};
+    /// use graphile_worker::{WorkerOptions, Plugin, HookRegistry, JobStart};
     ///
     /// struct LoggingPlugin;
     ///
-    /// impl LifecycleHooks for LoggingPlugin {
-    ///     async fn on_job_start(&self, ctx: JobStartContext) {
-    ///         println!("Job {} starting", ctx.job.id());
+    /// impl Plugin for LoggingPlugin {
+    ///     fn register(self, hooks: &mut HookRegistry) {
+    ///         hooks.on::<JobStart>(|ctx| async move {
+    ///             println!("Job {} starting", ctx.job.id());
+    ///         });
     ///     }
     /// }
     ///
     /// let options = WorkerOptions::default()
     ///     .add_plugin(LoggingPlugin);
     /// ```
-    pub fn add_plugin<H: LifecycleHooks>(mut self, hook: H) -> Self {
-        self.hooks.register(hook);
+    pub fn add_plugin<P: Plugin>(mut self, plugin: P) -> Self {
+        plugin.register(&mut self.hooks);
         self
     }
 
