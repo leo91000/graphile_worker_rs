@@ -4,13 +4,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use graphile_worker_job::Job;
-use graphile_worker_lifecycle_hooks::{
-    LocalQueueGetJobsCompleteContext, LocalQueueInitContext,
-    LocalQueueRefetchDelayAbortContext, LocalQueueRefetchDelayExpiredContext,
-    LocalQueueRefetchDelayStartContext, LocalQueueReturnJobsContext, LocalQueueSetModeContext,
-    TypeErasedHooks,
-};
 pub use graphile_worker_lifecycle_hooks::LocalQueueMode;
+use graphile_worker_lifecycle_hooks::{
+    LocalQueueGetJobsCompleteContext, LocalQueueInitContext, LocalQueueRefetchDelayAbortContext,
+    LocalQueueRefetchDelayExpiredContext, LocalQueueRefetchDelayStartContext,
+    LocalQueueReturnJobsContext, LocalQueueSetModeContext, TypeErasedHooks,
+};
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use rand::Rng;
 use sqlx::PgPool;
