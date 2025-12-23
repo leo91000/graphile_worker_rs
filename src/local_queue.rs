@@ -446,13 +446,13 @@ impl LocalQueue {
         }
     }
 
-    fn check_refetch_delay_abort(&self) -> bool {
+    async fn check_refetch_delay_abort(&self) -> bool {
         if !self.inner.refetch_delay.active.load(Ordering::SeqCst) {
             return false;
         }
 
         let counter = self.inner.refetch_delay.counter.load(Ordering::SeqCst);
-        let abort_threshold = *self.inner.refetch_delay.abort_threshold.blocking_read();
+        let abort_threshold = *self.inner.refetch_delay.abort_threshold.read().await;
 
         if counter >= abort_threshold {
             self.inner.refetch_delay.abort_notify.notify_one();
@@ -610,7 +610,7 @@ impl LocalQueue {
             .refetch_delay
             .counter
             .fetch_add(count, Ordering::SeqCst);
-        self.check_refetch_delay_abort();
+        self.check_refetch_delay_abort().await;
 
         let mode = *self.inner.mode.read().await;
 
