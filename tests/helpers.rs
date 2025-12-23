@@ -374,6 +374,12 @@ impl StaticCounter {
         let cell = self.cell.get_or_init(init_job_count).await;
         *cell.lock().await
     }
+
+    pub async fn reset(&self) {
+        let cell = self.cell.get_or_init(init_job_count).await;
+        let mut count = cell.lock().await;
+        *count = 0;
+    }
 }
 
 impl Default for StaticCounter {

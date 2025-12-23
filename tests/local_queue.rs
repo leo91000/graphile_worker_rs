@@ -32,6 +32,7 @@ impl TaskHandler for LocalQueueJob {
 #[tokio::test]
 async fn local_queue_processes_jobs_correctly() {
     with_test_db(|test_db| async move {
+        LOCAL_QUEUE_JOB_CALL_COUNT.reset().await;
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
 
@@ -104,6 +105,7 @@ impl TaskHandler for BatchJob {
 #[tokio::test]
 async fn local_queue_batch_fetches_jobs() {
     with_test_db(|test_db| async move {
+        BATCH_CALL_COUNT.reset().await;
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
 
@@ -172,6 +174,7 @@ impl TaskHandler for ShutdownJob {
 #[tokio::test]
 async fn local_queue_returns_jobs_on_shutdown() {
     with_test_db(|test_db| async move {
+        SHUTDOWN_CALL_COUNT.reset().await;
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
 
@@ -257,6 +260,7 @@ impl TaskHandler for FlaggedJob {
 #[tokio::test]
 async fn local_queue_with_forbidden_flags_uses_direct_fetch() {
     with_test_db(|test_db| async move {
+        FLAGGED_CALL_COUNT.reset().await;
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
 
@@ -344,6 +348,7 @@ impl TaskHandler for RunOnceJob {
 #[tokio::test]
 async fn local_queue_works_with_run_once() {
     with_test_db(|test_db| async move {
+        RUN_ONCE_CALL_COUNT.reset().await;
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
 
@@ -399,6 +404,7 @@ impl TaskHandler for TtlExpiryJob {
 #[tokio::test]
 async fn local_queue_returns_jobs_on_ttl_expiry() {
     with_test_db(|test_db| async move {
+        TTL_CALL_COUNT.reset().await;
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
 
@@ -484,6 +490,7 @@ impl TaskHandler for RefetchDelayJob {
 #[tokio::test]
 async fn local_queue_refetch_delay_triggers_when_below_threshold() {
     with_test_db(|test_db| async move {
+        REFETCH_DELAY_CALL_COUNT.reset().await;
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
 
@@ -560,6 +567,7 @@ impl TaskHandler for SmallQueueJob {
 #[tokio::test]
 async fn local_queue_with_size_one() {
     with_test_db(|test_db| async move {
+        SMALL_QUEUE_CALL_COUNT.reset().await;
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
 
@@ -628,6 +636,7 @@ impl TaskHandler for ConcurrentDistributionJob {
 #[tokio::test]
 async fn local_queue_distributes_jobs_to_concurrent_workers() {
     with_test_db(|test_db| async move {
+        CONCURRENT_CALL_COUNT.reset().await;
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
 
@@ -700,6 +709,7 @@ impl TaskHandler for ModeTransitionJob {
 #[tokio::test]
 async fn local_queue_transitions_modes_correctly() {
     with_test_db(|test_db| async move {
+        MODE_TRANSITION_CALL_COUNT.reset().await;
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
 
@@ -785,6 +795,7 @@ impl TaskHandler for EmptyQueueJob {
 #[tokio::test]
 async fn local_queue_handles_empty_queue_gracefully() {
     with_test_db(|test_db| async move {
+        EMPTY_QUEUE_CALL_COUNT.reset().await;
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
 
@@ -857,6 +868,7 @@ impl TaskHandler for LargeBatchJob {
 #[tokio::test]
 async fn local_queue_handles_large_batch() {
     with_test_db(|test_db| async move {
+        LARGE_BATCH_CALL_COUNT.reset().await;
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
 
@@ -924,6 +936,7 @@ impl TaskHandler for RefetchDelayWithJobsJob {
 #[tokio::test]
 async fn local_queue_processes_jobs_with_refetch_delay() {
     with_test_db(|test_db| async move {
+        REFETCH_WITH_JOBS_CALL_COUNT.reset().await;
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
 
