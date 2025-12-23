@@ -1416,8 +1416,7 @@ impl LifecycleHooks for LocalQueueHooksPlugin {
 
     async fn on_local_queue_set_mode(&self, ctx: LocalQueueSetModeContext) {
         self.counters.set_mode.fetch_add(1, Ordering::SeqCst);
-        *self.counters.last_mode_change.lock().unwrap() =
-            Some((ctx.old_mode.clone(), ctx.new_mode.clone()));
+        *self.counters.last_mode_change.lock().unwrap() = Some((ctx.old_mode, ctx.new_mode));
     }
 
     async fn on_local_queue_get_jobs_complete(&self, ctx: LocalQueueGetJobsCompleteContext) {
