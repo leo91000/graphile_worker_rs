@@ -50,10 +50,7 @@ pub async fn get_job<'e>(
 
     let job: Option<DbJob> = q.fetch_optional(executor).await?;
     Ok(job.map(|job| {
-        let task_identifier = task_details
-            .get(job.task_id())
-            .map(ToOwned::to_owned)
-            .unwrap_or_default();
+        let task_identifier = task_details.get_identifier(job.id(), job.task_id());
         Job::from_db_job(job, task_identifier)
     }))
 }
