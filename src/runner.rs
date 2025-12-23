@@ -19,8 +19,8 @@ use graphile_worker_extensions::ReadOnlyExtensions;
 use graphile_worker_job::Job;
 use graphile_worker_lifecycle_hooks::{
     AfterJobRunContext, BeforeJobRunContext, HookResult, InterceptorFn, JobCompleteContext,
-    JobFailContext, JobFetchContext, JobPermanentlyFailContext, JobStartContext, ObserverFn,
-    ShutdownReason, TypeErasedHooks, WorkerShutdownContext, WorkerStartContext,
+    JobFailContext, JobFetchContext, JobPermanentlyFailContext, JobStartContext, ShutdownReason,
+    TypeErasedHooks, WorkerShutdownContext, WorkerStartContext,
 };
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
@@ -105,12 +105,6 @@ pub enum WorkerRuntimeError {
 }
 
 impl Worker {
-    async fn invoke_observer<Ctx: Clone>(&self, hooks: &[ObserverFn<Ctx>], ctx: Ctx) {
-        for hook in hooks {
-            hook(ctx.clone()).await;
-        }
-    }
-
     async fn invoke_interceptor<Ctx: Clone>(
         &self,
         hooks: &[InterceptorFn<Ctx>],
@@ -183,15 +177,13 @@ impl Worker {
     /// - `Ok(())` if the worker shuts down gracefully
     /// - `Err(WorkerRuntimeError)` if an error occurs during worker execution
     pub async fn run(&self) -> Result<(), WorkerRuntimeError> {
-        self.invoke_observer(
-            &self.hooks.on_worker_start,
-            WorkerStartContext {
+        self.hooks
+            .emit_worker_start(WorkerStartContext {
                 pool: self.pg_pool.clone(),
                 worker_id: self.worker_id.clone(),
                 extensions: self.extensions.clone(),
-            },
-        )
-        .await;
+            })
+            .await;
 
         let job_runner = self.job_runner();
         let crontab_scheduler = self.crontab_scheduler();
@@ -203,15 +195,13 @@ impl Worker {
             Err(_) => ShutdownReason::Error,
         };
 
-        self.invoke_observer(
-            &self.hooks.on_worker_shutdown,
-            WorkerShutdownContext {
+        self.hooks
+            .emit_worker_shutdown(WorkerShutdownContext {
                 pool: self.pg_pool.clone(),
                 worker_id: self.worker_id.clone(),
                 reason,
-            },
-        )
-        .await;
+            })
+            .await;
 
         result?;
 
@@ -337,14 +327,12 @@ impl Worker {
                     if let Some(job) = job {
                         let job = Arc::new(job);
 
-                        self.invoke_observer(
-                            &self.hooks.on_job_fetch,
-                            JobFetchContext {
+                        self.hooks
+                            .emit_job_fetch(JobFetchContext {
                                 job: job.clone(),
                                 worker_id: self.worker_id().clone(),
-                            },
-                        )
-                        .await;
+                            })
+                            .await;
 
                         run_and_release_job(job.clone(), self, &source).await?;
                         debug!(job_id = job.id(), "Job processed");
@@ -494,13 +482,11 @@ async fn process_one_job(
             let job = Arc::new(job);
 
             worker
-                .invoke_observer(
-                    &worker.hooks.on_job_fetch,
-                    JobFetchContext {
-                        job: job.clone(),
-                        worker_id: worker.worker_id().clone(),
-                    },
-                )
+                .hooks
+                .emit_job_fetch(JobFetchContext {
+                    job: job.clone(),
+                    worker_id: worker.worker_id().clone(),
+                })
                 .await;
 
             run_and_release_job(job.clone(), worker, &source).await?;
@@ -551,13 +537,11 @@ async fn run_and_release_job(
     let (job_result, duration) = match before_result {
         HookResult::Continue => {
             worker
-                .invoke_observer(
-                    &worker.hooks.on_job_start,
-                    JobStartContext {
-                        job: job.clone(),
-                        worker_id: worker.worker_id().clone(),
-                    },
-                )
+                .hooks
+                .emit_job_start(JobStartContext {
+                    job: job.clone(),
+                    worker_id: worker.worker_id().clone(),
+                })
                 .await;
 
             let start = Instant::now();
@@ -810,14 +794,12 @@ async fn release_job(
             })?;
 
             worker
-                .invoke_observer(
-                    &worker.hooks.on_job_complete,
-                    JobCompleteContext {
-                        job,
-                        worker_id: worker.worker_id().clone(),
-                        duration,
-                    },
-                )
+                .hooks
+                .emit_job_complete(JobCompleteContext {
+                    job,
+                    worker_id: worker.worker_id().clone(),
+                    duration,
+                })
                 .await;
         }
         Err(e) => {
@@ -834,14 +816,12 @@ async fn release_job(
                 );
 
                 worker
-                    .invoke_observer(
-                        &worker.hooks.on_job_permanently_fail,
-                        JobPermanentlyFailContext {
-                            job: job.clone(),
-                            worker_id: worker.worker_id().clone(),
-                            error: error_str.clone(),
-                        },
-                    )
+                    .hooks
+                    .emit_job_permanently_fail(JobPermanentlyFailContext {
+                        job: job.clone(),
+                        worker_id: worker.worker_id().clone(),
+                        error: error_str.clone(),
+                    })
                     .await;
             } else {
                 warn!(
@@ -853,15 +833,13 @@ async fn release_job(
                 );
 
                 worker
-                    .invoke_observer(
-                        &worker.hooks.on_job_fail,
-                        JobFailContext {
-                            job: job.clone(),
-                            worker_id: worker.worker_id().clone(),
-                            error: error_str.clone(),
-                            will_retry,
-                        },
-                    )
+                    .hooks
+                    .emit_job_fail(JobFailContext {
+                        job: job.clone(),
+                        worker_id: worker.worker_id().clone(),
+                        error: error_str.clone(),
+                        will_retry,
+                    })
                     .await;
             }
 

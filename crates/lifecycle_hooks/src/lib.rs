@@ -168,48 +168,145 @@ impl TypeErasedHooks {
         }));
     }
 
-    pub fn emit_local_queue_init(&self, ctx: LocalQueueInitContext) {
-        for hook in &self.on_local_queue_init {
-            tokio::spawn(hook(ctx.clone()));
-        }
+    pub async fn emit_worker_init(&self, ctx: WorkerInitContext) {
+        let futures: Vec<_> = self.on_worker_init.iter().map(|h| h(ctx.clone())).collect();
+        futures::future::join_all(futures).await;
     }
 
-    pub fn emit_local_queue_set_mode(&self, ctx: LocalQueueSetModeContext) {
-        for hook in &self.on_local_queue_set_mode {
-            tokio::spawn(hook(ctx.clone()));
-        }
+    pub async fn emit_worker_start(&self, ctx: WorkerStartContext) {
+        let futures: Vec<_> = self
+            .on_worker_start
+            .iter()
+            .map(|h| h(ctx.clone()))
+            .collect();
+        futures::future::join_all(futures).await;
     }
 
-    pub fn emit_local_queue_get_jobs_complete(&self, ctx: LocalQueueGetJobsCompleteContext) {
-        for hook in &self.on_local_queue_get_jobs_complete {
-            tokio::spawn(hook(ctx.clone()));
-        }
+    pub async fn emit_worker_shutdown(&self, ctx: WorkerShutdownContext) {
+        let futures: Vec<_> = self
+            .on_worker_shutdown
+            .iter()
+            .map(|h| h(ctx.clone()))
+            .collect();
+        futures::future::join_all(futures).await;
     }
 
-    pub fn emit_local_queue_return_jobs(&self, ctx: LocalQueueReturnJobsContext) {
-        for hook in &self.on_local_queue_return_jobs {
-            tokio::spawn(hook(ctx.clone()));
-        }
+    pub async fn emit_job_fetch(&self, ctx: JobFetchContext) {
+        let futures: Vec<_> = self.on_job_fetch.iter().map(|h| h(ctx.clone())).collect();
+        futures::future::join_all(futures).await;
     }
 
-    pub fn emit_local_queue_refetch_delay_start(&self, ctx: LocalQueueRefetchDelayStartContext) {
-        for hook in &self.on_local_queue_refetch_delay_start {
-            tokio::spawn(hook(ctx.clone()));
-        }
+    pub async fn emit_job_start(&self, ctx: JobStartContext) {
+        let futures: Vec<_> = self.on_job_start.iter().map(|h| h(ctx.clone())).collect();
+        futures::future::join_all(futures).await;
     }
 
-    pub fn emit_local_queue_refetch_delay_abort(&self, ctx: LocalQueueRefetchDelayAbortContext) {
-        for hook in &self.on_local_queue_refetch_delay_abort {
-            tokio::spawn(hook(ctx.clone()));
-        }
+    pub async fn emit_job_complete(&self, ctx: JobCompleteContext) {
+        let futures: Vec<_> = self
+            .on_job_complete
+            .iter()
+            .map(|h| h(ctx.clone()))
+            .collect();
+        futures::future::join_all(futures).await;
     }
 
-    pub fn emit_local_queue_refetch_delay_expired(
+    pub async fn emit_job_fail(&self, ctx: JobFailContext) {
+        let futures: Vec<_> = self.on_job_fail.iter().map(|h| h(ctx.clone())).collect();
+        futures::future::join_all(futures).await;
+    }
+
+    pub async fn emit_job_permanently_fail(&self, ctx: JobPermanentlyFailContext) {
+        let futures: Vec<_> = self
+            .on_job_permanently_fail
+            .iter()
+            .map(|h| h(ctx.clone()))
+            .collect();
+        futures::future::join_all(futures).await;
+    }
+
+    pub async fn emit_cron_tick(&self, ctx: CronTickContext) {
+        let futures: Vec<_> = self.on_cron_tick.iter().map(|h| h(ctx.clone())).collect();
+        futures::future::join_all(futures).await;
+    }
+
+    pub async fn emit_cron_job_scheduled(&self, ctx: CronJobScheduledContext) {
+        let futures: Vec<_> = self
+            .on_cron_job_scheduled
+            .iter()
+            .map(|h| h(ctx.clone()))
+            .collect();
+        futures::future::join_all(futures).await;
+    }
+
+    pub async fn emit_local_queue_init(&self, ctx: LocalQueueInitContext) {
+        let futures: Vec<_> = self
+            .on_local_queue_init
+            .iter()
+            .map(|h| h(ctx.clone()))
+            .collect();
+        futures::future::join_all(futures).await;
+    }
+
+    pub async fn emit_local_queue_set_mode(&self, ctx: LocalQueueSetModeContext) {
+        let futures: Vec<_> = self
+            .on_local_queue_set_mode
+            .iter()
+            .map(|h| h(ctx.clone()))
+            .collect();
+        futures::future::join_all(futures).await;
+    }
+
+    pub async fn emit_local_queue_get_jobs_complete(&self, ctx: LocalQueueGetJobsCompleteContext) {
+        let futures: Vec<_> = self
+            .on_local_queue_get_jobs_complete
+            .iter()
+            .map(|h| h(ctx.clone()))
+            .collect();
+        futures::future::join_all(futures).await;
+    }
+
+    pub async fn emit_local_queue_return_jobs(&self, ctx: LocalQueueReturnJobsContext) {
+        let futures: Vec<_> = self
+            .on_local_queue_return_jobs
+            .iter()
+            .map(|h| h(ctx.clone()))
+            .collect();
+        futures::future::join_all(futures).await;
+    }
+
+    pub async fn emit_local_queue_refetch_delay_start(
+        &self,
+        ctx: LocalQueueRefetchDelayStartContext,
+    ) {
+        let futures: Vec<_> = self
+            .on_local_queue_refetch_delay_start
+            .iter()
+            .map(|h| h(ctx.clone()))
+            .collect();
+        futures::future::join_all(futures).await;
+    }
+
+    pub async fn emit_local_queue_refetch_delay_abort(
+        &self,
+        ctx: LocalQueueRefetchDelayAbortContext,
+    ) {
+        let futures: Vec<_> = self
+            .on_local_queue_refetch_delay_abort
+            .iter()
+            .map(|h| h(ctx.clone()))
+            .collect();
+        futures::future::join_all(futures).await;
+    }
+
+    pub async fn emit_local_queue_refetch_delay_expired(
         &self,
         ctx: LocalQueueRefetchDelayExpiredContext,
     ) {
-        for hook in &self.on_local_queue_refetch_delay_expired {
-            tokio::spawn(hook(ctx.clone()));
-        }
+        let futures: Vec<_> = self
+            .on_local_queue_refetch_delay_expired
+            .iter()
+            .map(|h| h(ctx.clone()))
+            .collect();
+        futures::future::join_all(futures).await;
     }
 }
