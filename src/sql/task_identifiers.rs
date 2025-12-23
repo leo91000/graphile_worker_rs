@@ -28,8 +28,7 @@ impl TaskDetails {
             None => {
                 warn!(
                     job_id,
-                    task_id,
-                    "Unknown task_id for job, using empty task identifier"
+                    task_id, "Unknown task_id for job, using empty task identifier"
                 );
                 String::new()
             }
