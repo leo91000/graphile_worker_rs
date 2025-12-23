@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use indoc::formatdoc;
 use sqlx::{query, query_as, FromRow, PgExecutor};
+use tracing::warn;
 
 use crate::errors::Result;
 
@@ -19,6 +20,20 @@ impl TaskDetails {
 
     pub fn get(&self, id: &i32) -> Option<&String> {
         self.0.get(id)
+    }
+
+    pub fn get_identifier(&self, job_id: &i64, task_id: &i32) -> String {
+        match self.0.get(task_id) {
+            Some(identifier) => identifier.to_owned(),
+            None => {
+                warn!(
+                    job_id,
+                    task_id,
+                    "Unknown task_id for job, using empty task identifier"
+                );
+                String::new()
+            }
+        }
     }
 }
 

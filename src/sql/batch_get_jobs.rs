@@ -57,10 +57,7 @@ pub async fn batch_get_jobs<'e>(
     Ok(jobs
         .into_iter()
         .map(|job| {
-            let task_identifier = task_details
-                .get(job.task_id())
-                .map(ToOwned::to_owned)
-                .unwrap_or_default();
+            let task_identifier = task_details.get_identifier(job.id(), job.task_id());
             Job::from_db_job(job, task_identifier)
         })
         .collect())
