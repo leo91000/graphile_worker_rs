@@ -113,31 +113,31 @@ pub struct BeforeJobScheduleContext {
     pub spec: JobSpec,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct LocalQueueInitContext {
     pub worker_id: String,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct LocalQueueSetModeContext {
     pub worker_id: String,
     pub old_mode: LocalQueueMode,
     pub new_mode: LocalQueueMode,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct LocalQueueGetJobsCompleteContext {
     pub worker_id: String,
     pub jobs_count: usize,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct LocalQueueReturnJobsContext {
     pub worker_id: String,
     pub jobs_count: usize,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct LocalQueueRefetchDelayStartContext {
     pub worker_id: String,
     pub duration: Duration,
@@ -145,14 +145,14 @@ pub struct LocalQueueRefetchDelayStartContext {
     pub abort_threshold: usize,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct LocalQueueRefetchDelayAbortContext {
     pub worker_id: String,
     pub count: usize,
     pub abort_threshold: usize,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct LocalQueueRefetchDelayExpiredContext {
     pub worker_id: String,
 }
