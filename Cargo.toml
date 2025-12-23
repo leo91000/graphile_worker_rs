@@ -99,9 +99,9 @@ hex = "0.4.3"
 cfg-if = "1.0.4"
 indoc = "2.0.7"
 derive_builder = "0.20.2"
-opentelemetry-30 = { package = "opentelemetry", version = "0.31.0", optional = true }
+opentelemetry-30 = { package = "opentelemetry", version = "0.30.0", optional = true }
 opentelemetry = { version = "0.31", optional = true }
-tracing-opentelemetry-30 = { package = "tracing-opentelemetry", version = "0.32.0", optional = true }
+tracing-opentelemetry-30 = { package = "tracing-opentelemetry", version = "0.31.0", optional = true }
 tracing-opentelemetry = { version = "0.32", optional = true }
 
 [dev-dependencies]
