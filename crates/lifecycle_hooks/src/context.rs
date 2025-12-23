@@ -103,3 +103,47 @@ pub struct BeforeJobScheduleContext {
     pub payload: serde_json::Value,
     pub spec: JobSpec,
 }
+
+#[derive(Clone)]
+pub struct LocalQueueInitContext {
+    pub worker_id: String,
+}
+
+#[derive(Clone)]
+pub struct LocalQueueSetModeContext {
+    pub worker_id: String,
+    pub old_mode: String,
+    pub new_mode: String,
+}
+
+#[derive(Clone)]
+pub struct LocalQueueGetJobsCompleteContext {
+    pub worker_id: String,
+    pub jobs_count: usize,
+}
+
+#[derive(Clone)]
+pub struct LocalQueueReturnJobsContext {
+    pub worker_id: String,
+    pub jobs_count: usize,
+}
+
+#[derive(Clone)]
+pub struct LocalQueueRefetchDelayStartContext {
+    pub worker_id: String,
+    pub duration: Duration,
+    pub threshold: usize,
+    pub abort_threshold: usize,
+}
+
+#[derive(Clone)]
+pub struct LocalQueueRefetchDelayAbortContext {
+    pub worker_id: String,
+    pub count: usize,
+    pub abort_threshold: usize,
+}
+
+#[derive(Clone)]
+pub struct LocalQueueRefetchDelayExpiredContext {
+    pub worker_id: String,
+}

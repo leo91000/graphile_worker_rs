@@ -1,3 +1,4 @@
+use crate::local_queue::{LocalQueue, LocalQueueConfig, LocalQueueParams};
 use crate::runner::WorkerFn;
 use crate::sql::task_identifiers::get_tasks_details;
 use crate::utils::escape_identifier;
@@ -126,6 +127,10 @@ pub struct WorkerOptions {
     /// Whether to automatically install OS-level shutdown signal listeners.
     /// Defaults to `true` when not explicitly configured.
     listen_os_shutdown_signals: Option<bool>,
+
+    /// Configuration for the local queue (batch-fetching jobs).
+    /// When set, enables LocalQueue for improved throughput.
+    local_queue_config: Option<LocalQueueConfig>,
 }
 
 /// Errors that can occur when initializing a worker.
@@ -231,10 +236,33 @@ impl WorkerOptions {
             manual_signal
         };
 
+        let worker_id = format!("graphile_worker_{}", hex::encode(random_bytes));
+        let poll_interval = self.poll_interval.unwrap_or(Duration::from_millis(1000));
+
+        let hooks = Arc::new(self.hooks);
+
+        let local_queue = if self.forbidden_flags.is_empty() {
+            self.local_queue_config.map(|config| {
+                LocalQueue::new(LocalQueueParams {
+                    config,
+                    pg_pool: pg_pool.clone(),
+                    escaped_schema: escaped_schema.clone(),
+                    worker_id: worker_id.clone(),
+                    task_details: Arc::clone(&task_details),
+                    poll_interval,
+                    continuous: true,
+                    shutdown_signal: Some(shutdown_signal.clone()),
+                    hooks: hooks.clone(),
+                })
+            })
+        } else {
+            None
+        };
+
         let worker = Worker {
-            worker_id: format!("graphile_worker_{}", hex::encode(random_bytes)),
+            worker_id,
             concurrency: self.concurrency.unwrap_or_else(num_cpus::get),
-            poll_interval: self.poll_interval.unwrap_or(Duration::from_millis(1000)),
+            poll_interval,
             jobs: self.jobs,
             pg_pool,
             escaped_schema,
@@ -245,7 +273,8 @@ impl WorkerOptions {
             shutdown_signal,
             shutdown_notifier,
             extensions: self.extensions.into(),
-            hooks: Arc::new(self.hooks),
+            hooks,
+            local_queue,
         };
 
         Ok(worker)
@@ -552,6 +581,46 @@ impl WorkerOptions {
     /// ```
     pub fn add_plugin<H: LifecycleHooks>(mut self, hook: H) -> Self {
         self.hooks.register(hook);
+        self
+    }
+
+    /// Enables the LocalQueue with the specified configuration.
+    ///
+    /// LocalQueue batch-fetches jobs from the database to reduce DB load,
+    /// trading latency for throughput. Jobs are cached locally and distributed
+    /// to workers without additional database queries until the cache is empty.
+    ///
+    /// # Arguments
+    /// * `config` - The LocalQueue configuration (size and TTL)
+    ///
+    /// # Note
+    /// When LocalQueue is enabled, jobs may experience slightly higher latency
+    /// as they wait in the local cache. The cache has a TTL after which
+    /// unclaimed jobs are returned to the database.
+    ///
+    /// Workers with `forbidden_flags` will bypass the LocalQueue and fetch
+    /// jobs directly from the database.
+    ///
+    /// # Example
+    /// ```
+    /// # use graphile_worker::{WorkerOptions, LocalQueueConfig, RefetchDelayConfig};
+    /// # use std::time::Duration;
+    ///
+    /// let options = WorkerOptions::default()
+    ///     .local_queue(
+    ///         LocalQueueConfig::default()
+    ///             .with_size(100)
+    ///             .with_ttl(Duration::from_secs(300))
+    ///             .with_refetch_delay(
+    ///                 RefetchDelayConfig::default()
+    ///                     .with_duration(Duration::from_millis(100))
+    ///                     .with_threshold(10)
+    ///                     .with_max_abort_threshold(500),
+    ///             ),
+    ///     );
+    /// ```
+    pub fn local_queue(mut self, config: LocalQueueConfig) -> Self {
+        self.local_queue_config = Some(config);
         self
     }
 }

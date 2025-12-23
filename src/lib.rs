@@ -42,6 +42,9 @@ pub mod job_spec;
 /// Core worker implementation for running the job queue
 pub mod runner;
 
+/// LocalQueue for batch-fetching jobs to improve throughput
+pub mod local_queue;
+
 /// SQL query implementations for interacting with the database
 pub mod sql;
 
@@ -65,5 +68,8 @@ pub use graphile_worker_task_handler::*;
 
 pub use builder::{WorkerBuildError, WorkerOptions};
 pub use context_ext::WorkerContextExt;
+pub use local_queue::{
+    LocalQueue, LocalQueueConfig, LocalQueueError, LocalQueueMode, RefetchDelayConfig,
+};
 pub use runner::Worker;
 pub use worker_utils::WorkerUtils;
