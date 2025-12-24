@@ -198,6 +198,12 @@ impl From<LocalQueueState> for LocalQueue {
     }
 }
 
+impl From<LocalQueueParams> for LocalQueue {
+    fn from(params: LocalQueueParams) -> Self {
+        LocalQueueState::new(params).into()
+    }
+}
+
 pub struct LocalQueueParams {
     pub config: LocalQueueConfig,
     pub pg_pool: PgPool,
@@ -235,7 +241,7 @@ impl LocalQueue {
         }
 
         let shutdown_signal = params.shutdown_signal.clone();
-        let queue: LocalQueue = LocalQueueState::new(params).into();
+        let queue: LocalQueue = params.into();
 
         let queue_clone = queue.clone();
         tokio::spawn(async move {
