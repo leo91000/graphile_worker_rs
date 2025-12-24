@@ -1,4 +1,4 @@
-use crate::local_queue::{LocalQueue, LocalQueueConfig, LocalQueueParams};
+use crate::local_queue::LocalQueueConfig;
 use crate::runner::WorkerFn;
 use crate::sql::task_identifiers::get_tasks_details;
 use crate::utils::escape_identifier;
@@ -241,27 +241,17 @@ impl WorkerOptions {
 
         let hooks = Arc::new(self.hooks);
 
-        let local_queue = if self.forbidden_flags.is_empty() {
-            self.local_queue_config.map(|config| {
-                LocalQueue::new(LocalQueueParams {
-                    config,
-                    pg_pool: pg_pool.clone(),
-                    escaped_schema: escaped_schema.clone(),
-                    worker_id: worker_id.clone(),
-                    task_details: Arc::clone(&task_details),
-                    poll_interval,
-                    continuous: true,
-                    shutdown_signal: Some(shutdown_signal.clone()),
-                    hooks: hooks.clone(),
-                })
-            })
+        let concurrency = self.concurrency.unwrap_or_else(num_cpus::get);
+
+        let local_queue_config = if self.forbidden_flags.is_empty() {
+            self.local_queue_config
         } else {
             None
         };
 
         let worker = Worker {
             worker_id,
-            concurrency: self.concurrency.unwrap_or_else(num_cpus::get),
+            concurrency,
             poll_interval,
             jobs: self.jobs,
             pg_pool,
@@ -274,7 +264,7 @@ impl WorkerOptions {
             shutdown_notifier,
             extensions: self.extensions.into(),
             hooks,
-            local_queue,
+            local_queue_config,
         };
 
         Ok(worker)

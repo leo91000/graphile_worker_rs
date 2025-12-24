@@ -8,7 +8,7 @@ use std::{collections::HashMap, time::Instant};
 use crate::errors::GraphileWorkerError;
 use crate::local_queue::LocalQueue;
 use crate::sql::{get_job::get_job, task_identifiers::TaskDetails};
-use crate::streams::{job_signal_stream, job_stream};
+use crate::streams::{job_signal_stream, job_signal_stream_with_receiver, job_stream};
 use crate::worker_utils::WorkerUtils;
 use futures::{try_join, StreamExt, TryStreamExt};
 use getset::Getters;
@@ -82,9 +82,9 @@ pub struct Worker {
     pub(crate) extensions: ReadOnlyExtensions,
     /// Lifecycle hooks for observing and intercepting worker events
     pub(crate) hooks: Arc<HookRegistry>,
-    /// Optional local queue for batch-fetching jobs (improves throughput)
+    /// Optional local queue config (LocalQueue created lazily in run())
     #[getset(skip)]
-    pub(crate) local_queue: Option<Arc<LocalQueue>>,
+    pub(crate) local_queue_config: Option<crate::local_queue::LocalQueueConfig>,
 }
 
 /// Errors that can occur during worker runtime.
@@ -171,7 +171,8 @@ impl Worker {
             })
             .await;
 
-        let job_runner = self.job_runner();
+        let local_queue = self.create_local_queue();
+        let job_runner = self.job_runner_internal(local_queue);
         let crontab_scheduler = self.crontab_scheduler();
 
         let result = try_join!(crontab_scheduler, job_runner);
@@ -275,12 +276,33 @@ impl Worker {
     /// A `Result` that is:
     /// - `Ok(())` if the job runner shuts down gracefully
     /// - `Err(WorkerRuntimeError)` if an error occurs during execution
-    async fn job_runner(&self) -> Result<(), WorkerRuntimeError> {
-        match &self.local_queue {
-            Some(local_queue) => {
-                self.job_runner_with_local_queue(Arc::clone(local_queue))
-                    .await
-            }
+    fn create_local_queue(&self) -> Option<(Arc<LocalQueue>, crate::streams::JobSignalReceiver)> {
+        if let Some(ref config) = self.local_queue_config {
+            let (tx, rx) = tokio::sync::mpsc::channel(self.concurrency * 2);
+            let queue = LocalQueue::new(crate::local_queue::LocalQueueParams {
+                config: config.clone(),
+                pg_pool: self.pg_pool.clone(),
+                escaped_schema: self.escaped_schema.clone(),
+                worker_id: self.worker_id.clone(),
+                task_details: Arc::clone(&self.task_details),
+                poll_interval: self.poll_interval,
+                continuous: true,
+                shutdown_signal: Some(self.shutdown_signal.clone()),
+                hooks: self.hooks.clone(),
+                job_signal_sender: tx,
+            });
+            Some((queue, rx))
+        } else {
+            None
+        }
+    }
+
+    async fn job_runner_internal(
+        &self,
+        local_queue: Option<(Arc<LocalQueue>, crate::streams::JobSignalReceiver)>,
+    ) -> Result<(), WorkerRuntimeError> {
+        match local_queue {
+            Some((local_queue, rx)) => self.job_runner_with_local_queue(local_queue, rx).await,
             None => self.job_runner_direct().await,
         }
     }
@@ -289,12 +311,14 @@ impl Worker {
     async fn job_runner_with_local_queue(
         &self,
         local_queue: Arc<LocalQueue>,
+        job_signal_rx: crate::streams::JobSignalReceiver,
     ) -> Result<(), WorkerRuntimeError> {
-        let job_signal = job_signal_stream(
+        let job_signal = job_signal_stream_with_receiver(
             self.pg_pool.clone(),
             self.poll_interval,
             self.shutdown_signal.clone(),
             self.concurrency,
+            job_signal_rx,
         )
         .await?;
 

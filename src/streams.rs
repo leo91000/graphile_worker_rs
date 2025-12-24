@@ -3,7 +3,7 @@ use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 use futures::{stream, Stream};
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use sqlx::{postgres::PgListener, PgPool};
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc, RwLock};
 use tracing::error;
 
 use crate::{
@@ -24,7 +24,16 @@ pub enum StreamSource {
     PgListener,
     /// Job processing came from a one-time run request
     RunOnce,
+    /// Job processing was triggered internally (e.g., after jobs were fetched into cache)
+    Internal,
 }
+
+/// Sender for injecting job signals into the stream.
+/// Used by LocalQueue to signal when jobs are available in the cache.
+pub type JobSignalSender = mpsc::Sender<()>;
+
+/// Receiver for job signals from LocalQueue.
+pub type JobSignalReceiver = mpsc::Receiver<()>;
 
 /// Internal data structure for managing the job signal stream.
 ///
@@ -41,15 +50,17 @@ struct JobSignalStreamData {
     concurrency: usize,
     /// When a job signal is received, yields multiple items to allow for concurrent processing
     yield_n: Option<(NonZeroUsize, StreamSource)>,
+    /// Optional receiver for internal job signals (from LocalQueue)
+    internal_rx: Option<mpsc::Receiver<()>>,
 }
 
 impl JobSignalStreamData {
-    /// Creates a new JobSignalStreamData with the given components.
     fn new(
         interval: tokio::time::Interval,
         pg_listener: PgListener,
         shutdown_signal: ShutdownSignal,
         concurrency: usize,
+        internal_rx: Option<mpsc::Receiver<()>>,
     ) -> Self {
         JobSignalStreamData {
             interval,
@@ -57,6 +68,7 @@ impl JobSignalStreamData {
             shutdown_signal,
             concurrency,
             yield_n: None,
+            internal_rx,
         }
     }
 }
@@ -89,11 +101,48 @@ pub async fn job_signal_stream(
     shutdown_signal: ShutdownSignal,
     concurrency: usize,
 ) -> Result<impl Stream<Item = StreamSource>> {
+    job_signal_stream_internal(pg_pool, poll_interval, shutdown_signal, concurrency, None).await
+}
+
+/// Creates a stream that yields job processing signals, with a provided receiver for internal signaling.
+///
+/// This variant is used with LocalQueue when the sender/receiver pair is created externally
+/// (e.g., in builder.rs) to avoid race conditions.
+pub async fn job_signal_stream_with_receiver(
+    pg_pool: PgPool,
+    poll_interval: Duration,
+    shutdown_signal: ShutdownSignal,
+    concurrency: usize,
+    internal_rx: JobSignalReceiver,
+) -> Result<impl Stream<Item = StreamSource>> {
+    job_signal_stream_internal(
+        pg_pool,
+        poll_interval,
+        shutdown_signal,
+        concurrency,
+        Some(internal_rx),
+    )
+    .await
+}
+
+async fn job_signal_stream_internal(
+    pg_pool: PgPool,
+    poll_interval: Duration,
+    shutdown_signal: ShutdownSignal,
+    concurrency: usize,
+    internal_rx: Option<mpsc::Receiver<()>>,
+) -> Result<impl Stream<Item = StreamSource>> {
     let interval = tokio::time::interval(poll_interval);
 
     let mut pg_listener = PgListener::connect_with(&pg_pool).await?;
     pg_listener.listen("jobs:insert").await?;
-    let stream_data = JobSignalStreamData::new(interval, pg_listener, shutdown_signal, concurrency);
+    let stream_data = JobSignalStreamData::new(
+        interval,
+        pg_listener,
+        shutdown_signal,
+        concurrency,
+        internal_rx,
+    );
     let stream = stream::unfold(stream_data, |mut f| async {
         if let Some((n, source)) = f.yield_n.take() {
             if n.get() > 1 {
@@ -105,16 +154,40 @@ pub async fn job_signal_stream(
             return Some((source, f));
         }
 
-        tokio::select! {
-            _ = (f.interval).tick() => {
-                f.yield_n = Some((NonZeroUsize::new(f.concurrency).unwrap(), StreamSource::Polling));
-                Some((StreamSource::Polling, f))
-            },
-            _ = (f.pg_listener).recv() => {
-                f.yield_n = Some((NonZeroUsize::new(f.concurrency).unwrap(), StreamSource::PgListener));
-                Some((StreamSource::PgListener, f))
-            },
-            _ = &mut f.shutdown_signal => None,
+        if let Some(ref mut rx) = f.internal_rx {
+            tokio::select! {
+                biased;
+                _ = f.interval.tick() => {
+                    f.yield_n = Some((NonZeroUsize::new(f.concurrency).unwrap(), StreamSource::Polling));
+                    Some((StreamSource::Polling, f))
+                },
+                _ = f.pg_listener.recv() => {
+                    f.yield_n = Some((NonZeroUsize::new(f.concurrency).unwrap(), StreamSource::PgListener));
+                    Some((StreamSource::PgListener, f))
+                },
+                res = rx.recv() => {
+                    if res.is_some() {
+                        f.yield_n = Some((NonZeroUsize::new(f.concurrency).unwrap(), StreamSource::Internal));
+                        Some((StreamSource::Internal, f))
+                    } else {
+                        None
+                    }
+                },
+                _ = &mut f.shutdown_signal => None,
+            }
+        } else {
+            tokio::select! {
+                biased;
+                _ = f.interval.tick() => {
+                    f.yield_n = Some((NonZeroUsize::new(f.concurrency).unwrap(), StreamSource::Polling));
+                    Some((StreamSource::Polling, f))
+                },
+                _ = f.pg_listener.recv() => {
+                    f.yield_n = Some((NonZeroUsize::new(f.concurrency).unwrap(), StreamSource::PgListener));
+                    Some((StreamSource::PgListener, f))
+                },
+                _ = &mut f.shutdown_signal => None,
+            }
         }
     });
 
