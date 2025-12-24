@@ -257,42 +257,43 @@ impl LocalQueue {
         queue
     }
 
-    async fn run(this: Arc<Self>) {
-        this.hooks
+    async fn run(queue: Arc<Self>) {
+        queue
+            .hooks
             .emit(LocalQueueInitContext {
-                worker_id: this.worker_id.clone(),
+                worker_id: queue.worker_id.clone(),
             })
             .await;
 
-        Self::set_mode(&this, LocalQueueMode::Polling).await;
-        Self::schedule_fetch(Arc::clone(&this)).await;
+        Self::set_mode(&queue, LocalQueueMode::Polling).await;
+        Self::schedule_fetch(Arc::clone(&queue)).await;
 
-        this.inner.run_complete_notify.notify_one();
+        queue.inner.run_complete_notify.notify_one();
     }
 
-    async fn schedule_fetch(this: Arc<Self>) {
+    async fn schedule_fetch(queue: Arc<Self>) {
         loop {
-            let mode = *this.inner.mode.read().await;
+            let mode = *queue.inner.mode.read().await;
 
             if mode == LocalQueueMode::Released {
                 break;
             }
 
             let can_fetch = mode == LocalQueueMode::Polling
-                && !this.inner.fetch_in_progress.load(Ordering::SeqCst)
-                && !this.inner.refetch_delay.active.load(Ordering::SeqCst);
+                && !queue.inner.fetch_in_progress.load(Ordering::SeqCst)
+                && !queue.inner.refetch_delay.active.load(Ordering::SeqCst);
 
             if !can_fetch {
-                this.inner.state_notify.notified().await;
+                queue.inner.state_notify.notified().await;
                 continue;
             }
 
-            Self::fetch(Arc::clone(&this)).await;
+            Self::fetch(Arc::clone(&queue)).await;
 
-            let mode = *this.inner.mode.read().await;
-            if mode == LocalQueueMode::Polling && this.continuous {
-                let should_fetch_again = this.inner.fetch_again.swap(false, Ordering::SeqCst);
-                let refetch_delay_wants_fetch = this
+            let mode = *queue.inner.mode.read().await;
+            if mode == LocalQueueMode::Polling && queue.continuous {
+                let should_fetch_again = queue.inner.fetch_again.swap(false, Ordering::SeqCst);
+                let refetch_delay_wants_fetch = queue
                     .inner
                     .refetch_delay
                     .fetch_on_complete
@@ -300,19 +301,19 @@ impl LocalQueue {
 
                 if !should_fetch_again && !refetch_delay_wants_fetch {
                     tokio::select! {
-                        _ = tokio::time::sleep(this.poll_interval) => {}
-                        _ = this.inner.state_notify.notified() => {}
+                        _ = tokio::time::sleep(queue.poll_interval) => {}
+                        _ = queue.inner.state_notify.notified() => {}
                     }
                 }
-            } else if mode == LocalQueueMode::Polling && !this.continuous {
-                Self::set_mode(&this, LocalQueueMode::Released).await;
+            } else if mode == LocalQueueMode::Polling && !queue.continuous {
+                Self::set_mode(&queue, LocalQueueMode::Released).await;
                 break;
             }
         }
     }
 
-    async fn fetch(this: Arc<Self>) {
-        if this
+    async fn fetch(queue: Arc<Self>) {
+        if queue
             .inner
             .fetch_in_progress
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -321,61 +322,63 @@ impl LocalQueue {
             return;
         }
 
-        if this.inner.refetch_delay.active.load(Ordering::SeqCst) {
-            this.inner
+        if queue.inner.refetch_delay.active.load(Ordering::SeqCst) {
+            queue
+                .inner
                 .refetch_delay
                 .fetch_on_complete
                 .store(true, Ordering::SeqCst);
-            this.inner.fetch_in_progress.store(false, Ordering::SeqCst);
-            this.inner.state_notify.notify_one();
+            queue.inner.fetch_in_progress.store(false, Ordering::SeqCst);
+            queue.inner.state_notify.notify_one();
             return;
         }
 
-        this.inner.fetch_again.store(false, Ordering::SeqCst);
-        this.inner.refetch_delay.counter.store(0, Ordering::SeqCst);
+        queue.inner.fetch_again.store(false, Ordering::SeqCst);
+        queue.inner.refetch_delay.counter.store(0, Ordering::SeqCst);
 
-        let task_details = this.task_details.read().await;
+        let task_details = queue.task_details.read().await;
         let result = batch_get_jobs(
-            &this.pg_pool,
+            &queue.pg_pool,
             &task_details,
-            &this.escaped_schema,
-            &this.worker_id,
+            &queue.escaped_schema,
+            &queue.worker_id,
             &[],
-            this.config.size.try_into().unwrap_or(i32::MAX),
+            queue.config.size.try_into().unwrap_or(i32::MAX),
         )
         .await;
         drop(task_details);
 
-        this.inner.fetch_in_progress.store(false, Ordering::SeqCst);
-        this.inner.state_notify.notify_one();
+        queue.inner.fetch_in_progress.store(false, Ordering::SeqCst);
+        queue.inner.state_notify.notify_one();
 
         match result {
             Ok(jobs) => {
                 let job_count = jobs.len();
                 debug!(job_count, "LocalQueue fetched jobs from database");
 
-                this.hooks
+                queue
+                    .hooks
                     .emit(LocalQueueGetJobsCompleteContext {
-                        worker_id: this.worker_id.clone(),
+                        worker_id: queue.worker_id.clone(),
                         jobs_count: job_count,
                     })
                     .await;
 
-                let fetched_max = job_count >= this.config.size;
+                let fetched_max = job_count >= queue.config.size;
 
-                if let Some(ref refetch_delay_config) = this.config.refetch_delay {
+                if let Some(ref refetch_delay_config) = queue.config.refetch_delay {
                     let threshold_surpassed =
                         fetched_max || job_count > refetch_delay_config.threshold;
 
                     if !threshold_surpassed {
-                        Self::start_refetch_delay(Arc::clone(&this), refetch_delay_config).await;
+                        Self::start_refetch_delay(Arc::clone(&queue), refetch_delay_config).await;
                     }
                 }
 
                 if !jobs.is_empty() {
-                    Self::received_jobs(Arc::clone(&this), jobs, fetched_max).await;
-                } else if !this.continuous {
-                    Self::set_mode(&this, LocalQueueMode::Released).await;
+                    Self::received_jobs(Arc::clone(&queue), jobs, fetched_max).await;
+                } else if !queue.continuous {
+                    Self::set_mode(&queue, LocalQueueMode::Released).await;
                 }
             }
             Err(e) => {
@@ -384,8 +387,8 @@ impl LocalQueue {
         }
     }
 
-    async fn start_refetch_delay(this: Arc<Self>, config: &RefetchDelayConfig) {
-        let max_abort = config.max_abort_threshold.unwrap_or(5 * this.config.size);
+    async fn start_refetch_delay(queue: Arc<Self>, config: &RefetchDelayConfig) {
+        let max_abort = config.max_abort_threshold.unwrap_or(5 * queue.config.size);
         let abort_threshold = if max_abort == usize::MAX {
             usize::MAX
         } else {
@@ -393,12 +396,14 @@ impl LocalQueue {
             ((random * max_abort as f64) as usize).max(1)
         };
 
-        *this.inner.refetch_delay.abort_threshold.write().await = abort_threshold;
-        this.inner
+        *queue.inner.refetch_delay.abort_threshold.write().await = abort_threshold;
+        queue
+            .inner
             .refetch_delay
             .active
             .store(true, Ordering::SeqCst);
-        this.inner
+        queue
+            .inner
             .refetch_delay
             .fetch_on_complete
             .store(false, Ordering::SeqCst);
@@ -413,48 +418,52 @@ impl LocalQueue {
             "LocalQueue starting refetch delay"
         );
 
-        this.hooks
+        queue
+            .hooks
             .emit(LocalQueueRefetchDelayStartContext {
-                worker_id: this.worker_id.clone(),
+                worker_id: queue.worker_id.clone(),
                 duration,
                 threshold: config.threshold,
                 abort_threshold,
             })
             .await;
 
-        let this_clone = Arc::clone(&this);
+        let queue_clone = Arc::clone(&queue);
         tokio::spawn(async move {
             tokio::select! {
                 _ = tokio::time::sleep(duration) => {
-                    Self::refetch_delay_complete(this_clone, false).await;
+                    Self::refetch_delay_complete(queue_clone, false).await;
                 }
-                _ = this_clone.inner.refetch_delay.abort_notify.notified() => {
-                    Self::refetch_delay_complete(this_clone, true).await;
+                _ = queue_clone.inner.refetch_delay.abort_notify.notified() => {
+                    Self::refetch_delay_complete(queue_clone, true).await;
                 }
             }
         });
     }
 
-    async fn refetch_delay_complete(this: Arc<Self>, aborted: bool) {
-        this.inner
+    async fn refetch_delay_complete(queue: Arc<Self>, aborted: bool) {
+        queue
+            .inner
             .refetch_delay
             .active
             .store(false, Ordering::SeqCst);
-        this.inner.state_notify.notify_one();
+        queue.inner.state_notify.notify_one();
 
         if aborted {
-            let count = this.inner.refetch_delay.counter.load(Ordering::SeqCst);
-            let abort_threshold = *this.inner.refetch_delay.abort_threshold.read().await;
+            let count = queue.inner.refetch_delay.counter.load(Ordering::SeqCst);
+            let abort_threshold = *queue.inner.refetch_delay.abort_threshold.read().await;
 
-            this.inner
+            queue
+                .inner
                 .refetch_delay
                 .fetch_on_complete
                 .store(true, Ordering::SeqCst);
             trace!("LocalQueue refetch delay aborted");
 
-            this.hooks
+            queue
+                .hooks
                 .emit(LocalQueueRefetchDelayAbortContext {
-                    worker_id: this.worker_id.clone(),
+                    worker_id: queue.worker_id.clone(),
                     count,
                     abort_threshold,
                 })
@@ -462,9 +471,10 @@ impl LocalQueue {
         } else {
             trace!("LocalQueue refetch delay expired");
 
-            this.hooks
+            queue
+                .hooks
                 .emit(LocalQueueRefetchDelayExpiredContext {
-                    worker_id: this.worker_id.clone(),
+                    worker_id: queue.worker_id.clone(),
                 })
                 .await;
         }
@@ -483,42 +493,42 @@ impl LocalQueue {
         }
     }
 
-    async fn received_jobs(this: Arc<Self>, jobs: Vec<Job>, fetched_max: bool) {
+    async fn received_jobs(queue: Arc<Self>, jobs: Vec<Job>, fetched_max: bool) {
         let job_count = jobs.len();
         {
-            let mut job_queue = this.inner.job_queue.lock().await;
+            let mut job_queue = queue.inner.job_queue.lock().await;
             for job in jobs {
                 job_queue.push_back(job);
             }
         }
 
-        Self::set_mode(&this, LocalQueueMode::Waiting).await;
-        Self::start_ttl_timer(Arc::clone(&this)).await;
+        Self::set_mode(&queue, LocalQueueMode::Waiting).await;
+        Self::start_ttl_timer(Arc::clone(&queue)).await;
 
         trace!(job_count, "Jobs added to cache, signaling stream");
 
-        let _ = this.inner.job_signal_sender.try_send(());
+        let _ = queue.inner.job_signal_sender.try_send(());
 
-        if fetched_max || this.inner.fetch_again.load(Ordering::SeqCst) {
-            this.inner.fetch_again.store(true, Ordering::SeqCst);
+        if fetched_max || queue.inner.fetch_again.load(Ordering::SeqCst) {
+            queue.inner.fetch_again.store(true, Ordering::SeqCst);
         }
     }
 
-    async fn start_ttl_timer(this: Arc<Self>) {
-        let ttl = this.config.ttl;
+    async fn start_ttl_timer(queue: Arc<Self>) {
+        let ttl = queue.config.ttl;
 
-        let mut handle_guard = this.inner.ttl_timer_handle.lock().await;
+        let mut handle_guard = queue.inner.ttl_timer_handle.lock().await;
         if let Some(existing_handle) = handle_guard.take() {
             existing_handle.abort();
         }
 
-        let this_clone = Arc::clone(&this);
+        let queue_clone = Arc::clone(&queue);
         let join_handle = tokio::spawn(async move {
             tokio::time::sleep(ttl).await;
 
-            let mode = *this_clone.inner.mode.read().await;
+            let mode = *queue_clone.inner.mode.read().await;
             if mode == LocalQueueMode::Waiting {
-                Self::set_mode_ttl_expired(this_clone).await;
+                Self::set_mode_ttl_expired(queue_clone).await;
             }
         });
 
@@ -557,8 +567,8 @@ impl LocalQueue {
         }
     }
 
-    async fn set_mode_ttl_expired(this: Arc<Self>) {
-        let mut mode = this.inner.mode.write().await;
+    async fn set_mode_ttl_expired(queue: Arc<Self>) {
+        let mut mode = queue.inner.mode.write().await;
         if *mode != LocalQueueMode::Waiting {
             return;
         }
@@ -567,22 +577,23 @@ impl LocalQueue {
 
         debug!("LocalQueue TTL expired, returning jobs to database");
 
-        let jobs: Vec<Job> = this.inner.job_queue.lock().await.drain(..).collect();
+        let jobs: Vec<Job> = queue.inner.job_queue.lock().await.drain(..).collect();
         if !jobs.is_empty() {
             let jobs_count = jobs.len();
             if let Err(e) = Self::return_jobs_with_retry(
-                &this.pg_pool,
+                &queue.pg_pool,
                 &jobs,
-                &this.escaped_schema,
-                &this.worker_id,
+                &queue.escaped_schema,
+                &queue.worker_id,
             )
             .await
             {
                 error!(error = %e, "Failed to return jobs after TTL expiry (exhausted retries)");
             } else {
-                this.hooks
+                queue
+                    .hooks
                     .emit(LocalQueueReturnJobsContext {
-                        worker_id: this.worker_id.clone(),
+                        worker_id: queue.worker_id.clone(),
                         jobs_count,
                     })
                     .await;
@@ -590,26 +601,26 @@ impl LocalQueue {
         }
     }
 
-    pub async fn get_job(this: &Arc<Self>, flags_to_skip: &[String]) -> Option<Job> {
-        let mode = *this.inner.mode.read().await;
+    pub async fn get_job(queue: &Arc<Self>, flags_to_skip: &[String]) -> Option<Job> {
+        let mode = *queue.inner.mode.read().await;
         if mode == LocalQueueMode::Released {
             return None;
         }
 
         if !flags_to_skip.is_empty() {
-            return Self::get_job_direct(this, flags_to_skip).await;
+            return Self::get_job_direct(queue, flags_to_skip).await;
         }
 
-        Self::get_job_from_cache(Arc::clone(this)).await
+        Self::get_job_from_cache(Arc::clone(queue)).await
     }
 
-    async fn get_job_direct(this: &Arc<Self>, flags_to_skip: &[String]) -> Option<Job> {
-        let task_details = this.task_details.read().await;
+    async fn get_job_direct(queue: &Arc<Self>, flags_to_skip: &[String]) -> Option<Job> {
+        let task_details = queue.task_details.read().await;
         match get_job(
-            &this.pg_pool,
+            &queue.pg_pool,
             &task_details,
-            &this.escaped_schema,
-            &this.worker_id,
+            &queue.escaped_schema,
+            &queue.worker_id,
             &flags_to_skip.to_vec(),
         )
         .await
@@ -622,26 +633,26 @@ impl LocalQueue {
         }
     }
 
-    async fn get_job_from_cache(this: Arc<Self>) -> Option<Job> {
+    async fn get_job_from_cache(queue: Arc<Self>) -> Option<Job> {
         {
-            let mode = *this.inner.mode.read().await;
+            let mode = *queue.inner.mode.read().await;
             if mode == LocalQueueMode::TtlExpired {
-                Self::set_mode(&this, LocalQueueMode::Polling).await;
+                Self::set_mode(&queue, LocalQueueMode::Polling).await;
             }
             if mode == LocalQueueMode::Released {
                 return None;
             }
         }
 
-        let mut job_queue = this.inner.job_queue.lock().await;
+        let mut job_queue = queue.inner.job_queue.lock().await;
         if let Some(job) = job_queue.pop_front() {
             let remaining = job_queue.len();
             drop(job_queue);
 
             if remaining == 0 {
-                Self::set_mode(&this, LocalQueueMode::Polling).await;
+                Self::set_mode(&queue, LocalQueueMode::Polling).await;
             } else {
-                let _ = this.inner.job_signal_sender.try_send(());
+                let _ = queue.inner.job_signal_sender.try_send(());
             }
 
             return Some(job);
@@ -720,8 +731,8 @@ impl LocalQueue {
         Ok(())
     }
 
-    async fn set_mode(this: &Arc<Self>, new_mode: LocalQueueMode) {
-        let mut mode = this.inner.mode.write().await;
+    async fn set_mode(queue: &Arc<Self>, new_mode: LocalQueueMode) {
+        let mut mode = queue.inner.mode.write().await;
         let old_mode = *mode;
         if old_mode == new_mode {
             return;
@@ -730,14 +741,15 @@ impl LocalQueue {
         *mode = new_mode;
         drop(mode);
 
-        this.hooks
+        queue
+            .hooks
             .emit(LocalQueueSetModeContext {
-                worker_id: this.worker_id.clone(),
+                worker_id: queue.worker_id.clone(),
                 old_mode,
                 new_mode,
             })
             .await;
 
-        this.inner.state_notify.notify_waiters();
+        queue.inner.state_notify.notify_waiters();
     }
 }
