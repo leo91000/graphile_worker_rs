@@ -276,7 +276,7 @@ impl Worker {
     /// A `Result` that is:
     /// - `Ok(())` if the job runner shuts down gracefully
     /// - `Err(WorkerRuntimeError)` if an error occurs during execution
-    fn create_local_queue(&self) -> Option<(Arc<LocalQueue>, crate::streams::JobSignalReceiver)> {
+    fn create_local_queue(&self) -> Option<(LocalQueue, crate::streams::JobSignalReceiver)> {
         if let Some(ref config) = self.local_queue_config {
             let (tx, rx) = tokio::sync::mpsc::channel(self.concurrency * 2);
             let queue = LocalQueue::new(crate::local_queue::LocalQueueParams {
@@ -299,7 +299,7 @@ impl Worker {
 
     async fn job_runner_internal(
         &self,
-        local_queue: Option<(Arc<LocalQueue>, crate::streams::JobSignalReceiver)>,
+        local_queue: Option<(LocalQueue, crate::streams::JobSignalReceiver)>,
     ) -> Result<(), WorkerRuntimeError> {
         match local_queue {
             Some((local_queue, rx)) => self.job_runner_with_local_queue(local_queue, rx).await,
@@ -310,7 +310,7 @@ impl Worker {
     /// Job runner implementation using LocalQueue for batch-fetching jobs.
     async fn job_runner_with_local_queue(
         &self,
-        local_queue: Arc<LocalQueue>,
+        local_queue: LocalQueue,
         job_signal_rx: crate::streams::JobSignalReceiver,
     ) -> Result<(), WorkerRuntimeError> {
         let job_signal = job_signal_stream_with_receiver(
@@ -326,13 +326,13 @@ impl Worker {
         job_signal
             .map(Ok::<_, ProcessJobError>)
             .try_for_each_concurrent(self.concurrency, |source| {
-                let local_queue = Arc::clone(&local_queue);
+                let local_queue = local_queue.clone();
                 async move {
                     if matches!(source, StreamSource::PgListener) {
                         local_queue.pulse(1).await;
                     }
 
-                    let job = LocalQueue::get_job(&local_queue, &self.forbidden_flags).await;
+                    let job = local_queue.get_job(&self.forbidden_flags).await;
 
                     if let Some(job) = job {
                         let job = Arc::new(job);
