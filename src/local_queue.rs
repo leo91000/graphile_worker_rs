@@ -678,6 +678,8 @@ impl LocalQueue {
                 if self.inner.fetch_in_progress.load(Ordering::SeqCst) {
                     self.inner.fetch_again.store(true, Ordering::SeqCst);
                     self.inner.state_notify.notify_one();
+                } else if !self.inner.refetch_delay.active.load(Ordering::SeqCst) {
+                    self.inner.state_notify.notify_one();
                 }
             }
             LocalQueueMode::Waiting | LocalQueueMode::TtlExpired => {}
