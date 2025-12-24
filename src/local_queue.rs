@@ -152,6 +152,7 @@ struct LocalQueueInner {
     refetch_delay: RefetchDelayState,
     state_notify: Notify,
     ttl_timer_handle: Mutex<Option<AbortHandle>>,
+    run_complete_notify: Notify,
 }
 
 pub struct LocalQueue {
@@ -222,6 +223,7 @@ impl LocalQueue {
                 refetch_delay: RefetchDelayState::default(),
                 state_notify: Notify::new(),
                 ttl_timer_handle: Mutex::new(None),
+                run_complete_notify: Notify::new(),
             },
             config,
             pg_pool,
@@ -259,7 +261,9 @@ impl LocalQueue {
             .await;
 
         Self::set_mode(&this, LocalQueueMode::Polling).await;
-        Self::schedule_fetch(this).await;
+        Self::schedule_fetch(Arc::clone(&this)).await;
+
+        this.inner.run_complete_notify.notify_one();
     }
 
     async fn schedule_fetch(this: Arc<Self>) {
@@ -702,6 +706,10 @@ impl LocalQueue {
         self.inner.refetch_delay.abort_notify.notify_waiters();
         self.inner.state_notify.notify_waiters();
 
+        if let Some(handle) = self.inner.ttl_timer_handle.lock().await.take() {
+            handle.abort();
+        }
+
         debug!("LocalQueue releasing, returning jobs to database");
 
         {
@@ -729,6 +737,8 @@ impl LocalQueue {
                 })
                 .await;
         }
+
+        self.inner.run_complete_notify.notified().await;
 
         Ok(())
     }
