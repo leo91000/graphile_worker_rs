@@ -14,7 +14,9 @@ use graphile_worker_shutdown_signal::ShutdownSignal;
 use rand::Rng;
 use sqlx::PgPool;
 use thiserror::Error;
-use tokio::sync::{oneshot, Mutex, Notify, RwLock};
+use tokio::sync::{Mutex, Notify, RwLock};
+
+use crate::streams::JobSignalSender;
 use tokio::task::AbortHandle;
 use tracing::{debug, error, trace, warn};
 
@@ -146,7 +148,7 @@ impl Default for RefetchDelayState {
 struct LocalQueueInner {
     mode: RwLock<LocalQueueMode>,
     job_queue: Mutex<VecDeque<Job>>,
-    worker_queue: Mutex<VecDeque<oneshot::Sender<Option<Job>>>>,
+    job_signal_sender: JobSignalSender,
     fetch_in_progress: AtomicBool,
     fetch_again: AtomicBool,
     refetch_delay: RefetchDelayState,
@@ -177,6 +179,7 @@ pub struct LocalQueueParams {
     pub continuous: bool,
     pub shutdown_signal: Option<ShutdownSignal>,
     pub hooks: Arc<HookRegistry>,
+    pub job_signal_sender: JobSignalSender,
 }
 
 impl LocalQueue {
@@ -191,6 +194,7 @@ impl LocalQueue {
             continuous,
             shutdown_signal,
             hooks,
+            job_signal_sender,
         } = params;
         if let Some(ref refetch_delay) = config.refetch_delay {
             if refetch_delay.duration > poll_interval {
@@ -217,7 +221,7 @@ impl LocalQueue {
             inner: LocalQueueInner {
                 mode: RwLock::new(LocalQueueMode::Starting),
                 job_queue: Mutex::new(VecDeque::new()),
-                worker_queue: Mutex::new(VecDeque::new()),
+                job_signal_sender,
                 fetch_in_progress: AtomicBool::new(false),
                 fetch_again: AtomicBool::new(false),
                 refetch_delay: RefetchDelayState::default(),
@@ -481,37 +485,22 @@ impl LocalQueue {
 
     async fn received_jobs(this: Arc<Self>, jobs: Vec<Job>, fetched_max: bool) {
         let job_count = jobs.len();
-        let mut job_queue = this.inner.job_queue.lock().await;
-        let mut worker_queue = this.inner.worker_queue.lock().await;
-
-        let mut jobs_iter = jobs.into_iter();
-
-        while let Some(sender) = worker_queue.pop_front() {
-            if let Some(job) = jobs_iter.next() {
-                let _ = sender.send(Some(job));
-            } else {
-                worker_queue.push_front(sender);
-                break;
+        {
+            let mut job_queue = this.inner.job_queue.lock().await;
+            for job in jobs {
+                job_queue.push_back(job);
             }
         }
 
-        for job in jobs_iter {
-            job_queue.push_back(job);
-        }
+        Self::set_mode(&this, LocalQueueMode::Waiting).await;
+        Self::start_ttl_timer(Arc::clone(&this)).await;
 
-        drop(worker_queue);
+        trace!(job_count, "Jobs added to cache, signaling stream");
 
-        if !job_queue.is_empty() {
-            drop(job_queue);
-            Self::set_mode(&this, LocalQueueMode::Waiting).await;
-            Self::start_ttl_timer(this).await;
-        } else {
-            drop(job_queue);
-            trace!(job_count, "All fetched jobs distributed to workers");
+        let _ = this.inner.job_signal_sender.try_send(());
 
-            if fetched_max || this.inner.fetch_again.load(Ordering::SeqCst) {
-                this.inner.fetch_again.store(true, Ordering::SeqCst);
-            }
+        if fetched_max || this.inner.fetch_again.load(Ordering::SeqCst) {
+            this.inner.fetch_again.store(true, Ordering::SeqCst);
         }
     }
 
@@ -639,31 +628,26 @@ impl LocalQueue {
             if mode == LocalQueueMode::TtlExpired {
                 Self::set_mode(&this, LocalQueueMode::Polling).await;
             }
-        }
-
-        {
-            let mut job_queue = this.inner.job_queue.lock().await;
-            if let Some(job) = job_queue.pop_front() {
-                let remaining = job_queue.len();
-                drop(job_queue);
-
-                if remaining == 0 {
-                    Self::set_mode(&this, LocalQueueMode::Polling).await;
-                }
-
-                return Some(job);
+            if mode == LocalQueueMode::Released {
+                return None;
             }
         }
 
-        let (tx, rx) = oneshot::channel();
-        this.inner.worker_queue.lock().await.push_back(tx);
+        let mut job_queue = this.inner.job_queue.lock().await;
+        if let Some(job) = job_queue.pop_front() {
+            let remaining = job_queue.len();
+            drop(job_queue);
 
-        let mode = *this.inner.mode.read().await;
-        if mode == LocalQueueMode::Released {
-            return None;
+            if remaining == 0 {
+                Self::set_mode(&this, LocalQueueMode::Polling).await;
+            } else {
+                let _ = this.inner.job_signal_sender.try_send(());
+            }
+
+            return Some(job);
         }
 
-        rx.await.unwrap_or_default()
+        None
     }
 
     pub async fn pulse(&self, count: usize) {
@@ -711,13 +695,6 @@ impl LocalQueue {
         }
 
         debug!("LocalQueue releasing, returning jobs to database");
-
-        {
-            let mut worker_queue = self.inner.worker_queue.lock().await;
-            while let Some(tx) = worker_queue.pop_front() {
-                let _ = tx.send(None);
-            }
-        }
 
         let jobs: Vec<Job> = self.inner.job_queue.lock().await.drain(..).collect();
         if !jobs.is_empty() {
