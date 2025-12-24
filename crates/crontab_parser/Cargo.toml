@@ -1,6 +1,6 @@
 [package]
 name = "graphile_worker_crontab_parser"
-version = "0.5.13"
+version = "0.5.14"
 edition = "2021"
 license-file = "LICENSE.md"
 description = "Crontab parsing package for graphile_worker, a high performance Rust/PostgreSQL job queue"
@@ -12,7 +12,7 @@ categories = []
 readme = "README.md"
 
 [dependencies]
-graphile_worker_crontab_types = { path = "../crontab_types", version = "0.5.9" }
+graphile_worker_crontab_types = { path = "../crontab_types", version = "0.5.10" }
 json5 = { workspace = true }
 nom = { workspace = true }
 serde = { workspace = true }
