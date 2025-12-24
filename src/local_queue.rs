@@ -165,6 +165,30 @@ struct LocalQueueState {
     hooks: Arc<HookRegistry>,
 }
 
+impl LocalQueueState {
+    fn new(params: LocalQueueParams) -> Self {
+        Self {
+            mode: RwLock::new(LocalQueueMode::Starting),
+            job_queue: Mutex::new(VecDeque::new()),
+            job_signal_sender: params.job_signal_sender,
+            fetch_in_progress: AtomicBool::new(false),
+            fetch_again: AtomicBool::new(false),
+            refetch_delay: RefetchDelayState::default(),
+            state_notify: Notify::new(),
+            ttl_timer_handle: Mutex::new(None),
+            run_complete_notify: Notify::new(),
+            config: params.config,
+            pg_pool: params.pg_pool,
+            escaped_schema: params.escaped_schema,
+            worker_id: params.worker_id,
+            task_details: params.task_details,
+            poll_interval: params.poll_interval,
+            continuous: params.continuous,
+            hooks: params.hooks,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct LocalQueue(Arc<LocalQueueState>);
 
@@ -189,60 +213,29 @@ pub struct LocalQueueParams {
 
 impl LocalQueue {
     pub fn new(params: LocalQueueParams) -> Self {
-        let LocalQueueParams {
-            config,
-            pg_pool,
-            escaped_schema,
-            worker_id,
-            task_details,
-            poll_interval,
-            continuous,
-            shutdown_signal,
-            hooks,
-            job_signal_sender,
-        } = params;
-
-        if let Some(ref refetch_delay) = config.refetch_delay {
-            if refetch_delay.duration > poll_interval {
+        if let Some(ref refetch_delay) = params.config.refetch_delay {
+            if refetch_delay.duration > params.poll_interval {
                 panic!(
                     "refetch_delay.duration ({:?}) must not be larger than poll_interval ({:?})",
-                    refetch_delay.duration, poll_interval
+                    refetch_delay.duration, params.poll_interval
                 );
             }
         }
 
-        if config.size == 0 {
+        if params.config.size == 0 {
             panic!("local_queue.size must be greater than 0");
         }
 
-        if config.size > i32::MAX as usize {
+        if params.config.size > i32::MAX as usize {
             panic!(
                 "local_queue.size ({}) must not exceed i32::MAX ({})",
-                config.size,
+                params.config.size,
                 i32::MAX
             );
         }
 
-        let queue: LocalQueue = LocalQueueState {
-            mode: RwLock::new(LocalQueueMode::Starting),
-            job_queue: Mutex::new(VecDeque::new()),
-            job_signal_sender,
-            fetch_in_progress: AtomicBool::new(false),
-            fetch_again: AtomicBool::new(false),
-            refetch_delay: RefetchDelayState::default(),
-            state_notify: Notify::new(),
-            ttl_timer_handle: Mutex::new(None),
-            run_complete_notify: Notify::new(),
-            config,
-            pg_pool,
-            escaped_schema,
-            worker_id,
-            task_details,
-            poll_interval,
-            continuous,
-            hooks,
-        }
-        .into();
+        let shutdown_signal = params.shutdown_signal.clone();
+        let queue: LocalQueue = LocalQueueState::new(params).into();
 
         let queue_clone = queue.clone();
         tokio::spawn(async move {
