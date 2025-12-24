@@ -285,13 +285,14 @@ let worker = WorkerOptions::default()
 
 ### Lifecycle Hooks
 
-You can observe and intercept job lifecycle events using plugins that implement the `LifecycleHooks` trait. This is useful for logging, metrics, validation, and custom job handling logic.
+You can observe and intercept job lifecycle events using plugins that implement the `Plugin` trait. This is useful for logging, metrics, validation, and custom job handling logic.
 
 ```rust,ignore
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use graphile_worker::{
-    LifecycleHooks, HookResult, JobStartContext, JobCompleteContext,
-    JobFailContext, BeforeJobRunContext, WorkerStartContext,
+    Plugin, HookRegistry, HookResult,
+    WorkerStart, JobStart, JobComplete, JobFail, BeforeJobRun,
 };
 
 struct MetricsPlugin {
@@ -299,48 +300,67 @@ struct MetricsPlugin {
     jobs_completed: AtomicU64,
 }
 
-impl LifecycleHooks for MetricsPlugin {
-    async fn on_worker_start(&self, ctx: WorkerStartContext) {
-        println!("Worker {} started", ctx.worker_id);
-    }
+impl Plugin for MetricsPlugin {
+    fn register(self, hooks: &mut HookRegistry) {
+        hooks.on(WorkerStart, async |ctx| {
+            println!("Worker {} started", ctx.worker_id);
+        });
 
-    async fn on_job_start(&self, ctx: JobStartContext) {
-        self.jobs_started.fetch_add(1, Ordering::Relaxed);
-        println!("Job {} started", ctx.job.id());
-    }
+        let jobs_started = Arc::new(self.jobs_started);
+        let jobs_completed = Arc::new(self.jobs_completed);
 
-    async fn on_job_complete(&self, ctx: JobCompleteContext) {
-        self.jobs_completed.fetch_add(1, Ordering::Relaxed);
-        println!("Job {} completed in {:?}", ctx.job.id(), ctx.duration);
-    }
+        {
+            let jobs_started = jobs_started.clone();
+            hooks.on(JobStart, move |ctx| {
+                let jobs_started = jobs_started.clone();
+                async move {
+                    jobs_started.fetch_add(1, Ordering::Relaxed);
+                    println!("Job {} started", ctx.job.id());
+                }
+            });
+        }
 
-    async fn on_job_fail(&self, ctx: JobFailContext) {
-        println!("Job {} failed: {}", ctx.job.id(), ctx.error);
+        {
+            let jobs_completed = jobs_completed.clone();
+            hooks.on(JobComplete, move |ctx| {
+                let jobs_completed = jobs_completed.clone();
+                async move {
+                    jobs_completed.fetch_add(1, Ordering::Relaxed);
+                    println!("Job {} completed in {:?}", ctx.job.id(), ctx.duration);
+                }
+            });
+        }
+
+        hooks.on(JobFail, async |ctx| {
+            println!("Job {} failed: {}", ctx.job.id(), ctx.error);
+        });
     }
 }
 ```
 
 #### Intercepting Jobs
 
-The `before_job_run` and `after_job_run` hooks can intercept jobs and change their behavior:
+The `BeforeJobRun` and `AfterJobRun` hooks can intercept jobs and change their behavior:
 
 ```rust,ignore
 struct ValidationPlugin;
 
-impl LifecycleHooks for ValidationPlugin {
-    async fn before_job_run(&self, ctx: BeforeJobRunContext) -> HookResult {
-        // Skip jobs with a "skip" flag in their payload
-        if ctx.payload.get("skip").and_then(|v| v.as_bool()).unwrap_or(false) {
-            return HookResult::Skip;
-        }
+impl Plugin for ValidationPlugin {
+    fn register(self, hooks: &mut HookRegistry) {
+        hooks.on(BeforeJobRun, async |ctx| {
+            // Skip jobs with a "skip" flag in their payload
+            if ctx.payload.get("skip").and_then(|v| v.as_bool()).unwrap_or(false) {
+                return HookResult::Skip;
+            }
 
-        // Fail jobs with invalid data
-        if ctx.payload.get("invalid").is_some() {
-            return HookResult::Fail("Invalid payload".into());
-        }
+            // Fail jobs with invalid data
+            if ctx.payload.get("invalid").is_some() {
+                return HookResult::Fail("Invalid payload".into());
+            }
 
-        // Continue with normal execution
-        HookResult::Continue
+            // Continue with normal execution
+            HookResult::Continue
+        });
     }
 }
 ```
@@ -365,18 +385,19 @@ Multiple plugins can be registered and they will all receive hook calls in the o
 
 | Hook | Type | Description |
 |------|------|-------------|
-| `on_worker_init` | Observer | Called when worker is initializing |
-| `on_worker_start` | Observer | Called when worker starts processing |
-| `on_worker_shutdown` | Observer | Called when worker is shutting down |
-| `on_job_fetch` | Observer | Called when a job is fetched from the queue |
-| `on_job_start` | Observer | Called before a job starts executing |
-| `on_job_complete` | Observer | Called after a job completes successfully |
-| `on_job_fail` | Observer | Called when a job fails (will retry) |
-| `on_job_permanently_fail` | Observer | Called when a job exceeds max attempts |
-| `on_cron_tick` | Observer | Called on each cron scheduler tick |
-| `on_cron_job_scheduled` | Observer | Called when a cron job is scheduled |
-| `before_job_run` | Interceptor | Can skip, fail, or continue job execution |
-| `after_job_run` | Interceptor | Can modify the job result after execution |
+| `WorkerInit` | Observer | Called when worker is initializing |
+| `WorkerStart` | Observer | Called when worker starts processing |
+| `WorkerShutdown` | Observer | Called when worker is shutting down |
+| `JobFetch` | Observer | Called when a job is fetched from the queue |
+| `JobStart` | Observer | Called before a job starts executing |
+| `JobComplete` | Observer | Called after a job completes successfully |
+| `JobFail` | Observer | Called when a job fails (will retry) |
+| `JobPermanentlyFail` | Observer | Called when a job exceeds max attempts |
+| `CronTick` | Observer | Called on each cron scheduler tick |
+| `CronJobScheduled` | Observer | Called when a cron job is scheduled |
+| `BeforeJobRun` | Interceptor | Can skip, fail, or continue job execution |
+| `AfterJobRun` | Interceptor | Can modify the job result after execution |
+| `BeforeJobSchedule` | Interceptor | Can skip, fail, or transform job before scheduling |
 
 ## Job Management Utilities
 
