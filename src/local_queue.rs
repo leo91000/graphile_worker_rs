@@ -441,9 +441,9 @@ impl LocalQueue {
         }
     }
 
-    async fn check_refetch_delay_abort(&self) -> bool {
+    async fn check_refetch_delay_abort(&self) {
         if !self.inner.refetch_delay.active.load(Ordering::SeqCst) {
-            return false;
+            return;
         }
 
         let counter = self.inner.refetch_delay.counter.load(Ordering::SeqCst);
@@ -452,8 +452,6 @@ impl LocalQueue {
         if counter >= abort_threshold {
             self.inner.refetch_delay.abort_notify.notify_one();
         }
-
-        true
     }
 
     async fn received_jobs(this: Arc<Self>, jobs: Vec<Job>, fetched_max: bool) {
