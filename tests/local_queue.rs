@@ -994,3 +994,147 @@ async fn local_queue_processes_jobs_with_refetch_delay() {
     })
     .await;
 }
+
+#[derive(Serialize, Deserialize)]
+struct PulseImmediateFetchJob {
+    id: u32,
+}
+
+static PULSE_IMMEDIATE_CALL_COUNT: StaticCounter = StaticCounter::new();
+
+impl TaskHandler for PulseImmediateFetchJob {
+    const IDENTIFIER: &'static str = "pulse_immediate_fetch_job";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        PULSE_IMMEDIATE_CALL_COUNT.increment().await;
+    }
+}
+
+#[tokio::test]
+async fn local_queue_pulse_triggers_immediate_fetch() {
+    with_test_db(|test_db| async move {
+        PULSE_IMMEDIATE_CALL_COUNT.reset().await;
+        let utils = test_db.worker_utils();
+        utils.migrate().await.expect("Failed to migrate");
+
+        let worker = Arc::new(
+            Worker::options()
+                .pg_pool(test_db.test_pool.clone())
+                .concurrency(1)
+                .poll_interval(Duration::from_secs(30))
+                .local_queue(LocalQueueConfig::default().with_size(10))
+                .listen_os_shutdown_signals(false)
+                .define_job::<PulseImmediateFetchJob>()
+                .init()
+                .await
+                .expect("Failed to create worker"),
+        );
+
+        let worker_for_run = Arc::clone(&worker);
+        let worker_fut = spawn_local(async move {
+            let _ = worker_for_run.run().await;
+        });
+
+        sleep(Duration::from_millis(500)).await;
+
+        let start = Instant::now();
+        utils
+            .add_job(PulseImmediateFetchJob { id: 1 }, JobSpec::default())
+            .await
+            .expect("Failed to add job");
+
+        while PULSE_IMMEDIATE_CALL_COUNT.get().await < 1 {
+            if start.elapsed().as_secs() > 5 {
+                panic!("Job should have been processed immediately via pulse, not after 30s poll");
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+
+        let elapsed = start.elapsed();
+        assert!(
+            elapsed < Duration::from_secs(3),
+            "Job should be processed quickly via pulse (took {:?}), not waiting for 30s poll_interval",
+            elapsed
+        );
+
+        worker.request_shutdown();
+        worker_fut.abort();
+    })
+    .await;
+}
+
+#[derive(Serialize, Deserialize)]
+struct ReleaseWaitsJob {
+    id: u32,
+}
+
+static RELEASE_WAITS_CALL_COUNT: StaticCounter = StaticCounter::new();
+static RELEASE_WAITS_COMPLETED: StaticCounter = StaticCounter::new();
+
+impl TaskHandler for ReleaseWaitsJob {
+    const IDENTIFIER: &'static str = "release_waits_job";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        RELEASE_WAITS_CALL_COUNT.increment().await;
+        sleep(Duration::from_millis(200)).await;
+        RELEASE_WAITS_COMPLETED.increment().await;
+    }
+}
+
+#[tokio::test]
+async fn local_queue_release_waits_for_run_loop() {
+    with_test_db(|test_db| async move {
+        RELEASE_WAITS_CALL_COUNT.reset().await;
+        RELEASE_WAITS_COMPLETED.reset().await;
+        let utils = test_db.worker_utils();
+        utils.migrate().await.expect("Failed to migrate");
+
+        for i in 1..=3 {
+            utils
+                .add_job(ReleaseWaitsJob { id: i }, JobSpec::default())
+                .await
+                .expect("Failed to add job");
+        }
+
+        let worker = Arc::new(
+            Worker::options()
+                .pg_pool(test_db.test_pool.clone())
+                .concurrency(2)
+                .local_queue(LocalQueueConfig::default().with_size(10))
+                .listen_os_shutdown_signals(false)
+                .define_job::<ReleaseWaitsJob>()
+                .init()
+                .await
+                .expect("Failed to create worker"),
+        );
+
+        let worker_for_run = Arc::clone(&worker);
+        let worker_fut = spawn_local(async move {
+            let _ = worker_for_run.run().await;
+        });
+
+        sleep(Duration::from_millis(500)).await;
+
+        assert!(
+            RELEASE_WAITS_CALL_COUNT.get().await > 0,
+            "At least one job should have started"
+        );
+
+        worker.request_shutdown();
+
+        let start = Instant::now();
+        while !worker_fut.is_finished() {
+            if start.elapsed().as_secs() > 10 {
+                worker_fut.abort();
+                panic!("Worker should have finished shutdown by now");
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+
+        assert!(
+            worker_fut.is_finished(),
+            "Worker future should be finished after shutdown"
+        );
+    })
+    .await;
+}
