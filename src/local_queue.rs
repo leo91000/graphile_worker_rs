@@ -218,6 +218,68 @@ pub struct LocalQueueParams {
 }
 
 impl LocalQueue {
+    // Helper methods for atomic operations
+
+    fn try_start_fetch(&self) -> bool {
+        self.0
+            .fetch_in_progress
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+    }
+
+    fn end_fetch(&self) {
+        self.0.fetch_in_progress.store(false, Ordering::SeqCst);
+    }
+
+    fn is_fetch_in_progress(&self) -> bool {
+        self.0.fetch_in_progress.load(Ordering::SeqCst)
+    }
+
+    fn set_fetch_again(&self, value: bool) {
+        self.0.fetch_again.store(value, Ordering::SeqCst);
+    }
+
+    fn take_fetch_again(&self) -> bool {
+        self.0.fetch_again.swap(false, Ordering::SeqCst)
+    }
+
+    fn is_refetch_delay_active(&self) -> bool {
+        self.0.refetch_delay.active.load(Ordering::SeqCst)
+    }
+
+    fn set_refetch_delay_active(&self, value: bool) {
+        self.0.refetch_delay.active.store(value, Ordering::SeqCst);
+    }
+
+    fn reset_refetch_delay_counter(&self) {
+        self.0.refetch_delay.counter.store(0, Ordering::SeqCst);
+    }
+
+    fn increment_refetch_delay_counter(&self, count: usize) {
+        self.0
+            .refetch_delay
+            .counter
+            .fetch_add(count, Ordering::SeqCst);
+    }
+
+    fn get_refetch_delay_counter(&self) -> usize {
+        self.0.refetch_delay.counter.load(Ordering::SeqCst)
+    }
+
+    fn set_refetch_delay_fetch_on_complete(&self, value: bool) {
+        self.0
+            .refetch_delay
+            .fetch_on_complete
+            .store(value, Ordering::SeqCst);
+    }
+
+    fn take_refetch_delay_fetch_on_complete(&self) -> bool {
+        self.0
+            .refetch_delay
+            .fetch_on_complete
+            .swap(false, Ordering::SeqCst)
+    }
+
     pub fn new(params: LocalQueueParams) -> Self {
         if let Some(ref refetch_delay) = params.config.refetch_delay {
             if refetch_delay.duration > params.poll_interval {
@@ -284,8 +346,8 @@ impl LocalQueue {
             }
 
             let can_fetch = mode == LocalQueueMode::Polling
-                && !self.0.fetch_in_progress.load(Ordering::SeqCst)
-                && !self.0.refetch_delay.active.load(Ordering::SeqCst);
+                && !self.is_fetch_in_progress()
+                && !self.is_refetch_delay_active();
 
             if !can_fetch {
                 self.0.state_notify.notified().await;
@@ -296,12 +358,8 @@ impl LocalQueue {
 
             let mode = *self.0.mode.read().await;
             if mode == LocalQueueMode::Polling && self.0.continuous {
-                let should_fetch_again = self.0.fetch_again.swap(false, Ordering::SeqCst);
-                let refetch_delay_wants_fetch = self
-                    .0
-                    .refetch_delay
-                    .fetch_on_complete
-                    .swap(false, Ordering::SeqCst);
+                let should_fetch_again = self.take_fetch_again();
+                let refetch_delay_wants_fetch = self.take_refetch_delay_fetch_on_complete();
 
                 if !should_fetch_again && !refetch_delay_wants_fetch {
                     tokio::select! {
@@ -317,27 +375,19 @@ impl LocalQueue {
     }
 
     async fn fetch(&self) {
-        if self
-            .0
-            .fetch_in_progress
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_err()
-        {
+        if !self.try_start_fetch() {
             return;
         }
 
-        if self.0.refetch_delay.active.load(Ordering::SeqCst) {
-            self.0
-                .refetch_delay
-                .fetch_on_complete
-                .store(true, Ordering::SeqCst);
-            self.0.fetch_in_progress.store(false, Ordering::SeqCst);
+        if self.is_refetch_delay_active() {
+            self.set_refetch_delay_fetch_on_complete(true);
+            self.end_fetch();
             self.0.state_notify.notify_one();
             return;
         }
 
-        self.0.fetch_again.store(false, Ordering::SeqCst);
-        self.0.refetch_delay.counter.store(0, Ordering::SeqCst);
+        self.set_fetch_again(false);
+        self.reset_refetch_delay_counter();
 
         let task_details = self.0.task_details.read().await;
         let result = batch_get_jobs(
@@ -351,7 +401,7 @@ impl LocalQueue {
         .await;
         drop(task_details);
 
-        self.0.fetch_in_progress.store(false, Ordering::SeqCst);
+        self.end_fetch();
         self.0.state_notify.notify_one();
 
         match result {
@@ -400,11 +450,8 @@ impl LocalQueue {
         };
 
         *self.0.refetch_delay.abort_threshold.write().await = abort_threshold;
-        self.0.refetch_delay.active.store(true, Ordering::SeqCst);
-        self.0
-            .refetch_delay
-            .fetch_on_complete
-            .store(false, Ordering::SeqCst);
+        self.set_refetch_delay_active(true);
+        self.set_refetch_delay_fetch_on_complete(false);
 
         let duration = Duration::from_millis(
             ((0.5 + rand::rng().random::<f64>() * 0.5) * config.duration.as_millis() as f64) as u64,
@@ -440,17 +487,14 @@ impl LocalQueue {
     }
 
     async fn refetch_delay_complete(&self, aborted: bool) {
-        self.0.refetch_delay.active.store(false, Ordering::SeqCst);
+        self.set_refetch_delay_active(false);
         self.0.state_notify.notify_one();
 
         if aborted {
-            let count = self.0.refetch_delay.counter.load(Ordering::SeqCst);
+            let count = self.get_refetch_delay_counter();
             let abort_threshold = *self.0.refetch_delay.abort_threshold.read().await;
 
-            self.0
-                .refetch_delay
-                .fetch_on_complete
-                .store(true, Ordering::SeqCst);
+            self.set_refetch_delay_fetch_on_complete(true);
             trace!("LocalQueue refetch delay aborted");
 
             self.0
@@ -474,11 +518,11 @@ impl LocalQueue {
     }
 
     async fn check_refetch_delay_abort(&self) {
-        if !self.0.refetch_delay.active.load(Ordering::SeqCst) {
+        if !self.is_refetch_delay_active() {
             return;
         }
 
-        let counter = self.0.refetch_delay.counter.load(Ordering::SeqCst);
+        let counter = self.get_refetch_delay_counter();
         let abort_threshold = *self.0.refetch_delay.abort_threshold.read().await;
 
         if counter >= abort_threshold {
@@ -502,8 +546,8 @@ impl LocalQueue {
 
         let _ = self.0.job_signal_sender.try_send(());
 
-        if fetched_max || self.0.fetch_again.load(Ordering::SeqCst) {
-            self.0.fetch_again.store(true, Ordering::SeqCst);
+        if fetched_max {
+            self.set_fetch_again(true);
         }
     }
 
@@ -657,20 +701,17 @@ impl LocalQueue {
     pub async fn pulse(&self, count: usize) {
         trace!(count, "LocalQueue received pulse");
 
-        self.0
-            .refetch_delay
-            .counter
-            .fetch_add(count, Ordering::SeqCst);
+        self.increment_refetch_delay_counter(count);
         self.check_refetch_delay_abort().await;
 
         let mode = *self.0.mode.read().await;
 
         match mode {
             LocalQueueMode::Polling => {
-                if self.0.fetch_in_progress.load(Ordering::SeqCst) {
-                    self.0.fetch_again.store(true, Ordering::SeqCst);
+                if self.is_fetch_in_progress() {
+                    self.set_fetch_again(true);
                     self.0.state_notify.notify_one();
-                } else if !self.0.refetch_delay.active.load(Ordering::SeqCst) {
+                } else if !self.is_refetch_delay_active() {
                     self.0.state_notify.notify_one();
                 }
             }
@@ -687,7 +728,7 @@ impl LocalQueue {
         *mode = LocalQueueMode::Released;
         drop(mode);
 
-        self.0.refetch_delay.active.store(false, Ordering::SeqCst);
+        self.set_refetch_delay_active(false);
         self.0.refetch_delay.abort_notify.notify_waiters();
         self.0.state_notify.notify_waiters();
 
