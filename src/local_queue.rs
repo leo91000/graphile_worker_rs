@@ -26,6 +26,27 @@ use crate::sql::task_identifiers::TaskDetails;
 const DEFAULT_LOCAL_QUEUE_SIZE: usize = 100;
 const DEFAULT_LOCAL_QUEUE_TTL: Duration = Duration::from_secs(5 * 60);
 
+struct RetryOptions {
+    max_attempts: u32,
+    min_delay_ms: u64,
+    max_delay_ms: u64,
+    multiplier: f64,
+}
+
+const RETURN_JOBS_RETRY_OPTIONS: RetryOptions = RetryOptions {
+    max_attempts: 20,
+    min_delay_ms: 200,
+    max_delay_ms: 30_000,
+    multiplier: 1.5,
+};
+
+fn calculate_retry_delay(attempt: u32, options: &RetryOptions) -> Duration {
+    let base = options.min_delay_ms as f64 * options.multiplier.powi(attempt as i32);
+    let capped = base.min(options.max_delay_ms as f64);
+    let jittered = capped * (0.5 + rand::rng().random::<f64>() * 0.5);
+    Duration::from_millis(jittered as u64)
+}
+
 #[derive(Debug, Clone)]
 pub struct RefetchDelayConfig {
     pub duration: Duration,
@@ -511,6 +532,38 @@ impl LocalQueue {
         *handle_guard = Some(join_handle.abort_handle());
     }
 
+    async fn return_jobs_with_retry(
+        pool: &PgPool,
+        jobs: &[Job],
+        escaped_schema: &str,
+        worker_id: &str,
+    ) -> Result<(), LocalQueueError> {
+        let mut attempt = 0u32;
+        loop {
+            match return_jobs(pool, jobs, escaped_schema, worker_id).await {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    attempt += 1;
+                    if attempt >= RETURN_JOBS_RETRY_OPTIONS.max_attempts {
+                        return Err(LocalQueueError::ReturnJobsError(format!(
+                            "Failed after {} attempts: {}",
+                            attempt, e
+                        )));
+                    }
+                    let delay = calculate_retry_delay(attempt - 1, &RETURN_JOBS_RETRY_OPTIONS);
+                    warn!(
+                        attempt,
+                        max_attempts = RETURN_JOBS_RETRY_OPTIONS.max_attempts,
+                        ?delay,
+                        error = %e,
+                        "Failed to return jobs, retrying"
+                    );
+                    tokio::time::sleep(delay).await;
+                }
+            }
+        }
+    }
+
     async fn set_mode_ttl_expired(this: Arc<Self>) {
         let mut mode = this.inner.mode.write().await;
         if *mode != LocalQueueMode::Waiting {
@@ -524,10 +577,15 @@ impl LocalQueue {
         let jobs: Vec<Job> = this.inner.job_queue.lock().await.drain(..).collect();
         if !jobs.is_empty() {
             let jobs_count = jobs.len();
-            if let Err(e) =
-                return_jobs(&this.pg_pool, &jobs, &this.escaped_schema, &this.worker_id).await
+            if let Err(e) = Self::return_jobs_with_retry(
+                &this.pg_pool,
+                &jobs,
+                &this.escaped_schema,
+                &this.worker_id,
+            )
+            .await
             {
-                error!(error = %e, "Failed to return jobs after TTL expiry");
+                error!(error = %e, "Failed to return jobs after TTL expiry (exhausted retries)");
             } else {
                 this.hooks
                     .emit(LocalQueueReturnJobsContext {
@@ -654,9 +712,13 @@ impl LocalQueue {
         let jobs: Vec<Job> = self.inner.job_queue.lock().await.drain(..).collect();
         if !jobs.is_empty() {
             let jobs_count = jobs.len();
-            return_jobs(&self.pg_pool, &jobs, &self.escaped_schema, &self.worker_id)
-                .await
-                .map_err(|e| LocalQueueError::ReturnJobsError(e.to_string()))?;
+            Self::return_jobs_with_retry(
+                &self.pg_pool,
+                &jobs,
+                &self.escaped_schema,
+                &self.worker_id,
+            )
+            .await?;
 
             self.hooks
                 .emit(LocalQueueReturnJobsContext {
