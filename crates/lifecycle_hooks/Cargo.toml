@@ -1,6 +1,6 @@
 [package]
 name = "graphile_worker_lifecycle_hooks"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 license-file = "LICENSE.md"
 description = "Lifecycle hooks for graphile_worker, a high performance Rust/PostgreSQL job queue"
@@ -12,9 +12,9 @@ categories = []
 readme = "README.md"
 
 [dependencies]
-graphile_worker_job = { path = "../job", version = "0.1.8" }
+graphile_worker_job = { path = "../job", version = "0.1.9" }
 graphile_worker_extensions = { path = "../extensions", version = "0.1.5" }
-graphile_worker_crontab_types = { path = "../crontab_types", version = "0.5.9" }
+graphile_worker_crontab_types = { path = "../crontab_types", version = "0.5.10" }
 graphile_worker_job_spec = { path = "../job_spec", version = "0.1.0" }
 chrono.workspace = true
 serde_json.workspace = true

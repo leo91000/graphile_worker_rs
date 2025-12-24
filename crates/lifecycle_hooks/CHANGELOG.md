@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_lifecycle_hooks-v0.1.1...graphile_worker_lifecycle_hooks-v0.2.0) - 2025-12-24
+
+### Added
+
+- [**breaking**] replace LifecycleHooks trait with Bevy-style observer API
+- add Debug derive to LocalQueue context structs
+- add LocalQueue for batch job fetching with lifecycle hooks
+
+### Other
+
+- unify interceptor API with intercept() method
+- use LocalQueueMode enum instead of String in LocalQueueSetModeContext
+- use emit methods for all observer hooks with parallel execution
+
 ## [0.1.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_lifecycle_hooks-v0.1.0...graphile_worker_lifecycle_hooks-v0.1.1) - 2025-12-22
 
 ### Other

@@ -1,5 +1,50 @@
 # Changelog
 
+## [0.10.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.9.5...graphile_worker-v0.10.0) - 2025-12-24
+
+### Added
+
+- make release() wait for background tasks to complete
+- add retry logic for return_jobs with exponential backoff
+- [**breaking**] replace LifecycleHooks trait with Bevy-style observer API
+- add Debug derive to LocalQueue context structs
+- add LocalQueue for batch job fetching with lifecycle hooks
+
+### Fixed
+
+- trigger immediate fetch on pulse when idle in polling mode
+- add validation for config.size in LocalQueue constructor
+- remove redundant start_time variable in concurrent workers test
+- add StaticCounter::reset and call it at start of each test
+- prevent multiple concurrent TTL timers by using AbortHandle
+- remove unused AggregateError variant
+- use AtomicUsize for last_jobs_count to avoid truncation
+- use try_into with fallback for size to i32 conversion
+- replace blocking_read with async read in check_refetch_delay_abort
+
+### Other
+
+- add local_queue example
+- update README to reflect Bevy-style observer API for hooks
+- add helper methods for atomic operations in LocalQueue
+- add From<LocalQueueParams> for LocalQueue
+- add LocalQueueState::new() for cleaner construction
+- use Arc wrapper pattern for LocalQueue
+- rename 'this' to 'queue' in LocalQueue for Rust idiom
+- create LocalQueue lazily in run() to eliminate Mutex
+- add local queue integration tests for pulse and release
+- remove unused return value from check_refetch_delay_abort
+- unify interceptor API with intercept() method
+- Fmt
+- extract duplicated helper functions to job_query_helpers module
+- remove unnecessary clone on Copy type LocalQueueMode
+- add get_identifier method to TaskDetails with warning logging
+- use LocalQueueMode enum instead of String in LocalQueueSetModeContext
+- replace busy-waiting with Notify in LocalQueue
+- move impl blocks to module level to fix non_local_definitions warnings
+- use emit methods for all observer hooks with parallel execution
+- *(deps)* update rust crate serde_json to 1.0.147 ([#347](https://github.com/leo91000/graphile_worker_rs/pull/347))
+
 ## [0.9.5](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.9.4...graphile_worker-v0.9.5) - 2025-12-23
 
 ### Fixed

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.14](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_parser-v0.5.13...graphile_worker_crontab_parser-v0.5.14) - 2025-12-24
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.5.13](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_parser-v0.5.12...graphile_worker_crontab_parser-v0.5.13) - 2025-12-22
 
 ### Other

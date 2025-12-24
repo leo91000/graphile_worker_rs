@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_job-v0.1.8...graphile_worker_job-v0.1.9) - 2025-12-24
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.1.8](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_job-v0.1.7...graphile_worker_job-v0.1.8) - 2025-12-22
 
 ### Other
