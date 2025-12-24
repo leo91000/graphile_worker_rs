@@ -1,5 +1,3 @@
-#![allow(private_interfaces)]
-
 use futures::future::BoxFuture;
 
 use crate::context::{
@@ -11,7 +9,7 @@ use crate::context::{
     LocalQueueReturnJobsContext, LocalQueueSetModeContext, WorkerInitContext,
     WorkerShutdownContext, WorkerStartContext,
 };
-use crate::event::Event;
+use crate::event::{Event, HookOutput, Interceptable};
 use crate::result::{HookResult, JobScheduleResult};
 use crate::TypeErasedHooks;
 
@@ -69,6 +67,67 @@ macro_rules! define_interceptor_event {
                 hooks.get_handlers_mut::<Self>().push(handler);
             }
         }
+
+        impl Interceptable for $context {
+            type Output = HookResult;
+
+            fn intercept_with(self, hooks: &TypeErasedHooks) -> BoxFuture<'_, Self::Output> {
+                Box::pin(async move {
+                    let Some(handlers) = hooks.get_handlers::<$event>() else {
+                        return HookResult::default();
+                    };
+                    for handler in handlers {
+                        let result = handler(self.clone()).await;
+                        if result.is_terminal() {
+                            return result;
+                        }
+                    }
+                    HookResult::default()
+                })
+            }
+        }
+    };
+
+    ($event:ident, $context:ty, $output:ty, $chain_field:ident) => {
+        pub struct $event;
+
+        impl Event for $event {
+            type Context = $context;
+            type Output = $output;
+
+            fn register_boxed(
+                hooks: &mut TypeErasedHooks,
+                handler: Box<
+                    dyn Fn(Self::Context) -> BoxFuture<'static, Self::Output> + Send + Sync,
+                >,
+            ) {
+                hooks.get_handlers_mut::<Self>().push(handler);
+            }
+        }
+
+        impl Interceptable for $context {
+            type Output = $output;
+
+            fn intercept_with(self, hooks: &TypeErasedHooks) -> BoxFuture<'_, Self::Output> {
+                Box::pin(async move {
+                    let Some(handlers) = hooks.get_handlers::<$event>() else {
+                        return <$output as HookOutput>::default_with_value(self.$chain_field);
+                    };
+
+                    let mut current_value = self.$chain_field.clone();
+                    for handler in handlers {
+                        let mut ctx = self.clone();
+                        ctx.$chain_field = current_value;
+                        let result = handler(ctx).await;
+                        if result.is_terminal() {
+                            return result;
+                        }
+                        current_value = result.chain_value().unwrap();
+                    }
+                    <$output as HookOutput>::default_with_value(current_value)
+                })
+            }
+        }
     };
 }
 
@@ -101,17 +160,9 @@ define_observer_event!(
 
 define_interceptor_event!(BeforeJobRun, BeforeJobRunContext);
 define_interceptor_event!(AfterJobRun, AfterJobRunContext);
-
-pub struct BeforeJobSchedule;
-
-impl Event for BeforeJobSchedule {
-    type Context = BeforeJobScheduleContext;
-    type Output = JobScheduleResult;
-
-    fn register_boxed(
-        hooks: &mut TypeErasedHooks,
-        handler: Box<dyn Fn(Self::Context) -> BoxFuture<'static, Self::Output> + Send + Sync>,
-    ) {
-        hooks.get_handlers_mut::<Self>().push(handler);
-    }
-}
+define_interceptor_event!(
+    BeforeJobSchedule,
+    BeforeJobScheduleContext,
+    JobScheduleResult,
+    payload
+);

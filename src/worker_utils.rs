@@ -170,26 +170,17 @@ impl WorkerUtils {
             return Ok(payload);
         };
 
-        let mut current_payload = payload;
-        for hook in hooks.before_job_schedule_handlers() {
-            let ctx = BeforeJobScheduleContext {
-                identifier: identifier.to_string(),
-                payload: current_payload,
-                spec: spec.clone(),
-            };
-            match hook(ctx).await {
-                JobScheduleResult::Continue(new_payload) => {
-                    current_payload = new_payload;
-                }
-                JobScheduleResult::Skip => {
-                    return Err(GraphileWorkerError::JobScheduleSkipped);
-                }
-                JobScheduleResult::Fail(msg) => {
-                    return Err(GraphileWorkerError::JobScheduleFailed(msg));
-                }
-            }
+        let ctx = BeforeJobScheduleContext {
+            identifier: identifier.to_string(),
+            payload,
+            spec: spec.clone(),
+        };
+
+        match hooks.intercept(ctx).await {
+            JobScheduleResult::Continue(payload) => Ok(payload),
+            JobScheduleResult::Skip => Err(GraphileWorkerError::JobScheduleSkipped),
+            JobScheduleResult::Fail(msg) => Err(GraphileWorkerError::JobScheduleFailed(msg)),
         }
-        Ok(current_payload)
     }
 
     /// Adds a job to the queue with type safety.
