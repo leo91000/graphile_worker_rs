@@ -1216,7 +1216,6 @@ struct ExtendedHookCounters {
     before_job_run: AtomicU32,
     after_job_run: AtomicU32,
     job_permanently_fail: AtomicU32,
-    retry_requested: AtomicU32,
 }
 
 #[derive(Clone)]
@@ -1239,24 +1238,10 @@ impl ExtendedHooksPlugin {
 impl Plugin for ExtendedHooksPlugin {
     fn register(self, hooks: &mut HookRegistry) {
         let counters = self.counters.clone();
-        hooks.on(BeforeJobRun, move |ctx| {
+        hooks.on(BeforeJobRun, move |_ctx| {
             let counters = counters.clone();
             async move {
                 counters.before_job_run.fetch_add(1, Ordering::SeqCst);
-
-                let should_retry = ctx
-                    .payload
-                    .get("retry")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false);
-
-                if should_retry {
-                    counters.retry_requested.fetch_add(1, Ordering::SeqCst);
-                    return HookResult::Retry {
-                        delay: Duration::from_secs(1),
-                    };
-                }
-
                 HookResult::Continue
             }
         });
@@ -1278,75 +1263,6 @@ impl Plugin for ExtendedHooksPlugin {
             }
         });
     }
-}
-
-#[tokio::test]
-async fn test_before_job_run_retry() {
-    with_test_db(|test_db| async move {
-        let utils = test_db.worker_utils();
-        utils.migrate().await.expect("Failed to migrate");
-
-        let plugin = ExtendedHooksPlugin::new();
-        let counters = plugin.counters();
-
-        let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
-            async move {
-                Worker::options()
-                    .pg_pool(test_pool)
-                    .concurrency(2)
-                    .define_job::<TestJob>()
-                    .add_plugin(plugin)
-                    .init()
-                    .await
-                    .expect("Failed to create worker")
-                    .run()
-                    .await
-                    .expect("Failed to run worker");
-            }
-        });
-
-        utils
-            .add_job(
-                TestJob {
-                    value: 1,
-                    skip: false,
-                    force_fail: false,
-                    should_error: false,
-                },
-                JobSpec::default(),
-            )
-            .await
-            .expect("Failed to add job");
-
-        utils
-            .add_raw_job(
-                "test_hooks_job",
-                serde_json::json!({
-                    "value": 2,
-                    "retry": true
-                }),
-                JobSpec::default(),
-            )
-            .await
-            .expect("Failed to add job");
-
-        let c = counters.clone();
-        wait_for_condition(
-            || c.retry_requested.load(Ordering::SeqCst) >= 1,
-            5,
-            "Retry should have been requested",
-        )
-        .await;
-
-        sleep(Duration::from_millis(200)).await;
-
-        assert_eq!(counters.before_job_run.load(Ordering::SeqCst), 2);
-        assert_eq!(counters.retry_requested.load(Ordering::SeqCst), 1);
-
-        worker_fut.abort();
-    })
-    .await;
 }
 
 #[tokio::test]

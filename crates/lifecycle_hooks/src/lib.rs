@@ -11,19 +11,19 @@ use std::collections::HashMap;
 use futures::future::BoxFuture;
 
 pub use context::*;
-pub use event::{Event, HookOutput};
+pub use event::{Event, HookOutput, Interceptable};
 pub use events::*;
 pub use plugin::Plugin;
 pub use registry::HookRegistry;
 pub use result::*;
 
-use event::InterceptorFn;
 pub use event::ObserverFn;
 
 type HandlerVec<Ctx, Out> = Vec<Box<dyn Fn(Ctx) -> BoxFuture<'static, Out> + Send + Sync>>;
 
 #[derive(Default)]
-pub(crate) struct TypeErasedHooks {
+#[doc(hidden)]
+pub struct TypeErasedHooks {
     handlers: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
 }
 
@@ -45,6 +45,10 @@ impl TypeErasedHooks {
     pub async fn emit<C: Emittable>(&self, ctx: C) {
         ctx.emit_to(self).await
     }
+
+    pub async fn intercept<C: event::Interceptable>(&self, ctx: C) -> C::Output {
+        ctx.intercept_with(self).await
+    }
 }
 
 impl HookRegistry {
@@ -53,29 +57,8 @@ impl HookRegistry {
         self.inner.emit(ctx).await
     }
 
-    pub fn before_job_run_handlers(&self) -> &[InterceptorFn<BeforeJobRunContext>] {
-        self.inner
-            .get_handlers::<BeforeJobRun>()
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
-    }
-
-    pub fn after_job_run_handlers(&self) -> &[InterceptorFn<AfterJobRunContext>] {
-        self.inner
-            .get_handlers::<AfterJobRun>()
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
-    }
-
-    pub fn before_job_schedule_handlers(
-        &self,
-    ) -> &[Box<
-        dyn Fn(BeforeJobScheduleContext) -> BoxFuture<'static, JobScheduleResult> + Send + Sync,
-    >] {
-        self.inner
-            .get_handlers::<BeforeJobSchedule>()
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
+    pub async fn intercept<C: event::Interceptable>(&self, ctx: C) -> C::Output {
+        self.inner.intercept(ctx).await
     }
 
     pub fn cron_tick_handlers(&self) -> &[ObserverFn<CronTickContext>] {

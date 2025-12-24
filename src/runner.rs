@@ -105,21 +105,6 @@ pub enum WorkerRuntimeError {
 }
 
 impl Worker {
-    async fn invoke_interceptor<Ctx, F, Fut>(hooks: &[F], ctx: Ctx) -> HookResult
-    where
-        Ctx: Clone,
-        F: Fn(Ctx) -> Fut,
-        Fut: std::future::Future<Output = HookResult>,
-    {
-        for hook in hooks {
-            match hook(ctx.clone()).await {
-                HookResult::Continue => continue,
-                other => return other,
-            }
-        }
-        HookResult::Continue
-    }
-
     /// Creates a new `WorkerOptions` builder with default settings.
     ///
     /// This is the starting point for configuring and creating a new worker.
@@ -524,15 +509,14 @@ async fn run_and_release_job(
     worker: &Worker,
     source: &StreamSource,
 ) -> Result<(), ProcessJobError> {
-    let before_result = Worker::invoke_interceptor(
-        worker.hooks.before_job_run_handlers(),
-        BeforeJobRunContext {
+    let before_result = worker
+        .hooks
+        .intercept(BeforeJobRunContext {
             job: job.clone(),
             worker_id: worker.worker_id().clone(),
             payload: job.payload().clone(),
-        },
-    )
-    .await;
+        })
+        .await;
 
     let (job_result, duration) = match before_result {
         HookResult::Continue => {
@@ -552,25 +536,20 @@ async fn run_and_release_job(
                 .as_ref()
                 .map(|_| ())
                 .map_err(|e| format!("{e:?}"));
-            let after_result = Worker::invoke_interceptor(
-                worker.hooks.after_job_run_handlers(),
-                AfterJobRunContext {
+            let after_result = worker
+                .hooks
+                .intercept(AfterJobRunContext {
                     job: job.clone(),
                     worker_id: worker.worker_id().clone(),
                     result: result_for_hook,
                     duration,
-                },
-            )
-            .await;
+                })
+                .await;
 
             match after_result {
                 HookResult::Continue => (job_result, duration),
                 HookResult::Skip => (Ok(()), duration),
                 HookResult::Fail(msg) => (Err(RunJobError::TaskError(msg)), duration),
-                HookResult::Retry { delay: _ } => (
-                    Err(RunJobError::TaskError("Retry requested by hook".into())),
-                    duration,
-                ),
             }
         }
         HookResult::Skip => {
@@ -583,16 +562,6 @@ async fn run_and_release_job(
                 "Job failed by before_job_run hook: {}", msg
             );
             (Err(RunJobError::TaskError(msg)), Duration::ZERO)
-        }
-        HookResult::Retry { delay: _ } => {
-            debug!(
-                job_id = job.id(),
-                "Job retry requested by before_job_run hook"
-            );
-            (
-                Err(RunJobError::TaskError("Retry requested by hook".into())),
-                Duration::ZERO,
-            )
         }
     };
 
