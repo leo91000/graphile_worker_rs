@@ -69,7 +69,7 @@ impl SharedTaskDetails {
         self.0.read().await.get(id).cloned()
     }
 
-    pub async fn get_identifier(&self, job_id: &i64, task_id: &i32) -> String {
+    pub async fn get_or_empty(&self, job_id: &i64, task_id: &i32) -> String {
         self.0.read().await.get_or_empty(job_id, task_id)
     }
 
