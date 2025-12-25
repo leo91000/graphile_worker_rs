@@ -23,6 +23,7 @@ just test-docker
 | `just check-fmt` | Check formatting |
 | `just fmt` | Format code |
 | `just coverage-docker` | Run coverage with tarpaulin |
+| `just coverage-diff` | Run coverage and show diff against main (requires `diff-cover`) |
 
 ## Environment Variables
 

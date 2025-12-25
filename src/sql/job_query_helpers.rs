@@ -28,9 +28,7 @@ pub fn get_update_queue_clause(
     worker_id_param: u8,
     now_param: Option<u8>,
 ) -> String {
-    let locked_at = now_param
-        .map(|p| format!("${p}::timestamptz"))
-        .unwrap_or_else(|| "now()".to_string());
+    let locked_at = get_now_clause(now_param);
     format!(
         r#",
             q as (
