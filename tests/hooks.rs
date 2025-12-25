@@ -748,13 +748,9 @@ async fn test_before_job_schedule_transform_payload_stored_in_db() {
 
         let job_payload = &jobs[0].payload;
         assert_eq!(job_payload.get("value").unwrap().as_u64().unwrap(), 42);
-        assert_eq!(
-            job_payload.get("transform").unwrap().as_bool().unwrap(),
-            true
-        );
-        assert_eq!(
+        assert!(job_payload.get("transform").unwrap().as_bool().unwrap());
+        assert!(
             job_payload.get("transformed").unwrap().as_bool().unwrap(),
-            true,
             "Transformed field should be added by hook"
         );
     })
@@ -939,9 +935,8 @@ async fn test_before_job_schedule_with_typed_add_job() {
 
         let payload = &jobs[0].payload;
         assert_eq!(payload.get("message").unwrap().as_str().unwrap(), "hello");
-        assert_eq!(
+        assert!(
             payload.get("transformed").unwrap().as_bool().unwrap(),
-            true,
             "Hook should have added transformed field"
         );
     })
@@ -1040,14 +1035,12 @@ async fn test_before_job_schedule_multiple_plugins_chain_transforms() {
         assert_eq!(jobs.len(), 1);
 
         let payload = &jobs[0].payload;
-        assert_eq!(
+        assert!(
             payload.get("plugin1_processed").unwrap().as_bool().unwrap(),
-            true,
             "Plugin 1 should have processed"
         );
-        assert_eq!(
+        assert!(
             payload.get("plugin2_processed").unwrap().as_bool().unwrap(),
-            true,
             "Plugin 2 should have processed"
         );
     })
@@ -1547,7 +1540,7 @@ async fn test_local_queue_set_mode_hook() {
             "LocalQueue set_mode hook should be called at least once (starting -> polling)"
         );
 
-        let last_mode = counters.last_mode_change.lock().unwrap().clone();
+        let last_mode = *counters.last_mode_change.lock().unwrap();
         assert!(last_mode.is_some(), "Should have recorded a mode change");
 
         worker_fut.abort();

@@ -447,7 +447,7 @@ async fn local_queue_returns_jobs_on_ttl_expiry() {
             .filter(|j| j.locked_by.is_some())
             .collect();
         assert!(
-            locked_jobs.len() >= 1,
+            !locked_jobs.is_empty(),
             "At least one job should be locked by worker"
         );
 
