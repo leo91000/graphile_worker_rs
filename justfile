@@ -17,6 +17,10 @@ coverage-docker:
   DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo tarpaulin --all --out Xml
   docker rm -f graphile-worker-rs-test
 
+coverage-diff branch="main":
+  just coverage-docker
+  diff-cover cobertura.xml --compare-branch={{branch}}
+
 doc-test:
   cargo test --all --doc
 

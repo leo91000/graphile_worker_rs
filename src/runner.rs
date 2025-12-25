@@ -5,6 +5,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
 
+use chrono::Utc;
+
 use crate::errors::GraphileWorkerError;
 use crate::local_queue::LocalQueue;
 use crate::sql::{get_job::get_job, task_identifiers::SharedTaskDetails};
@@ -71,7 +73,7 @@ pub struct Worker {
     pub(crate) forbidden_flags: Vec<String>,
     /// List of cron job definitions to be scheduled
     pub(crate) crontabs: Vec<Crontab>,
-    /// Whether to use local time for cron jobs (true) or UTC (false)
+    /// Whether to use local application time (true) or database time (false) for timestamps
     pub(crate) use_local_time: bool,
     /// Signal that can be triggered to gracefully shut down the worker
     pub(crate) shutdown_signal: ShutdownSignal,
@@ -220,6 +222,7 @@ impl Worker {
             self.escaped_schema.clone(),
             self.worker_id.clone(),
             self.forbidden_flags.clone(),
+            self.use_local_time,
         );
 
         job_stream
@@ -243,6 +246,7 @@ impl Worker {
                         break;
                     }
                     info!(job_id, "Job has queue, fetching another job");
+                    let now = self.use_local_time.then(Utc::now);
                     let task_details_guard = self.task_details.read().await;
                     let new_job = get_job(
                         self.pg_pool(),
@@ -250,6 +254,7 @@ impl Worker {
                         self.escaped_schema(),
                         self.worker_id(),
                         self.forbidden_flags(),
+                        now,
                     )
                     .await
                     .unwrap_or(None);
@@ -290,6 +295,7 @@ impl Worker {
                 shutdown_signal: Some(self.shutdown_signal.clone()),
                 hooks: self.hooks.clone(),
                 job_signal_sender: tx,
+                use_local_time: self.use_local_time,
             });
             Some((queue, rx))
         } else {
@@ -408,8 +414,7 @@ impl Worker {
             self.crontabs(),
             *self.use_local_time(),
             self.shutdown_signal.clone(),
-            self.hooks.cron_tick_handlers(),
-            self.hooks.cron_job_scheduled_handlers(),
+            &self.hooks,
         )
         .await?;
 
@@ -472,6 +477,7 @@ async fn process_one_job(
     worker: &Worker,
     source: StreamSource,
 ) -> Result<Option<Job>, ProcessJobError> {
+    let now = worker.use_local_time.then(Utc::now);
     let task_details_guard = worker.task_details.read().await;
     let job = get_job(
         worker.pg_pool(),
@@ -479,6 +485,7 @@ async fn process_one_job(
         worker.escaped_schema(),
         worker.worker_id(),
         worker.forbidden_flags(),
+        now,
     )
     .await
     .map_err(|e| {
@@ -673,15 +680,16 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
     let payload = job.payload().to_string();
 
     // Create a context for the task handler
-    let worker_ctx = WorkerContext::new(
-        job.payload().clone(),
-        worker.pg_pool().clone(),
-        worker.escaped_schema().clone(),
-        job.clone(),
-        worker.worker_id().clone(),
-        worker.extensions().clone(),
-        worker.task_details().clone(),
-    );
+    let worker_ctx = WorkerContext::builder()
+        .payload(job.payload().clone())
+        .pg_pool(worker.pg_pool().clone())
+        .escaped_schema(worker.escaped_schema().clone())
+        .job(job.clone())
+        .worker_id(worker.worker_id().clone())
+        .extensions(worker.extensions().clone())
+        .task_details(worker.task_details().clone())
+        .use_local_time(worker.use_local_time)
+        .build();
 
     // Get the future that will execute the task
     let task_fut = task_fn(worker_ctx);

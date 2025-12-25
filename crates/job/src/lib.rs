@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use derive_builder::Builder;
 use getset::Getters;
 use serde_json::Value;
 use sqlx::FromRow;
@@ -51,43 +52,44 @@ pub struct DbJob {
 /// This struct is used throughout the worker system for job processing and
 /// contains everything needed to execute a job, including the string identifier
 /// of the task which is used to look up the appropriate handler function.
-#[derive(FromRow, Getters, Debug, Clone, PartialEq, Eq)]
+#[derive(FromRow, Getters, Debug, Clone, PartialEq, Eq, Builder)]
 #[getset(get = "pub")]
+#[builder(build_fn(private, name = "build_internal"), pattern = "owned")]
 #[allow(dead_code)]
 pub struct Job {
-    /// Unique identifier for this job
+    #[builder(default)]
     id: i64,
-    /// Foreign key to job_queues table if this job is part of a queue
+    #[builder(default, setter(strip_option))]
     job_queue_id: Option<i32>,
-    /// The JSON payload/data associated with this job
+    #[builder(default = "serde_json::json!({})")]
     payload: serde_json::Value,
-    /// Priority level (lower number means higher priority)
+    #[builder(default)]
     priority: i16,
-    /// When the job is scheduled to run
+    #[builder(default = "Utc::now()")]
     run_at: DateTime<Utc>,
-    /// How many times this job has been attempted
+    #[builder(default)]
     attempts: i16,
-    /// Maximum number of retry attempts before considering the job permanently failed
+    #[builder(default = "25")]
     max_attempts: i16,
-    /// Error message from the last failed attempt
+    #[builder(default, setter(strip_option))]
     last_error: Option<String>,
-    /// When the job was created
+    #[builder(default = "Utc::now()")]
     created_at: DateTime<Utc>,
-    /// When the job was last updated
+    #[builder(default = "Utc::now()")]
     updated_at: DateTime<Utc>,
-    /// Optional unique key for identifying/updating this job from user code
+    #[builder(default, setter(strip_option))]
     key: Option<String>,
-    /// Counter tracking the number of revisions/updates to this job
+    #[builder(default)]
     revision: i32,
-    /// When the job was locked for processing
+    #[builder(default, setter(strip_option))]
     locked_at: Option<DateTime<Utc>>,
-    /// Worker ID that has locked this job
+    #[builder(default, setter(strip_option))]
     locked_by: Option<String>,
-    /// Optional JSON flags to control job processing behavior
+    #[builder(default, setter(strip_option))]
     flags: Option<Value>,
-    /// Foreign key to the tasks table identifying the task type
+    #[builder(default)]
     task_id: i32,
-    /// String identifier of the task, used to look up the handler function
+    #[builder(default, setter(into))]
     task_identifier: String,
 }
 
@@ -116,6 +118,11 @@ impl From<Job> for DbJob {
 }
 
 impl Job {
+    /// Creates a new builder for constructing a `Job`.
+    pub fn builder() -> JobBuilder {
+        JobBuilder::default()
+    }
+
     /// Creates a `Job` from a `DbJob` and a task identifier string.
     ///
     /// The task identifier is used to look up the appropriate handler function
@@ -149,6 +156,14 @@ impl Job {
             task_id: db_job.task_id,
             task_identifier,
         }
+    }
+}
+
+impl JobBuilder {
+    /// Builds the Job with all configured values.
+    pub fn build(self) -> Job {
+        self.build_internal()
+            .expect("All fields have defaults, build should never fail")
     }
 }
 

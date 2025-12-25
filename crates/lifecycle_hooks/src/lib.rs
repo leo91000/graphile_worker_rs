@@ -17,8 +17,6 @@ pub use plugin::Plugin;
 pub use registry::HookRegistry;
 pub use result::*;
 
-pub use event::ObserverFn;
-
 type HandlerVec<Ctx, Out> = Vec<Box<dyn Fn(Ctx) -> BoxFuture<'static, Out> + Send + Sync>>;
 
 #[derive(Default)]
@@ -52,26 +50,11 @@ impl TypeErasedHooks {
 }
 
 impl HookRegistry {
-    #[doc(hidden)]
     pub async fn emit<C: Emittable>(&self, ctx: C) {
         self.inner.emit(ctx).await
     }
 
     pub async fn intercept<C: event::Interceptable>(&self, ctx: C) -> C::Output {
         self.inner.intercept(ctx).await
-    }
-
-    pub fn cron_tick_handlers(&self) -> &[ObserverFn<CronTickContext>] {
-        self.inner
-            .get_handlers::<CronTick>()
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
-    }
-
-    pub fn cron_job_scheduled_handlers(&self) -> &[ObserverFn<CronJobScheduledContext>] {
-        self.inner
-            .get_handlers::<CronJobScheduled>()
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
     }
 }

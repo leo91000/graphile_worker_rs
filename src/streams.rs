@@ -1,5 +1,6 @@
 use std::{num::NonZeroUsize, time::Duration};
 
+use chrono::Utc;
 use futures::{stream, Stream};
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use sqlx::{postgres::PgListener, PgPool};
@@ -212,6 +213,7 @@ async fn job_signal_stream_internal(
 /// * `escaped_schema` - Database schema name (properly escaped for SQL)
 /// * `worker_id` - Unique identifier for this worker
 /// * `forbidden_flags` - List of job flags that this worker will not process
+/// * `use_local_time` - Whether to use local application time (true) or database time (false)
 ///
 /// # Returns
 ///
@@ -223,6 +225,7 @@ pub fn job_stream(
     escaped_schema: String,
     worker_id: String,
     forbidden_flags: Vec<String>,
+    use_local_time: bool,
 ) -> impl Stream<Item = Job> {
     futures::stream::unfold((), move |()| {
         let pg_pool = pg_pool.clone();
@@ -232,6 +235,7 @@ pub fn job_stream(
         let forbidden_flags = forbidden_flags.clone();
 
         let job_fut = async move {
+            let now = use_local_time.then(Utc::now);
             let task_details_guard = task_details.read().await;
             let job = get_job(
                 &pg_pool,
@@ -239,6 +243,7 @@ pub fn job_stream(
                 &escaped_schema,
                 &worker_id,
                 &forbidden_flags,
+                now,
             )
             .await
             .map_err(|e| {

@@ -13,6 +13,7 @@ readme = "README.md"
 
 [dependencies]
 getset.workspace = true
+derive_builder.workspace = true
 chrono.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true

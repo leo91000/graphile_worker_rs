@@ -181,6 +181,7 @@ impl TestDatabase {
             identifier,
             serde_json::to_value(payload).unwrap(),
             spec,
+            true,
         )
         .await
         .expect("Failed to add job")

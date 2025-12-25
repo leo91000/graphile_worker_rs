@@ -3,6 +3,7 @@ use std::sync::Arc;
 use chrono::{Duration, DurationRound, Local};
 use futures::FutureExt;
 use graphile_worker::parse_crontab;
+use graphile_worker::HookRegistry;
 use graphile_worker::IntoTaskHandlerResult;
 use graphile_worker::Worker;
 use graphile_worker_crontab_runner::{CronRunner, MockClock};
@@ -311,10 +312,11 @@ async fn cron_runner_schedules_job_on_tick() {
 
         let crontabs = parse_crontab("* * * * * test_task").expect("Failed to parse crontab");
 
+        let hooks = HookRegistry::default();
         let test_pool = test_db.test_pool.clone();
         let clock_for_runner = clock.clone();
         let runner_handle = spawn_local(async move {
-            CronRunner::new(&test_pool, "graphile_worker", &crontabs)
+            CronRunner::new(&test_pool, "graphile_worker", &crontabs, &hooks)
                 .with_clock(clock_for_runner)
                 .run(shutdown_signal)
                 .await
@@ -358,10 +360,11 @@ async fn cron_runner_catches_up_after_clock_jump() {
 
         let crontabs = parse_crontab("* * * * * catchup_task").expect("Failed to parse crontab");
 
+        let hooks = HookRegistry::default();
         let test_pool = test_db.test_pool.clone();
         let clock_for_runner = clock.clone();
         let runner_handle = spawn_local(async move {
-            CronRunner::new(&test_pool, "graphile_worker", &crontabs)
+            CronRunner::new(&test_pool, "graphile_worker", &crontabs, &hooks)
                 .with_clock(clock_for_runner)
                 .run(shutdown_signal)
                 .await
@@ -396,7 +399,25 @@ async fn cron_runner_catches_up_after_clock_jump() {
 
 #[tokio::test]
 async fn cron_runner_calls_hooks() {
+    use graphile_worker::{CronJobScheduled, CronTick, Plugin};
     use std::sync::atomic::{AtomicU32, Ordering};
+
+    static TICK_COUNT: AtomicU32 = AtomicU32::new(0);
+    static SCHEDULED_COUNT: AtomicU32 = AtomicU32::new(0);
+
+    struct CronHooksPlugin;
+
+    impl Plugin for CronHooksPlugin {
+        fn register(self, hooks: &mut HookRegistry) {
+            hooks.on(CronTick, |_ctx| async {
+                TICK_COUNT.fetch_add(1, Ordering::SeqCst);
+            });
+
+            hooks.on(CronJobScheduled, |_ctx| async {
+                SCHEDULED_COUNT.fetch_add(1, Ordering::SeqCst);
+            });
+        }
+    }
 
     with_test_db(|test_db| async move {
         test_db
@@ -411,32 +432,12 @@ async fn cron_runner_calls_hooks() {
 
         let crontabs = parse_crontab("* * * * * hook_task").expect("Failed to parse crontab");
 
-        static TICK_COUNT: AtomicU32 = AtomicU32::new(0);
-        static SCHEDULED_COUNT: AtomicU32 = AtomicU32::new(0);
-
-        let on_tick: graphile_worker::ObserverFn<graphile_worker::CronTickContext> =
-            Box::new(|_ctx| {
-                Box::pin(async {
-                    TICK_COUNT.fetch_add(1, Ordering::SeqCst);
-                })
-            });
-
-        let on_scheduled: graphile_worker::ObserverFn<graphile_worker::CronJobScheduledContext> =
-            Box::new(|_ctx| {
-                Box::pin(async {
-                    SCHEDULED_COUNT.fetch_add(1, Ordering::SeqCst);
-                })
-            });
-
-        let tick_hooks = [on_tick];
-        let scheduled_hooks = [on_scheduled];
+        let hooks = HookRegistry::default().with_plugin(CronHooksPlugin);
 
         let test_pool = test_db.test_pool.clone();
         let clock_for_runner = clock.clone();
         let runner_handle = spawn_local(async move {
-            CronRunner::new(&test_pool, "graphile_worker", &crontabs)
-                .on_cron_tick(&tick_hooks)
-                .on_cron_job_scheduled(&scheduled_hooks)
+            CronRunner::new(&test_pool, "graphile_worker", &crontabs, &hooks)
                 .with_clock(clock_for_runner)
                 .run(shutdown_signal)
                 .await
@@ -483,10 +484,11 @@ async fn cron_runner_shutdown_cleanly() {
 
         let crontabs = parse_crontab("* * * * * shutdown_task").expect("Failed to parse crontab");
 
+        let hooks = HookRegistry::default();
         let test_pool = test_db.test_pool.clone();
         let clock_for_runner = clock.clone();
         let runner_handle = spawn_local(async move {
-            CronRunner::new(&test_pool, "graphile_worker", &crontabs)
+            CronRunner::new(&test_pool, "graphile_worker", &crontabs, &hooks)
                 .with_clock(clock_for_runner)
                 .run(shutdown_signal)
                 .await

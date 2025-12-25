@@ -124,6 +124,9 @@ pub struct WorkerUtils {
 
     /// Shared task details for refreshing after GcTaskIdentifiers cleanup
     task_details: SharedTaskDetails,
+
+    /// Whether to use local application time (true) or database time (false) for timestamps
+    use_local_time: bool,
 }
 
 impl WorkerUtils {
@@ -141,6 +144,7 @@ impl WorkerUtils {
             escaped_schema,
             hooks: None,
             task_details: SharedTaskDetails::default(),
+            use_local_time: false,
         }
     }
 
@@ -157,6 +161,16 @@ impl WorkerUtils {
     /// up jobs after task identifiers are garbage collected.
     pub fn with_task_details(mut self, task_details: SharedTaskDetails) -> Self {
         self.task_details = task_details;
+        self
+    }
+
+    /// Sets whether to use local application time or database time for timestamps.
+    ///
+    /// When `use_local_time` is true, the application's `Utc::now()` is used for timestamps,
+    /// which can help handle clock drift between the application server and database server.
+    /// When false (default), PostgreSQL's `now()` is used instead.
+    pub fn with_use_local_time(mut self, use_local_time: bool) -> Self {
+        self.use_local_time = use_local_time;
         self
     }
 
@@ -280,6 +294,7 @@ impl WorkerUtils {
             identifier,
             payload,
             spec,
+            self.use_local_time,
         )
         .await
     }
@@ -343,6 +358,7 @@ impl WorkerUtils {
             identifier,
             payload,
             spec,
+            self.use_local_time,
         )
         .await
     }
@@ -422,6 +438,7 @@ impl WorkerUtils {
             &jobs_to_add,
             &task_details,
             job_key_preserve_run_at,
+            self.use_local_time,
         )
         .await
     }
@@ -504,6 +521,7 @@ impl WorkerUtils {
             &jobs_to_add,
             &task_details,
             job_key_preserve_run_at,
+            self.use_local_time,
         )
         .await
     }

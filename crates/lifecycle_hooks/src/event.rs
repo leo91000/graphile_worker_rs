@@ -67,5 +67,3 @@ pub trait Interceptable: Clone + Send + 'static {
     #[doc(hidden)]
     fn intercept_with(self, hooks: &TypeErasedHooks) -> BoxFuture<'_, Self::Output>;
 }
-
-pub type ObserverFn<Ctx> = Box<dyn Fn(Ctx) -> BoxFuture<'static, ()> + Send + Sync>;

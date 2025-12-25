@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 
+use derive_builder::Builder;
 use getset::Getters;
 use graphile_worker_extensions::ReadOnlyExtensions;
 use graphile_worker_job::Job;
@@ -19,59 +20,37 @@ use sqlx::PgPool;
 /// This context is created by the worker and passed to task handlers,
 /// providing everything they need to process a job within the task handler's
 /// execution environment.
-#[derive(Getters, Clone, Debug)]
+///
+/// Use [`WorkerContextBuilder`] to construct a new instance.
+#[derive(Getters, Clone, Debug, Builder)]
 #[getset(get = "pub")]
+#[builder(build_fn(private, name = "build_internal"), pattern = "owned")]
 pub struct WorkerContext {
     /// The JSON payload of the job, containing task-specific data
     payload: Value,
     /// PostgreSQL connection pool for database access during job processing
     pg_pool: PgPool,
     /// SQL-escaped schema name where Graphile Worker tables are located
+    #[builder(setter(into))]
     escaped_schema: String,
     /// The complete job record with all metadata
     job: Job,
     /// Unique identifier of the worker processing this job
+    #[builder(setter(into))]
     worker_id: String,
     /// Application-specific extensions/state that can be accessed by task handlers
     extensions: ReadOnlyExtensions,
     /// Shared task details mapping task IDs to identifiers
     task_details: SharedTaskDetails,
+    /// Whether to use local application time (true) or database time (false) for timestamps
+    #[builder(default)]
+    use_local_time: bool,
 }
 
 impl WorkerContext {
-    /// Creates a new WorkerContext with all required components.
-    ///
-    /// # Arguments
-    ///
-    /// * `payload` - The job's JSON payload data
-    /// * `pg_pool` - PostgreSQL connection pool
-    /// * `escaped_schema` - SQL-escaped schema name used by the worker
-    /// * `job` - The complete job record
-    /// * `worker_id` - Identifier for the worker processing this job
-    /// * `extensions` - Custom application state/extensions
-    /// * `task_details` - Shared task details for mapping task IDs to identifiers
-    ///
-    /// # Returns
-    ///
-    /// A new `WorkerContext` instance that will be passed to the task handler
-    pub fn new(
-        payload: Value,
-        pg_pool: PgPool,
-        escaped_schema: String,
-        job: Job,
-        worker_id: String,
-        extensions: ReadOnlyExtensions,
-        task_details: SharedTaskDetails,
-    ) -> Self {
-        WorkerContext {
-            payload,
-            pg_pool,
-            escaped_schema,
-            job,
-            worker_id,
-            extensions,
-            task_details,
-        }
+    /// Creates a new builder for constructing a `WorkerContext`.
+    pub fn builder() -> WorkerContextBuilder {
+        WorkerContextBuilder::default()
     }
 
     /// Retrieves a reference to an extension value by its type.
@@ -104,5 +83,105 @@ impl WorkerContext {
     /// ```
     pub fn get_ext<T: Send + Sync + 'static>(&self) -> Option<&T> {
         self.extensions.get()
+    }
+}
+
+impl WorkerContextBuilder {
+    /// Builds the `WorkerContext`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any required field is not set.
+    pub fn build(self) -> WorkerContext {
+        self.build_internal()
+            .expect("Required field missing in WorkerContextBuilder")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use graphile_worker_extensions::Extensions;
+    use graphile_worker_job::Job;
+    use sqlx::postgres::PgPoolOptions;
+
+    fn create_test_job() -> Job {
+        Job::builder()
+            .id(1)
+            .payload(serde_json::json!({"test": "data"}))
+            .task_identifier("test_task".to_string())
+            .build()
+    }
+
+    fn create_test_pool() -> PgPool {
+        PgPoolOptions::new()
+            .connect_lazy("postgres://test:test@localhost/test")
+            .expect("Failed to create lazy pool")
+    }
+
+    fn create_extensions() -> ReadOnlyExtensions {
+        ReadOnlyExtensions::new(Extensions::default())
+    }
+
+    #[tokio::test]
+    async fn test_worker_context_builder() {
+        let job = create_test_job();
+        let pool = create_test_pool();
+        let extensions = create_extensions();
+        let task_details = SharedTaskDetails::default();
+
+        let ctx = WorkerContext::builder()
+            .payload(serde_json::json!({"key": "value"}))
+            .pg_pool(pool)
+            .escaped_schema("graphile_worker".to_string())
+            .job(job)
+            .worker_id("worker-1".to_string())
+            .extensions(extensions)
+            .task_details(task_details)
+            .use_local_time(true)
+            .build();
+
+        assert_eq!(ctx.payload(), &serde_json::json!({"key": "value"}));
+        assert_eq!(ctx.escaped_schema(), "graphile_worker");
+        assert_eq!(ctx.worker_id(), "worker-1");
+        assert!(ctx.use_local_time());
+    }
+
+    #[tokio::test]
+    async fn test_worker_context_builder_use_local_time_default() {
+        let job = create_test_job();
+        let pool = create_test_pool();
+        let extensions = create_extensions();
+        let task_details = SharedTaskDetails::default();
+
+        let ctx = WorkerContext::builder()
+            .payload(serde_json::json!({}))
+            .pg_pool(pool)
+            .escaped_schema("schema".to_string())
+            .job(job)
+            .worker_id("worker".to_string())
+            .extensions(extensions)
+            .task_details(task_details)
+            .build();
+
+        assert!(!ctx.use_local_time());
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "UninitializedField(\"payload\")")]
+    async fn test_worker_context_builder_missing_payload() {
+        let job = create_test_job();
+        let pool = create_test_pool();
+        let extensions = create_extensions();
+        let task_details = SharedTaskDetails::default();
+
+        WorkerContext::builder()
+            .pg_pool(pool)
+            .escaped_schema("schema".to_string())
+            .job(job)
+            .worker_id("worker".to_string())
+            .extensions(extensions)
+            .task_details(task_details)
+            .build();
     }
 }
