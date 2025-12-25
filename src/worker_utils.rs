@@ -360,6 +360,8 @@ impl WorkerUtils {
     ///
     /// # Limitations
     /// * `job_key_mode: UnsafeDedupe` is not supported in batch operations
+    /// * `job_key_mode` is applied uniformly: if any job uses `PreserveRunAt`, it applies
+    ///   to all jobs in the batch. For per-job `job_key_mode` control, use `add_job` individually.
     ///
     /// # Hook Failure Behavior
     /// If the `before_job_schedule` hook fails for any job in the batch, the entire
@@ -437,6 +439,8 @@ impl WorkerUtils {
     ///
     /// # Limitations
     /// * `job_key_mode: UnsafeDedupe` is not supported in batch operations
+    /// * `job_key_mode` is applied uniformly: if any job uses `PreserveRunAt`, it applies
+    ///   to all jobs in the batch. For per-job `job_key_mode` control, use `add_raw_job` individually.
     ///
     /// # Hook Failure Behavior
     /// If the `before_job_schedule` hook fails for any job in the batch, the entire
