@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.11.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.10.0...graphile_worker-v0.11.0) - 2025-12-25
+
+### Other
+
+- update flake.lock
+- rename CLAUDE.md to AGENTS.md with symlink
+- add CONTRIBUTING.md
+- add CODE_OF_CONDUCT.md and SECURITY.md
+- address PR review feedback
+- replace manual builders with derive_builder macro
+
 ## [0.10.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.9.5...graphile_worker-v0.10.0) - 2025-12-24
 
 ### Added
