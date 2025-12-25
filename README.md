@@ -25,7 +25,7 @@ Key highlights:
 This port is mostly compatible with the original Graphile Worker, meaning you can run it side by side with the Node.js version.
 The key differences are:
 
-- No support for batch job processing yet (processing array payloads within a single job)
+- No support for batch job processing yet (processing array payloads within a single job). Note: batch job *scheduling* (adding multiple jobs at once) is supported - see "Batch job scheduling" section.
 - In the Node.js version, each process has its own worker_id. In the Rust version, there is only one worker_id, and jobs are processed in your async runtime thread
 
 ## Installation
