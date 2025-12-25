@@ -37,3 +37,13 @@ check-clippy:
   cargo clippy --all --all-targets -- -D warnings
 
 lint: fmt check check-clippy
+
+bench:
+  cargo bench
+
+bench-docker:
+  docker rm -f graphile-worker-rs-bench 2> /dev/null || true
+  docker run -d --name graphile-worker-rs-bench -p 54233:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=postgres postgres
+  docker exec graphile-worker-rs-bench bash -c 'while ! pg_isready -U postgres -h localhost; do sleep 1; done'
+  DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo bench
+  docker rm -f graphile-worker-rs-bench
