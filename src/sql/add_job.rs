@@ -1,8 +1,22 @@
-use crate::{errors::GraphileWorkerError, JobSpec};
+use crate::{errors::GraphileWorkerError, JobKeyMode, JobSpec};
+use chrono::{DateTime, Utc};
 use graphile_worker_job::Job;
 use indoc::formatdoc;
 use sqlx::{query_as, PgExecutor};
 use tracing::info;
+
+#[derive(Debug, Clone)]
+pub struct RawJobSpec {
+    pub identifier: String,
+    pub payload: serde_json::Value,
+    pub spec: JobSpec,
+}
+
+pub struct JobToAdd<'a> {
+    pub identifier: &'a str,
+    pub payload: serde_json::Value,
+    pub spec: &'a JobSpec,
+}
 
 /// Add a job to the queue
 #[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
@@ -51,4 +65,81 @@ pub async fn add_job(
     );
 
     Ok(Job::from_db_job(job, identifier.to_string()))
+}
+
+#[derive(serde::Serialize)]
+struct DbJobSpec {
+    identifier: String,
+    payload: serde_json::Value,
+    queue_name: Option<String>,
+    run_at: Option<DateTime<Utc>>,
+    max_attempts: Option<i16>,
+    job_key: Option<String>,
+    priority: Option<i16>,
+    flags: Option<Vec<String>>,
+}
+
+#[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
+pub async fn add_jobs<'a>(
+    executor: impl for<'e> PgExecutor<'e>,
+    escaped_schema: &str,
+    jobs: &[JobToAdd<'a>],
+    job_key_preserve_run_at: bool,
+) -> Result<Vec<Job>, GraphileWorkerError> {
+    if jobs.is_empty() {
+        return Ok(vec![]);
+    }
+
+    for job in jobs {
+        if let Some(mode) = job.spec.job_key_mode() {
+            if matches!(mode, JobKeyMode::UnsafeDedupe) {
+                return Err(GraphileWorkerError::JobScheduleFailed(
+                    "UnsafeDedupe job_key_mode is not supported in batch add_jobs".to_string(),
+                ));
+            }
+        }
+    }
+
+    let db_specs: Vec<DbJobSpec> = jobs
+        .iter()
+        .map(|job| DbJobSpec {
+            identifier: job.identifier.to_string(),
+            payload: job.payload.clone(),
+            queue_name: job.spec.queue_name().clone(),
+            run_at: *job.spec.run_at(),
+            max_attempts: *job.spec.max_attempts(),
+            job_key: job.spec.job_key().clone(),
+            priority: *job.spec.priority(),
+            flags: job.spec.flags().clone(),
+        })
+        .collect();
+
+    let sql = formatdoc!(
+        r#"
+            SELECT * FROM {escaped_schema}.add_jobs(
+                array(
+                    SELECT json_populate_recordset(null::{escaped_schema}.job_spec, $1::json)
+                ),
+                $2::boolean
+            );
+        "#
+    );
+
+    let specs_json = serde_json::to_value(&db_specs)?;
+
+    let db_jobs: Vec<graphile_worker_job::DbJob> = query_as(&sql)
+        .bind(&specs_json)
+        .bind(job_key_preserve_run_at)
+        .fetch_all(executor)
+        .await?;
+
+    info!(count = db_jobs.len(), "Jobs added to queue in batch");
+
+    let result: Vec<Job> = db_jobs
+        .into_iter()
+        .zip(jobs.iter())
+        .map(|(db_job, job)| Job::from_db_job(db_job, job.identifier.to_string()))
+        .collect();
+
+    Ok(result)
 }
