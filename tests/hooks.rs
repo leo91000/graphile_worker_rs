@@ -1584,15 +1584,15 @@ async fn test_local_queue_get_jobs_complete_hook() {
 
         let c = counters.clone();
         wait_for_condition(
-            || c.get_jobs_complete.load(Ordering::SeqCst) >= 1,
+            || c.last_jobs_count.load(Ordering::SeqCst) >= 1,
             5,
-            "get_jobs_complete hook should be called",
+            "Should have fetched at least one job",
         )
         .await;
 
         assert!(
-            counters.last_jobs_count.load(Ordering::SeqCst) >= 1,
-            "Should have fetched at least one job"
+            counters.get_jobs_complete.load(Ordering::SeqCst) >= 1,
+            "get_jobs_complete hook should have been called"
         );
 
         worker_fut.abort();
