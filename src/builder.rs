@@ -115,7 +115,7 @@ pub struct WorkerOptions {
     /// List of crontab entries for scheduled jobs
     crontabs: Option<Vec<Crontab>>,
 
-    /// Whether to use local time or PostgreSQL server time for scheduling
+    /// Whether to use local application time (true) or database time (false) for timestamps
     use_local_time: bool,
 
     /// Custom application state and dependencies
@@ -466,12 +466,16 @@ impl WorkerOptions {
         Ok(self)
     }
 
-    /// Sets whether to use local time or PostgreSQL server time for scheduling.
+    /// Sets whether to use local application time or database time for timestamps.
     ///
-    /// Affects how crontab schedules and job run_at times are interpreted.
+    /// When `use_local_time` is true, the application's `Utc::now()` is used for timestamps,
+    /// which can help handle clock drift between the application server and database server.
+    /// When false (default), PostgreSQL's `now()` is used instead.
+    ///
+    /// Affects job fetching, job scheduling, and crontab scheduling.
     ///
     /// # Arguments
-    /// * `value` - True to use local time, false to use PostgreSQL server time
+    /// * `value` - True to use application time, false to use database time
     ///
     /// # Default
     /// If not specified, defaults to false (use PostgreSQL server time).

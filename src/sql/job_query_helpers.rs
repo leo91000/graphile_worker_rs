@@ -23,17 +23,30 @@ pub fn get_queue_clause(escaped_schema: &str) -> String {
     )
 }
 
-pub fn get_update_queue_clause(escaped_schema: &str, param_ord: u8) -> String {
+pub fn get_update_queue_clause(
+    escaped_schema: &str,
+    worker_id_param: u8,
+    now_param: Option<u8>,
+) -> String {
+    let locked_at = now_param
+        .map(|p| format!("${p}::timestamptz"))
+        .unwrap_or_else(|| "now()".to_string());
     format!(
         r#",
             q as (
                 update {escaped_schema}._private_job_queues as job_queues
                     set
-                        locked_by = ${param_ord},
-                        locked_at = now()
+                        locked_by = ${worker_id_param},
+                        locked_at = {locked_at}
                 from j
                 where job_queues.id = j.job_queue_id
             )
         "#
     )
+}
+
+pub fn get_now_clause(now_param: Option<u8>) -> String {
+    now_param
+        .map(|p| format!("${p}::timestamptz"))
+        .unwrap_or_else(|| "now()".to_string())
 }

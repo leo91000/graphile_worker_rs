@@ -3,6 +3,7 @@ use std::future::Future;
 use futures::future::BoxFuture;
 
 use crate::event::Event;
+use crate::plugin::Plugin;
 use crate::TypeErasedHooks;
 
 #[derive(Default)]
@@ -27,6 +28,11 @@ impl HookRegistry {
                 Box::pin(fut)
             });
         E::register_boxed(&mut self.inner, boxed);
+        self
+    }
+
+    pub fn with_plugin<P: Plugin>(mut self, plugin: P) -> Self {
+        plugin.register(&mut self);
         self
     }
 }

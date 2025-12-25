@@ -1481,7 +1481,7 @@ async fn test_local_queue_init_hook() {
                 Worker::options()
                     .pg_pool(test_pool)
                     .concurrency(2)
-                    .local_queue(LocalQueueConfig::default().with_size(10))
+                    .local_queue(LocalQueueConfig::builder().size(10).build())
                     .define_job::<LocalQueueTestJob>()
                     .add_plugin(plugin)
                     .init()
@@ -1521,7 +1521,7 @@ async fn test_local_queue_set_mode_hook() {
                 Worker::options()
                     .pg_pool(test_pool)
                     .concurrency(2)
-                    .local_queue(LocalQueueConfig::default().with_size(10))
+                    .local_queue(LocalQueueConfig::builder().size(10).build())
                     .define_job::<LocalQueueTestJob>()
                     .add_plugin(plugin)
                     .init()
@@ -1570,7 +1570,7 @@ async fn test_local_queue_get_jobs_complete_hook() {
                 Worker::options()
                     .pg_pool(test_pool)
                     .concurrency(2)
-                    .local_queue(LocalQueueConfig::default().with_size(10))
+                    .local_queue(LocalQueueConfig::builder().size(10).build())
                     .define_job::<LocalQueueTestJob>()
                     .add_plugin(plugin)
                     .init()
@@ -1634,7 +1634,7 @@ async fn test_local_queue_return_jobs_hook() {
             Worker::options()
                 .pg_pool(test_db.test_pool.clone())
                 .concurrency(2)
-                .local_queue(LocalQueueConfig::default().with_size(20))
+                .local_queue(LocalQueueConfig::builder().size(20).build())
                 .listen_os_shutdown_signals(false)
                 .define_job::<SlowLocalQueueJob>()
                 .add_plugin(plugin)
@@ -1648,7 +1648,13 @@ async fn test_local_queue_return_jobs_hook() {
             let _ = worker_for_run.run().await;
         });
 
-        sleep(Duration::from_millis(300)).await;
+        let c = counters.clone();
+        wait_for_condition(
+            || c.last_jobs_count.load(Ordering::SeqCst) >= 1,
+            10,
+            "Should have fetched at least one job into local queue",
+        )
+        .await;
 
         worker.request_shutdown();
 
@@ -1681,13 +1687,15 @@ async fn test_local_queue_refetch_delay_hooks() {
                     .pg_pool(test_pool)
                     .concurrency(2)
                     .local_queue(
-                        LocalQueueConfig::default()
-                            .with_size(10)
-                            .with_refetch_delay(
-                                RefetchDelayConfig::default()
-                                    .with_duration(Duration::from_millis(50))
-                                    .with_threshold(0),
-                            ),
+                        LocalQueueConfig::builder()
+                            .size(10)
+                            .refetch_delay(
+                                RefetchDelayConfig::builder()
+                                    .duration(Duration::from_millis(50))
+                                    .threshold(0)
+                                    .build(),
+                            )
+                            .build(),
                     )
                     .define_job::<LocalQueueTestJob>()
                     .add_plugin(plugin)

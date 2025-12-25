@@ -157,10 +157,12 @@ where
         "#
     );
 
+    let app_time = use_local_time.then(Utc::now);
+
     query(&statement)
         .bind(serde_json::to_string(crontab_jobs)?)
         .bind(last_execution)
-        .bind(use_local_time.then(Local::now))
+        .bind(app_time)
         .execute(executor)
         .await?;
 

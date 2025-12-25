@@ -3,6 +3,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use chrono::Utc;
+use derive_builder::Builder;
 use graphile_worker_job::Job;
 pub use graphile_worker_lifecycle_hooks::LocalQueueMode;
 use graphile_worker_lifecycle_hooks::{
@@ -49,71 +51,81 @@ fn calculate_retry_delay(attempt: u32, options: &RetryOptions) -> Duration {
     Duration::from_millis(jittered as u64)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default, Builder)]
+#[builder(build_fn(private, name = "build_internal"), default, pattern = "owned")]
 pub struct RefetchDelayConfig {
+    #[builder(default = "Duration::from_millis(100)")]
     pub duration: Duration,
+    #[builder(default)]
     pub threshold: usize,
+    #[builder(default, setter(strip_option))]
     pub max_abort_threshold: Option<usize>,
 }
 
-impl Default for RefetchDelayConfig {
-    fn default() -> Self {
+impl RefetchDelayConfig {
+    pub fn builder() -> RefetchDelayConfigBuilder {
+        RefetchDelayConfigBuilder::default()
+    }
+
+    pub fn with_duration(self, duration: Duration) -> Self {
+        Self { duration, ..self }
+    }
+
+    pub fn with_threshold(self, threshold: usize) -> Self {
+        Self { threshold, ..self }
+    }
+
+    pub fn with_max_abort_threshold(self, max_abort_threshold: usize) -> Self {
         Self {
-            duration: Duration::from_millis(100),
-            threshold: 0,
-            max_abort_threshold: None,
+            max_abort_threshold: Some(max_abort_threshold),
+            ..self
         }
     }
 }
 
-impl RefetchDelayConfig {
-    pub fn with_duration(mut self, duration: Duration) -> Self {
-        self.duration = duration;
-        self
-    }
-
-    pub fn with_threshold(mut self, threshold: usize) -> Self {
-        self.threshold = threshold;
-        self
-    }
-
-    pub fn with_max_abort_threshold(mut self, max_abort_threshold: usize) -> Self {
-        self.max_abort_threshold = Some(max_abort_threshold);
-        self
+impl RefetchDelayConfigBuilder {
+    pub fn build(self) -> RefetchDelayConfig {
+        self.build_internal()
+            .expect("All fields have defaults, build should never fail")
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default, Builder)]
+#[builder(build_fn(private, name = "build_internal"), default, pattern = "owned")]
 pub struct LocalQueueConfig {
+    #[builder(default = "DEFAULT_LOCAL_QUEUE_SIZE")]
     pub size: usize,
+    #[builder(default = "DEFAULT_LOCAL_QUEUE_TTL")]
     pub ttl: Duration,
+    #[builder(default, setter(strip_option))]
     pub refetch_delay: Option<RefetchDelayConfig>,
 }
 
-impl Default for LocalQueueConfig {
-    fn default() -> Self {
+impl LocalQueueConfig {
+    pub fn builder() -> LocalQueueConfigBuilder {
+        LocalQueueConfigBuilder::default()
+    }
+
+    pub fn with_size(self, size: usize) -> Self {
+        Self { size, ..self }
+    }
+
+    pub fn with_ttl(self, ttl: Duration) -> Self {
+        Self { ttl, ..self }
+    }
+
+    pub fn with_refetch_delay(self, refetch_delay: RefetchDelayConfig) -> Self {
         Self {
-            size: DEFAULT_LOCAL_QUEUE_SIZE,
-            ttl: DEFAULT_LOCAL_QUEUE_TTL,
-            refetch_delay: None,
+            refetch_delay: Some(refetch_delay),
+            ..self
         }
     }
 }
 
-impl LocalQueueConfig {
-    pub fn with_size(mut self, size: usize) -> Self {
-        self.size = size;
-        self
-    }
-
-    pub fn with_ttl(mut self, ttl: Duration) -> Self {
-        self.ttl = ttl;
-        self
-    }
-
-    pub fn with_refetch_delay(mut self, refetch_delay: RefetchDelayConfig) -> Self {
-        self.refetch_delay = Some(refetch_delay);
-        self
+impl LocalQueueConfigBuilder {
+    pub fn build(self) -> LocalQueueConfig {
+        self.build_internal()
+            .expect("All fields have defaults, build should never fail")
     }
 }
 
@@ -163,6 +175,7 @@ struct LocalQueueState {
     poll_interval: Duration,
     continuous: bool,
     hooks: Arc<HookRegistry>,
+    use_local_time: bool,
 }
 
 impl LocalQueueState {
@@ -185,6 +198,7 @@ impl LocalQueueState {
             poll_interval: params.poll_interval,
             continuous: params.continuous,
             hooks: params.hooks,
+            use_local_time: params.use_local_time,
         }
     }
 }
@@ -215,6 +229,7 @@ pub struct LocalQueueParams {
     pub shutdown_signal: Option<ShutdownSignal>,
     pub hooks: Arc<HookRegistry>,
     pub job_signal_sender: JobSignalSender,
+    pub use_local_time: bool,
 }
 
 impl LocalQueue {
@@ -390,6 +405,7 @@ impl LocalQueue {
         self.reset_refetch_delay_counter();
 
         let task_details = self.0.task_details.read().await;
+        let now = self.0.use_local_time.then(Utc::now);
         let result = batch_get_jobs(
             &self.0.pg_pool,
             &task_details,
@@ -397,6 +413,7 @@ impl LocalQueue {
             &self.0.worker_id,
             &[],
             self.0.config.size.try_into().unwrap_or(i32::MAX),
+            now,
         )
         .await;
         drop(task_details);
@@ -653,12 +670,14 @@ impl LocalQueue {
 
     async fn get_job_direct(&self, flags_to_skip: &[String]) -> Option<Job> {
         let task_details = self.0.task_details.read().await;
+        let now = self.0.use_local_time.then(Utc::now);
         match get_job(
             &self.0.pg_pool,
             &task_details,
             &self.0.escaped_schema,
             &self.0.worker_id,
             &flags_to_skip.to_vec(),
+            now,
         )
         .await
         {

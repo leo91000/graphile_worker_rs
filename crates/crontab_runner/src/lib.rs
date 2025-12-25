@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use backfill::register_and_backfill_items;
 use chrono::prelude::*;
 use graphile_worker_crontab_types::Crontab;
-use graphile_worker_lifecycle_hooks::{CronJobScheduledContext, CronTickContext, ObserverFn};
+use graphile_worker_lifecycle_hooks::{CronJobScheduledContext, CronTickContext, HookRegistry};
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use sqlx::PgExecutor;
 use tracing::{debug, warn};
@@ -23,19 +23,16 @@ pub mod clock;
 mod sql;
 mod utils;
 
-pub async fn cron_main<'e>(
+pub async fn cron_main<'e, 'h>(
     executor: impl PgExecutor<'e> + Clone,
     escaped_schema: &str,
     crontabs: &[Crontab],
     use_local_time: bool,
     shutdown_signal: ShutdownSignal,
-    on_cron_tick: &[ObserverFn<CronTickContext>],
-    on_cron_job_scheduled: &[ObserverFn<CronJobScheduledContext>],
+    hooks: &'h HookRegistry,
 ) -> Result<(), ScheduleCronJobError> {
-    CronRunner::new(executor, escaped_schema, crontabs)
+    CronRunner::new(executor, escaped_schema, crontabs, hooks)
         .use_local_time(use_local_time)
-        .on_cron_tick(on_cron_tick)
-        .on_cron_job_scheduled(on_cron_job_scheduled)
         .run(shutdown_signal)
         .await
 }
@@ -45,20 +42,23 @@ pub struct CronRunner<'a, E, C = SystemClock> {
     escaped_schema: &'a str,
     crontabs: &'a [Crontab],
     use_local_time: bool,
-    on_cron_tick: &'a [ObserverFn<CronTickContext>],
-    on_cron_job_scheduled: &'a [ObserverFn<CronJobScheduledContext>],
+    hooks: &'a HookRegistry,
     clock: C,
 }
 
 impl<'a, E> CronRunner<'a, E, SystemClock> {
-    pub fn new(executor: E, escaped_schema: &'a str, crontabs: &'a [Crontab]) -> Self {
+    pub fn new(
+        executor: E,
+        escaped_schema: &'a str,
+        crontabs: &'a [Crontab],
+        hooks: &'a HookRegistry,
+    ) -> Self {
         Self {
             executor,
             escaped_schema,
             crontabs,
             use_local_time: false,
-            on_cron_tick: &[],
-            on_cron_job_scheduled: &[],
+            hooks,
             clock: SystemClock,
         }
     }
@@ -70,27 +70,13 @@ impl<'a, E, C: Clock> CronRunner<'a, E, C> {
         self
     }
 
-    pub fn on_cron_tick(mut self, hooks: &'a [ObserverFn<CronTickContext>]) -> Self {
-        self.on_cron_tick = hooks;
-        self
-    }
-
-    pub fn on_cron_job_scheduled(
-        mut self,
-        hooks: &'a [ObserverFn<CronJobScheduledContext>],
-    ) -> Self {
-        self.on_cron_job_scheduled = hooks;
-        self
-    }
-
     pub fn with_clock<C2: Clock>(self, clock: C2) -> CronRunner<'a, E, C2> {
         CronRunner {
             executor: self.executor,
             escaped_schema: self.escaped_schema,
             crontabs: self.crontabs,
             use_local_time: self.use_local_time,
-            on_cron_tick: self.on_cron_tick,
-            on_cron_job_scheduled: self.on_cron_job_scheduled,
+            hooks: self.hooks,
             clock,
         }
     }
@@ -148,9 +134,7 @@ impl<'a, E, C: Clock> CronRunner<'a, E, C> {
                 timestamp: ts.with_timezone(&Utc),
                 crontabs: self.crontabs.to_vec(),
             };
-            for hook in self.on_cron_tick {
-                hook(tick_ctx.clone()).await;
-            }
+            self.hooks.emit(tick_ctx).await;
 
             let mut jobs: Vec<CrontabJob> = vec![];
 
@@ -162,9 +146,7 @@ impl<'a, E, C: Clock> CronRunner<'a, E, C> {
                         crontab: cron.clone(),
                         scheduled_at: ts.with_timezone(&Utc),
                     };
-                    for hook in self.on_cron_job_scheduled {
-                        hook(scheduled_ctx.clone()).await;
-                    }
+                    self.hooks.emit(scheduled_ctx).await;
                 }
             }
 

@@ -28,6 +28,7 @@ pub async fn add_job(
     identifier: &str,
     payload: serde_json::Value,
     spec: JobSpec,
+    use_local_time: bool,
 ) -> Result<Job, GraphileWorkerError> {
     let sql = formatdoc!(
         r#"
@@ -47,11 +48,13 @@ pub async fn add_job(
 
     let job_key_mode = spec.job_key_mode().clone().map(|jkm| jkm.to_string());
 
+    let run_at = spec.run_at().or_else(|| use_local_time.then(Utc::now));
+
     let job = query_as(&sql)
         .bind(identifier)
         .bind(&payload)
         .bind(spec.queue_name())
-        .bind(spec.run_at())
+        .bind(run_at)
         .bind(spec.max_attempts())
         .bind(spec.job_key())
         .bind(spec.priority())
@@ -88,6 +91,7 @@ pub async fn add_jobs<'a>(
     jobs: &[JobToAdd<'a>],
     task_details: &TaskDetails,
     job_key_preserve_run_at: bool,
+    use_local_time: bool,
 ) -> Result<Vec<Job>, GraphileWorkerError> {
     if jobs.is_empty() {
         return Ok(vec![]);
@@ -103,13 +107,15 @@ pub async fn add_jobs<'a>(
         }
     }
 
+    let default_run_at = use_local_time.then(Utc::now);
+
     let db_specs: Vec<DbJobSpec> = jobs
         .iter()
         .map(|job| DbJobSpec {
             identifier: job.identifier.to_string(),
             payload: job.payload.clone(),
             queue_name: job.spec.queue_name().clone(),
-            run_at: *job.spec.run_at(),
+            run_at: job.spec.run_at().or(default_run_at),
             max_attempts: *job.spec.max_attempts(),
             job_key: job.spec.job_key().clone(),
             priority: *job.spec.priority(),

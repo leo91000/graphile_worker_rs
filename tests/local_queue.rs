@@ -42,7 +42,7 @@ async fn local_queue_processes_jobs_correctly() {
                 Worker::options()
                     .pg_pool(test_pool)
                     .concurrency(3)
-                    .local_queue(LocalQueueConfig::default().with_size(10))
+                    .local_queue(LocalQueueConfig::builder().size(10).build())
                     .define_job::<LocalQueueJob>()
                     .init()
                     .await
@@ -122,7 +122,7 @@ async fn local_queue_batch_fetches_jobs() {
                 Worker::options()
                     .pg_pool(test_pool)
                     .concurrency(5)
-                    .local_queue(LocalQueueConfig::default().with_size(50))
+                    .local_queue(LocalQueueConfig::builder().size(50).build())
                     .define_job::<BatchJob>()
                     .init()
                     .await
@@ -192,7 +192,7 @@ async fn local_queue_returns_jobs_on_shutdown() {
             Worker::options()
                 .pg_pool(test_db.test_pool.clone())
                 .concurrency(2)
-                .local_queue(LocalQueueConfig::default().with_size(20))
+                .local_queue(LocalQueueConfig::builder().size(20).build())
                 .listen_os_shutdown_signals(false)
                 .define_job::<ShutdownJob>()
                 .init()
@@ -290,7 +290,7 @@ async fn local_queue_with_forbidden_flags_uses_direct_fetch() {
                 Worker::options()
                     .pg_pool(test_pool)
                     .concurrency(3)
-                    .local_queue(LocalQueueConfig::default().with_size(10))
+                    .local_queue(LocalQueueConfig::builder().size(10).build())
                     .add_forbidden_flag("special")
                     .define_job::<FlaggedJob>()
                     .init()
@@ -423,9 +423,10 @@ async fn local_queue_returns_jobs_on_ttl_expiry() {
                 .pg_pool(test_db.test_pool.clone())
                 .concurrency(1)
                 .local_queue(
-                    LocalQueueConfig::default()
-                        .with_size(20)
-                        .with_ttl(Duration::from_millis(500)),
+                    LocalQueueConfig::builder()
+                        .size(20)
+                        .ttl(Duration::from_millis(500))
+                        .build(),
                 )
                 .listen_os_shutdown_signals(false)
                 .define_job::<TtlExpiryJob>()
@@ -509,13 +510,15 @@ async fn local_queue_refetch_delay_triggers_when_below_threshold() {
                     .concurrency(2)
                     .poll_interval(Duration::from_secs(10))
                     .local_queue(
-                        LocalQueueConfig::default()
-                            .with_size(10)
-                            .with_refetch_delay(
-                                RefetchDelayConfig::default()
-                                    .with_duration(Duration::from_millis(200))
-                                    .with_threshold(5),
-                            ),
+                        LocalQueueConfig::builder()
+                            .size(10)
+                            .refetch_delay(
+                                RefetchDelayConfig::builder()
+                                    .duration(Duration::from_millis(200))
+                                    .threshold(5)
+                                    .build(),
+                            )
+                            .build(),
                     )
                     .define_job::<RefetchDelayJob>()
                     .init()
@@ -584,7 +587,7 @@ async fn local_queue_with_size_one() {
                 Worker::options()
                     .pg_pool(test_pool)
                     .concurrency(1)
-                    .local_queue(LocalQueueConfig::default().with_size(1))
+                    .local_queue(LocalQueueConfig::builder().size(1).build())
                     .define_job::<SmallQueueJob>()
                     .init()
                     .await
@@ -655,7 +658,7 @@ async fn local_queue_distributes_jobs_to_concurrent_workers() {
                 Worker::options()
                     .pg_pool(test_pool)
                     .concurrency(5)
-                    .local_queue(LocalQueueConfig::default().with_size(20))
+                    .local_queue(LocalQueueConfig::builder().size(20).build())
                     .define_job::<ConcurrentDistributionJob>()
                     .init()
                     .await
@@ -717,7 +720,7 @@ async fn local_queue_transitions_modes_correctly() {
                 .pg_pool(test_db.test_pool.clone())
                 .concurrency(1)
                 .poll_interval(Duration::from_millis(100))
-                .local_queue(LocalQueueConfig::default().with_size(5))
+                .local_queue(LocalQueueConfig::builder().size(5).build())
                 .listen_os_shutdown_signals(false)
                 .define_job::<ModeTransitionJob>()
                 .init()
@@ -803,7 +806,7 @@ async fn local_queue_handles_empty_queue_gracefully() {
                 .pg_pool(test_db.test_pool.clone())
                 .concurrency(2)
                 .poll_interval(Duration::from_millis(100))
-                .local_queue(LocalQueueConfig::default().with_size(10))
+                .local_queue(LocalQueueConfig::builder().size(10).build())
                 .listen_os_shutdown_signals(false)
                 .define_job::<EmptyQueueJob>()
                 .init()
@@ -884,7 +887,7 @@ async fn local_queue_handles_large_batch() {
                 Worker::options()
                     .pg_pool(test_pool)
                     .concurrency(10)
-                    .local_queue(LocalQueueConfig::default().with_size(50))
+                    .local_queue(LocalQueueConfig::builder().size(50).build())
                     .define_job::<LargeBatchJob>()
                     .init()
                     .await
@@ -1022,7 +1025,7 @@ async fn local_queue_pulse_triggers_immediate_fetch() {
                 .pg_pool(test_db.test_pool.clone())
                 .concurrency(1)
                 .poll_interval(Duration::from_secs(30))
-                .local_queue(LocalQueueConfig::default().with_size(10))
+                .local_queue(LocalQueueConfig::builder().size(10).build())
                 .listen_os_shutdown_signals(false)
                 .define_job::<PulseImmediateFetchJob>()
                 .init()
@@ -1100,7 +1103,7 @@ async fn local_queue_release_waits_for_run_loop() {
             Worker::options()
                 .pg_pool(test_db.test_pool.clone())
                 .concurrency(2)
-                .local_queue(LocalQueueConfig::default().with_size(10))
+                .local_queue(LocalQueueConfig::builder().size(10).build())
                 .listen_os_shutdown_signals(false)
                 .define_job::<ReleaseWaitsJob>()
                 .init()
