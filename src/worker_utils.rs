@@ -327,6 +327,11 @@ impl WorkerUtils {
     /// # Limitations
     /// * `job_key_mode: UnsafeDedupe` is not supported in batch operations
     ///
+    /// # Hook Failure Behavior
+    /// If the `before_job_schedule` hook fails for any job in the batch, the entire
+    /// batch operation fails and no jobs are added. For partial success semantics,
+    /// use `add_job` individually in a loop with your own error handling.
+    ///
     /// # Example
     /// ```
     /// # use graphile_worker::{WorkerUtils, JobSpec, TaskHandler, WorkerContext, IntoTaskHandlerResult};
@@ -420,6 +425,11 @@ impl WorkerUtils {
     ///
     /// # Limitations
     /// * `job_key_mode: UnsafeDedupe` is not supported in batch operations
+    ///
+    /// # Hook Failure Behavior
+    /// If the `before_job_schedule` hook fails for any job in the batch, the entire
+    /// batch operation fails and no jobs are added. For partial success semantics,
+    /// use `add_raw_job` individually in a loop with your own error handling.
     ///
     /// # Example
     /// ```
