@@ -26,5 +26,10 @@ fmt:
 check-fmt:
   cargo fmt --all -- --check
 
+check:
+  cargo check --all --all-targets
+
 check-clippy:
-  cargo clippy --all -- -D warnings
+  cargo clippy --all --all-targets -- -D warnings
+
+lint: fmt check check-clippy
