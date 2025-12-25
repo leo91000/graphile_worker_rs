@@ -12,3 +12,6 @@ readme = "README.md"
 [dependencies]
 tokio = { workspace = true, features = ["sync"] }
 tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }
