@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::sql::add_job::{add_job, add_jobs, JobToAdd, RawJobSpec};
-use crate::sql::task_identifiers::{get_tasks_details, TaskDetails};
+use crate::sql::task_identifiers::{get_tasks_details, SharedTaskDetails};
 use crate::tracing::add_tracing_info;
 use crate::{errors::GraphileWorkerError, DbJob, Job, JobSpec};
 use graphile_worker_lifecycle_hooks::{BeforeJobScheduleContext, HookRegistry, JobScheduleResult};
@@ -10,7 +10,6 @@ use graphile_worker_task_handler::TaskHandler;
 use indoc::formatdoc;
 use serde::Serialize;
 use sqlx::{PgExecutor, PgPool};
-use tokio::sync::RwLock;
 use tracing::Span;
 
 /// Types of database cleanup tasks that can be performed on the Graphile Worker schema.
@@ -124,7 +123,7 @@ pub struct WorkerUtils {
     hooks: Option<Arc<HookRegistry>>,
 
     /// Shared task details for refreshing after GcTaskIdentifiers cleanup
-    task_details: Option<Arc<RwLock<TaskDetails>>>,
+    task_details: SharedTaskDetails,
 }
 
 impl WorkerUtils {
@@ -141,7 +140,7 @@ impl WorkerUtils {
             pg_pool,
             escaped_schema,
             hooks: None,
-            task_details: None,
+            task_details: SharedTaskDetails::default(),
         }
     }
 
@@ -156,8 +155,8 @@ impl WorkerUtils {
     /// When task_details is provided, cleanup operations that include `GcTaskIdentifiers`
     /// will automatically refresh the task details to ensure the worker can still pick
     /// up jobs after task identifiers are garbage collected.
-    pub fn with_task_details(mut self, task_details: Arc<RwLock<TaskDetails>>) -> Self {
-        self.task_details = Some(task_details);
+    pub fn with_task_details(mut self, task_details: SharedTaskDetails) -> Self {
+        self.task_details = task_details;
         self
     }
 
@@ -396,10 +395,13 @@ impl WorkerUtils {
                 .is_some_and(|m| matches!(m, crate::JobKeyMode::PreserveRunAt))
         });
 
+        let task_details = self.task_details.read().await;
+
         add_jobs(
             &self.pg_pool,
             &self.escaped_schema,
             &jobs_to_add,
+            &task_details,
             job_key_preserve_run_at,
         )
         .await
@@ -484,10 +486,21 @@ impl WorkerUtils {
                 .is_some_and(|m| matches!(m, crate::JobKeyMode::PreserveRunAt))
         });
 
+        let unique_identifiers: Vec<String> = jobs
+            .iter()
+            .map(|j| j.identifier.clone())
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+
+        let task_details =
+            get_tasks_details(&self.pg_pool, &self.escaped_schema, unique_identifiers).await?;
+
         add_jobs(
             &self.pg_pool,
             &self.escaped_schema,
             &jobs_to_add,
+            &task_details,
             job_key_preserve_run_at,
         )
         .await
@@ -671,25 +684,23 @@ impl WorkerUtils {
     /// # }
     /// ```
     pub async fn cleanup(&self, tasks: &[CleanupTask]) -> Result<(), GraphileWorkerError> {
-        let has_gc_task_identifiers = tasks
+        let should_refresh_task_identifiers = tasks
             .iter()
             .any(|t| matches!(t, CleanupTask::GcTaskIdentifiers));
 
-        if has_gc_task_identifiers {
-            if let Some(task_details) = &self.task_details {
-                let mut guard = task_details.write().await;
-                let task_names = guard.task_names();
+        if should_refresh_task_identifiers {
+            let mut guard = self.task_details.write().await;
+            let task_names = guard.task_names();
 
-                for task in tasks {
-                    task.execute(&self.pg_pool, &self.escaped_schema, &task_names)
-                        .await?;
-                }
-
-                let refreshed =
-                    get_tasks_details(&self.pg_pool, &self.escaped_schema, task_names).await?;
-                *guard = refreshed;
-                return Ok(());
+            for task in tasks {
+                task.execute(&self.pg_pool, &self.escaped_schema, &task_names)
+                    .await?;
             }
+
+            let refreshed =
+                get_tasks_details(&self.pg_pool, &self.escaped_schema, task_names).await?;
+            *guard = refreshed;
+            return Ok(());
         }
 
         for task in tasks {

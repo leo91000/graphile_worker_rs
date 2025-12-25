@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use getset::Getters;
 use graphile_worker_extensions::ReadOnlyExtensions;
 use graphile_worker_job::Job;
+pub use graphile_worker_task_details::{SharedTaskDetails, TaskDetails};
 use serde_json::Value;
 use sqlx::PgPool;
 
@@ -33,6 +34,8 @@ pub struct WorkerContext {
     worker_id: String,
     /// Application-specific extensions/state that can be accessed by task handlers
     extensions: ReadOnlyExtensions,
+    /// Shared task details mapping task IDs to identifiers
+    task_details: SharedTaskDetails,
 }
 
 impl WorkerContext {
@@ -46,6 +49,7 @@ impl WorkerContext {
     /// * `job` - The complete job record
     /// * `worker_id` - Identifier for the worker processing this job
     /// * `extensions` - Custom application state/extensions
+    /// * `task_details` - Shared task details for mapping task IDs to identifiers
     ///
     /// # Returns
     ///
@@ -57,6 +61,7 @@ impl WorkerContext {
         job: Job,
         worker_id: String,
         extensions: ReadOnlyExtensions,
+        task_details: SharedTaskDetails,
     ) -> Self {
         WorkerContext {
             payload,
@@ -65,6 +70,7 @@ impl WorkerContext {
             job,
             worker_id,
             extensions,
+            task_details,
         }
     }
 

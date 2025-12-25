@@ -23,7 +23,7 @@ use tracing::{debug, error, trace, warn};
 use crate::sql::batch_get_jobs::batch_get_jobs;
 use crate::sql::get_job::get_job;
 use crate::sql::return_jobs::return_jobs;
-use crate::sql::task_identifiers::TaskDetails;
+use crate::sql::task_identifiers::SharedTaskDetails;
 
 const DEFAULT_LOCAL_QUEUE_SIZE: usize = 100;
 const DEFAULT_LOCAL_QUEUE_TTL: Duration = Duration::from_secs(5 * 60);
@@ -159,7 +159,7 @@ struct LocalQueueState {
     pg_pool: PgPool,
     escaped_schema: String,
     worker_id: String,
-    task_details: Arc<RwLock<TaskDetails>>,
+    task_details: SharedTaskDetails,
     poll_interval: Duration,
     continuous: bool,
     hooks: Arc<HookRegistry>,
@@ -209,7 +209,7 @@ pub struct LocalQueueParams {
     pub pg_pool: PgPool,
     pub escaped_schema: String,
     pub worker_id: String,
-    pub task_details: Arc<RwLock<TaskDetails>>,
+    pub task_details: SharedTaskDetails,
     pub poll_interval: Duration,
     pub continuous: bool,
     pub shutdown_signal: Option<ShutdownSignal>,
