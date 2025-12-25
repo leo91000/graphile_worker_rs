@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
+use crate::sql::add_job::{add_job, add_jobs, JobToAdd, RawJobSpec};
 use crate::sql::task_identifiers::{get_tasks_details, TaskDetails};
 use crate::tracing::add_tracing_info;
-use crate::{errors::GraphileWorkerError, sql::add_job::add_job, DbJob, Job, JobSpec};
+use crate::{errors::GraphileWorkerError, DbJob, Job, JobSpec};
 use graphile_worker_lifecycle_hooks::{BeforeJobScheduleContext, HookRegistry, JobScheduleResult};
 use graphile_worker_migrations::{migrate, MigrateError};
 use graphile_worker_task_handler::TaskHandler;
@@ -309,6 +310,185 @@ impl WorkerUtils {
             identifier,
             payload,
             spec,
+        )
+        .await
+    }
+
+    /// Adds multiple jobs of the same type to the queue in a single batch operation.
+    ///
+    /// This is more efficient than calling `add_job` multiple times when you need to
+    /// add many jobs of the same type, as it uses a single database round trip.
+    ///
+    /// # Arguments
+    /// * `jobs` - Slice of tuples containing payloads and job specifications
+    ///
+    /// # Returns
+    /// * `Result<Vec<Job>, GraphileWorkerError>` - The created jobs or an error
+    ///
+    /// # Limitations
+    /// * `job_key_mode: UnsafeDedupe` is not supported in batch operations
+    ///
+    /// # Example
+    /// ```
+    /// # use graphile_worker::{WorkerUtils, JobSpec, TaskHandler, WorkerContext, IntoTaskHandlerResult};
+    /// # use graphile_worker::errors::GraphileWorkerError;
+    /// # use serde::{Deserialize, Serialize};
+    /// # #[derive(Clone, Deserialize, Serialize)]
+    /// # struct SendEmail { to: String }
+    /// # impl TaskHandler for SendEmail {
+    /// #     const IDENTIFIER: &'static str = "send_email";
+    /// #     async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult { Ok::<(), String>(()) }
+    /// # }
+    /// # async fn example(utils: &WorkerUtils) -> Result<(), GraphileWorkerError> {
+    /// let spec = JobSpec::default();
+    /// let jobs = utils.add_jobs::<SendEmail>(&[
+    ///     (SendEmail { to: "user1@example.com".into() }, &spec),
+    ///     (SendEmail { to: "user2@example.com".into() }, &spec),
+    /// ]).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[tracing::instrument(
+        "add_jobs",
+        skip_all,
+        fields(
+            messaging.system = "graphile-worker",
+            messaging.operation.name = "add_jobs",
+            messaging.batch.message_count = jobs.len()
+        )
+    )]
+    pub async fn add_jobs<T: TaskHandler + Clone>(
+        &self,
+        jobs: &[(T, &JobSpec)],
+    ) -> Result<Vec<Job>, GraphileWorkerError> {
+        if jobs.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let identifier = T::IDENTIFIER;
+        let mut payloads = Vec::with_capacity(jobs.len());
+
+        for (payload, spec) in jobs {
+            let mut payload_value = serde_json::to_value(payload.clone())?;
+            add_tracing_info(&mut payload_value);
+
+            let payload_value = self
+                .invoke_before_job_schedule(identifier, payload_value, spec)
+                .await?;
+
+            payloads.push(payload_value);
+        }
+
+        let jobs_to_add: Vec<JobToAdd<'_>> = jobs
+            .iter()
+            .zip(payloads.into_iter())
+            .map(|((_, spec), payload)| JobToAdd {
+                identifier,
+                payload,
+                spec,
+            })
+            .collect();
+
+        let job_key_preserve_run_at = jobs_to_add.iter().any(|j| {
+            j.spec
+                .job_key_mode()
+                .as_ref()
+                .is_some_and(|m| matches!(m, crate::JobKeyMode::PreserveRunAt))
+        });
+
+        add_jobs(
+            &self.pg_pool,
+            &self.escaped_schema,
+            &jobs_to_add,
+            job_key_preserve_run_at,
+        )
+        .await
+    }
+
+    /// Adds multiple jobs with raw identifiers and payloads in a single batch operation.
+    ///
+    /// This allows adding jobs of different types in a single batch, but without
+    /// compile-time type safety. More efficient than multiple `add_raw_job` calls.
+    ///
+    /// # Arguments
+    /// * `jobs` - Slice of `RawJobSpec` containing identifiers, payloads, and specifications
+    ///
+    /// # Returns
+    /// * `Result<Vec<Job>, GraphileWorkerError>` - The created jobs or an error
+    ///
+    /// # Limitations
+    /// * `job_key_mode: UnsafeDedupe` is not supported in batch operations
+    ///
+    /// # Example
+    /// ```
+    /// # use graphile_worker::{WorkerUtils, JobSpec, RawJobSpec};
+    /// # use graphile_worker::errors::GraphileWorkerError;
+    /// # use serde_json::json;
+    /// # async fn example(utils: &WorkerUtils) -> Result<(), GraphileWorkerError> {
+    /// let jobs = utils.add_raw_jobs(&[
+    ///     RawJobSpec {
+    ///         identifier: "send_email".into(),
+    ///         payload: json!({ "to": "user@example.com" }),
+    ///         spec: JobSpec::default(),
+    ///     },
+    ///     RawJobSpec {
+    ///         identifier: "process_payment".into(),
+    ///         payload: json!({ "amount": 100 }),
+    ///         spec: JobSpec::default(),
+    ///     },
+    /// ]).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[tracing::instrument(
+        "add_raw_jobs",
+        skip_all,
+        fields(
+            messaging.system = "graphile-worker",
+            messaging.operation.name = "add_jobs",
+            messaging.batch.message_count = jobs.len()
+        )
+    )]
+    pub async fn add_raw_jobs(&self, jobs: &[RawJobSpec]) -> Result<Vec<Job>, GraphileWorkerError> {
+        if jobs.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut payloads = Vec::with_capacity(jobs.len());
+
+        for job in jobs {
+            let mut payload = job.payload.clone();
+            add_tracing_info(&mut payload);
+
+            let payload = self
+                .invoke_before_job_schedule(&job.identifier, payload, &job.spec)
+                .await?;
+
+            payloads.push(payload);
+        }
+
+        let jobs_to_add: Vec<JobToAdd<'_>> = jobs
+            .iter()
+            .zip(payloads.into_iter())
+            .map(|(job, payload)| JobToAdd {
+                identifier: &job.identifier,
+                payload,
+                spec: &job.spec,
+            })
+            .collect();
+
+        let job_key_preserve_run_at = jobs_to_add.iter().any(|j| {
+            j.spec
+                .job_key_mode()
+                .as_ref()
+                .is_some_and(|m| matches!(m, crate::JobKeyMode::PreserveRunAt))
+        });
+
+        add_jobs(
+            &self.pg_pool,
+            &self.escaped_schema,
+            &jobs_to_add,
+            job_key_preserve_run_at,
         )
         .await
     }

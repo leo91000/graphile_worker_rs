@@ -72,4 +72,5 @@ pub use local_queue::{
     LocalQueue, LocalQueueConfig, LocalQueueError, LocalQueueMode, RefetchDelayConfig,
 };
 pub use runner::Worker;
+pub use sql::add_job::RawJobSpec;
 pub use worker_utils::WorkerUtils;

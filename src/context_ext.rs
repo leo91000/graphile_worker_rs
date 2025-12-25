@@ -1,4 +1,5 @@
 use crate::errors::GraphileWorkerError;
+use crate::sql::add_job::RawJobSpec;
 use crate::worker_utils::{CleanupTask, RescheduleJobOptions, WorkerUtils};
 use crate::{DbJob, Job, JobSpec, TaskHandler};
 use graphile_worker_ctx::WorkerContext;
@@ -28,6 +29,18 @@ pub trait WorkerContextExt {
         payload: P,
         spec: JobSpec,
     ) -> impl core::future::Future<Output = Result<Job, GraphileWorkerError>> + Send;
+
+    /// Add multiple typed jobs in a single batch operation.
+    fn add_jobs<T: TaskHandler + Clone + 'static>(
+        &self,
+        jobs: &[(T, &JobSpec)],
+    ) -> impl core::future::Future<Output = Result<Vec<Job>, GraphileWorkerError>> + Send;
+
+    /// Add multiple raw jobs in a single batch operation.
+    fn add_raw_jobs(
+        &self,
+        jobs: &[RawJobSpec],
+    ) -> impl core::future::Future<Output = Result<Vec<Job>, GraphileWorkerError>> + Send;
 
     /// Remove a job by job key.
     fn remove_job(
@@ -91,6 +104,17 @@ impl WorkerContextExt for WorkerContext {
         spec: JobSpec,
     ) -> Result<Job, GraphileWorkerError> {
         self.utils().add_raw_job(identifier, payload, spec).await
+    }
+
+    async fn add_jobs<T: TaskHandler + Clone + 'static>(
+        &self,
+        jobs: &[(T, &JobSpec)],
+    ) -> Result<Vec<Job>, GraphileWorkerError> {
+        self.utils().add_jobs(jobs).await
+    }
+
+    async fn add_raw_jobs(&self, jobs: &[RawJobSpec]) -> Result<Vec<Job>, GraphileWorkerError> {
+        self.utils().add_raw_jobs(jobs).await
     }
 
     async fn remove_job(&self, job_key: &str) -> Result<(), GraphileWorkerError> {

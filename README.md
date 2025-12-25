@@ -25,7 +25,7 @@ Key highlights:
 This port is mostly compatible with the original Graphile Worker, meaning you can run it side by side with the Node.js version.
 The key differences are:
 
-- No support for batch jobs yet (create an issue if you need this feature)
+- No support for batch job processing yet (processing array payloads within a single job)
 - In the Node.js version, each process has its own worker_id. In the Rust version, there is only one worker_id, and jobs are processed in your async runtime thread
 
 ## Installation
@@ -169,6 +169,34 @@ utils.add_raw_job(
 ).await?;
 ```
 
+#### Option C: Batch job scheduling
+
+For efficiency when adding many jobs at once, use batch methods:
+
+```rust,ignore
+// Batch add jobs of the same type (type-safe)
+let spec = JobSpec::default();
+utils.add_jobs::<SendEmail>(&[
+    (SendEmail { to: "user1@example.com".into(), subject: "Hello".into(), body: "...".into() }, &spec),
+    (SendEmail { to: "user2@example.com".into(), subject: "Hello".into(), body: "...".into() }, &spec),
+    (SendEmail { to: "user3@example.com".into(), subject: "Hello".into(), body: "...".into() }, &spec),
+]).await?;
+
+// Batch add jobs of different types (dynamic)
+utils.add_raw_jobs(&[
+    RawJobSpec {
+        identifier: "send_email".into(),
+        payload: serde_json::json!({ "to": "user@example.com", "subject": "Hi" }),
+        spec: JobSpec::default(),
+    },
+    RawJobSpec {
+        identifier: "process_payment".into(),
+        payload: serde_json::json!({ "user_id": 123, "amount": 50 }),
+        spec: JobSpec::default(),
+    },
+]).await?;
+```
+
 ## Advanced Features
 
 ### Shared Application State
@@ -283,6 +311,42 @@ let worker = WorkerOptions::default()
     .await?;
 ```
 
+### Local Queue
+
+The Local Queue feature batch-fetches jobs from the database and caches them locally, significantly reducing database load in high-throughput scenarios.
+
+```rust,ignore
+use graphile_worker::{WorkerOptions, LocalQueueConfig, RefetchDelayConfig};
+use std::time::Duration;
+
+let worker = WorkerOptions::default()
+    .local_queue(
+        LocalQueueConfig::default()
+            .with_size(100)                              // Cache up to 100 jobs
+            .with_ttl(Duration::from_secs(300))          // Return unclaimed jobs after 5 minutes
+            .with_refetch_delay(
+                RefetchDelayConfig::default()
+                    .with_duration(Duration::from_millis(100))  // Delay between refetches
+                    .with_threshold(10)                         // Refetch when queue drops below 10
+            )
+    )
+    .define_job::<SendEmail>()
+    .pg_pool(pg_pool)
+    .init()
+    .await?;
+```
+
+The Local Queue operates in several modes:
+- **Polling**: Actively fetching jobs from the database
+- **Waiting**: Jobs are cached locally, serving from cache
+- **TtlExpired**: Cache TTL expired, returning jobs to database
+
+Key benefits:
+- Reduces database round-trips by fetching jobs in batches
+- Configurable cache size and TTL
+- Automatic return of unclaimed jobs on shutdown or TTL expiry
+- Refetch delay prevents thundering herd on empty queues
+
 ### Lifecycle Hooks
 
 You can observe and intercept job lifecycle events using plugins that implement the `Plugin` trait. This is useful for logging, metrics, validation, and custom job handling logic.
@@ -395,6 +459,13 @@ Multiple plugins can be registered and they will all receive hook calls in the o
 | `JobPermanentlyFail` | Observer | Called when a job exceeds max attempts |
 | `CronTick` | Observer | Called on each cron scheduler tick |
 | `CronJobScheduled` | Observer | Called when a cron job is scheduled |
+| `LocalQueueInit` | Observer | Called when local queue is initialized |
+| `LocalQueueSetMode` | Observer | Called when local queue changes mode |
+| `LocalQueueGetJobsComplete` | Observer | Called after batch fetching jobs |
+| `LocalQueueReturnJobs` | Observer | Called when jobs are returned to database |
+| `LocalQueueRefetchDelayStart` | Observer | Called when refetch delay starts |
+| `LocalQueueRefetchDelayAbort` | Observer | Called when refetch delay is aborted |
+| `LocalQueueRefetchDelayExpired` | Observer | Called when refetch delay expires |
 | `BeforeJobRun` | Interceptor | Can skip, fail, or continue job execution |
 | `AfterJobRun` | Interceptor | Can modify the job result after execution |
 | `BeforeJobSchedule` | Interceptor | Can skip, fail, or transform job before scheduling |
