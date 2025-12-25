@@ -5,6 +5,8 @@ use indoc::formatdoc;
 use sqlx::{query_as, PgExecutor};
 use tracing::info;
 
+use super::task_identifiers::TaskDetails;
+
 #[derive(Debug, Clone)]
 pub struct RawJobSpec {
     pub identifier: String,
@@ -84,6 +86,7 @@ pub async fn add_jobs<'a>(
     executor: impl for<'e> PgExecutor<'e>,
     escaped_schema: &str,
     jobs: &[JobToAdd<'a>],
+    task_details: &TaskDetails,
     job_key_preserve_run_at: bool,
 ) -> Result<Vec<Job>, GraphileWorkerError> {
     if jobs.is_empty() {
@@ -137,8 +140,10 @@ pub async fn add_jobs<'a>(
 
     let result: Vec<Job> = db_jobs
         .into_iter()
-        .zip(jobs.iter())
-        .map(|(db_job, job)| Job::from_db_job(db_job, job.identifier.to_string()))
+        .map(|db_job| {
+            let identifier = task_details.get_or_empty(db_job.id(), db_job.task_id());
+            Job::from_db_job(db_job, identifier)
+        })
         .collect();
 
     Ok(result)

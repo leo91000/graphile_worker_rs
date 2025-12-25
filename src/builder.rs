@@ -1,6 +1,6 @@
 use crate::local_queue::LocalQueueConfig;
 use crate::runner::WorkerFn;
-use crate::sql::task_identifiers::get_tasks_details;
+use crate::sql::task_identifiers::{get_tasks_details, SharedTaskDetails};
 use crate::utils::escape_identifier;
 use crate::Worker;
 use futures::FutureExt;
@@ -20,7 +20,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::sync::{Notify, RwLock};
+use tokio::sync::Notify;
 
 /// Creates a shutdown signal that can be triggered manually via the returned notifier.
 fn manual_shutdown_signal_pair() -> (ShutdownSignal, Arc<Notify>) {
@@ -217,14 +217,13 @@ impl WorkerOptions {
 
         migrate(&pg_pool, &escaped_schema).await?;
 
-        let task_details = Arc::new(RwLock::new(
-            get_tasks_details(
-                &pg_pool,
-                &escaped_schema,
-                self.jobs.keys().cloned().collect(),
-            )
-            .await?,
-        ));
+        let task_details: SharedTaskDetails = get_tasks_details(
+            &pg_pool,
+            &escaped_schema,
+            self.jobs.keys().cloned().collect(),
+        )
+        .await?
+        .into();
 
         let mut random_bytes = [0u8; 9];
         rand::rng().fill_bytes(&mut random_bytes);

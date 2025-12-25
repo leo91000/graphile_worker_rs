@@ -14,6 +14,7 @@ readme = "README.md"
 [dependencies]
 graphile_worker_job = { path = "../job", version = "0.1.8" }
 graphile_worker_extensions = { path = "../extensions", version = "0.1.5" }
+graphile_worker_task_details = { path = "../task_details", version = "0.1.0" }
 getset.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true

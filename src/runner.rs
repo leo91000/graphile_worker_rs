@@ -7,7 +7,7 @@ use std::{collections::HashMap, time::Instant};
 
 use crate::errors::GraphileWorkerError;
 use crate::local_queue::LocalQueue;
-use crate::sql::{get_job::get_job, task_identifiers::TaskDetails};
+use crate::sql::{get_job::get_job, task_identifiers::SharedTaskDetails};
 use crate::streams::{job_signal_stream, job_signal_stream_with_receiver, job_stream};
 use crate::worker_utils::WorkerUtils;
 use futures::{try_join, StreamExt, TryStreamExt};
@@ -24,7 +24,7 @@ use graphile_worker_lifecycle_hooks::{
 };
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
-use tokio::sync::{Notify, RwLock};
+use tokio::sync::Notify;
 use tracing::{debug, error, info, trace, warn, Instrument, Span};
 
 use crate::builder::WorkerOptions;
@@ -65,8 +65,8 @@ pub struct Worker {
     pub(crate) pg_pool: sqlx::PgPool,
     /// Database schema name (properly escaped for SQL)
     pub(crate) escaped_schema: String,
-    /// Mapping of task IDs to their string identifiers (behind RwLock for refresh support)
-    pub(crate) task_details: Arc<RwLock<TaskDetails>>,
+    /// Mapping of task IDs to their string identifiers
+    pub(crate) task_details: SharedTaskDetails,
     /// List of job flags that this worker will not process
     pub(crate) forbidden_flags: Vec<String>,
     /// List of cron job definitions to be scheduled
@@ -284,7 +284,7 @@ impl Worker {
                 pg_pool: self.pg_pool.clone(),
                 escaped_schema: self.escaped_schema.clone(),
                 worker_id: self.worker_id.clone(),
-                task_details: Arc::clone(&self.task_details),
+                task_details: self.task_details.clone(),
                 poll_interval: self.poll_interval,
                 continuous: true,
                 shutdown_signal: Some(self.shutdown_signal.clone()),
@@ -680,6 +680,7 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
         job.clone(),
         worker.worker_id().clone(),
         worker.extensions().clone(),
+        worker.task_details().clone(),
     );
 
     // Get the future that will execute the task

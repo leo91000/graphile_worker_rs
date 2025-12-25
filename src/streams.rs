@@ -1,14 +1,14 @@
-use std::{num::NonZeroUsize, sync::Arc, time::Duration};
+use std::{num::NonZeroUsize, time::Duration};
 
 use futures::{stream, Stream};
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use sqlx::{postgres::PgListener, PgPool};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use tracing::error;
 
 use crate::{
     errors::Result,
-    sql::{get_job::get_job, task_identifiers::TaskDetails},
+    sql::{get_job::get_job, task_identifiers::SharedTaskDetails},
     Job,
 };
 
@@ -208,7 +208,7 @@ async fn job_signal_stream_internal(
 ///
 /// * `pg_pool` - PostgreSQL connection pool
 /// * `shutdown_signal` - Signal that completes when the worker should shut down
-/// * `task_details` - Mapping of task IDs to their string identifiers (behind RwLock for refresh support)
+/// * `task_details` - Shared mapping of task IDs to their string identifiers
 /// * `escaped_schema` - Database schema name (properly escaped for SQL)
 /// * `worker_id` - Unique identifier for this worker
 /// * `forbidden_flags` - List of job flags that this worker will not process
@@ -219,7 +219,7 @@ async fn job_signal_stream_internal(
 pub fn job_stream(
     pg_pool: PgPool,
     shutdown_signal: ShutdownSignal,
-    task_details: Arc<RwLock<TaskDetails>>,
+    task_details: SharedTaskDetails,
     escaped_schema: String,
     worker_id: String,
     forbidden_flags: Vec<String>,
