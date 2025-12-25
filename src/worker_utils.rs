@@ -183,6 +183,40 @@ impl WorkerUtils {
         }
     }
 
+    async fn prepare_batch_jobs<'a, I>(
+        &self,
+        jobs: I,
+    ) -> Result<(Vec<JobToAdd<'a>>, bool), GraphileWorkerError>
+    where
+        I: IntoIterator<Item = (&'a str, serde_json::Value, &'a JobSpec)>,
+    {
+        let jobs: Vec<_> = jobs.into_iter().collect();
+        let mut jobs_to_add = Vec::with_capacity(jobs.len());
+
+        for (identifier, mut payload, spec) in jobs {
+            add_tracing_info(&mut payload);
+
+            let payload = self
+                .invoke_before_job_schedule(identifier, payload, spec)
+                .await?;
+
+            jobs_to_add.push(JobToAdd {
+                identifier,
+                payload,
+                spec,
+            });
+        }
+
+        let job_key_preserve_run_at = jobs_to_add.iter().any(|j| {
+            j.spec
+                .job_key_mode()
+                .as_ref()
+                .is_some_and(|m| matches!(m, crate::JobKeyMode::PreserveRunAt))
+        });
+
+        Ok((jobs_to_add, job_key_preserve_run_at))
+    }
+
     /// Adds a job to the queue with type safety.
     ///
     /// Uses the TaskHandler trait to ensure that the job identifier
@@ -370,35 +404,13 @@ impl WorkerUtils {
         }
 
         let identifier = T::IDENTIFIER;
-        let mut payloads = Vec::with_capacity(jobs.len());
-
-        for (payload, spec) in jobs {
-            let mut payload_value = serde_json::to_value(payload.clone())?;
-            add_tracing_info(&mut payload_value);
-
-            let payload_value = self
-                .invoke_before_job_schedule(identifier, payload_value, spec)
-                .await?;
-
-            payloads.push(payload_value);
-        }
-
-        let jobs_to_add: Vec<JobToAdd<'_>> = jobs
-            .iter()
-            .zip(payloads.into_iter())
-            .map(|((_, spec), payload)| JobToAdd {
-                identifier,
-                payload,
-                spec,
-            })
-            .collect();
-
-        let job_key_preserve_run_at = jobs_to_add.iter().any(|j| {
-            j.spec
-                .job_key_mode()
-                .as_ref()
-                .is_some_and(|m| matches!(m, crate::JobKeyMode::PreserveRunAt))
+        let job_inputs = jobs.iter().map(|(payload, spec)| {
+            let payload_value = serde_json::to_value(payload.clone())?;
+            Ok((identifier, payload_value, *spec))
         });
+        let job_inputs: Result<Vec<_>, GraphileWorkerError> = job_inputs.collect();
+
+        let (jobs_to_add, job_key_preserve_run_at) = self.prepare_batch_jobs(job_inputs?).await?;
 
         let task_details = self.task_details.read().await;
 
@@ -466,35 +478,11 @@ impl WorkerUtils {
             return Ok(vec![]);
         }
 
-        let mut payloads = Vec::with_capacity(jobs.len());
-
-        for job in jobs {
-            let mut payload = job.payload.clone();
-            add_tracing_info(&mut payload);
-
-            let payload = self
-                .invoke_before_job_schedule(&job.identifier, payload, &job.spec)
-                .await?;
-
-            payloads.push(payload);
-        }
-
-        let jobs_to_add: Vec<JobToAdd<'_>> = jobs
+        let job_inputs = jobs
             .iter()
-            .zip(payloads.into_iter())
-            .map(|(job, payload)| JobToAdd {
-                identifier: &job.identifier,
-                payload,
-                spec: &job.spec,
-            })
-            .collect();
+            .map(|job| (job.identifier.as_str(), job.payload.clone(), &job.spec));
 
-        let job_key_preserve_run_at = jobs_to_add.iter().any(|j| {
-            j.spec
-                .job_key_mode()
-                .as_ref()
-                .is_some_and(|m| matches!(m, crate::JobKeyMode::PreserveRunAt))
-        });
+        let (jobs_to_add, job_key_preserve_run_at) = self.prepare_batch_jobs(job_inputs).await?;
 
         let unique_identifiers: Vec<String> = jobs
             .iter()
