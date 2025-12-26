@@ -1,3 +1,4 @@
+use crate::batcher::{CompletionBatcher, FailureBatcher};
 use crate::local_queue::LocalQueueConfig;
 use crate::runner::WorkerFn;
 use crate::sql::task_identifiers::{get_tasks_details, SharedTaskDetails};
@@ -131,6 +132,16 @@ pub struct WorkerOptions {
     /// Configuration for the local queue (batch-fetching jobs).
     /// When set, enables LocalQueue for improved throughput.
     local_queue_config: Option<LocalQueueConfig>,
+
+    /// Delay before flushing batched job completions.
+    /// When set, job completions are collected and flushed in batches.
+    /// This reduces SQL round trips and improves throughput.
+    complete_job_batch_delay: Option<Duration>,
+
+    /// Delay before flushing batched job failures.
+    /// When set, job failures are collected and flushed in batches.
+    /// Retryable failures are still processed individually.
+    fail_job_batch_delay: Option<Duration>,
 }
 
 /// Errors that can occur when initializing a worker.
@@ -248,6 +259,28 @@ impl WorkerOptions {
             None
         };
 
+        let completion_batcher = self.complete_job_batch_delay.map(|delay| {
+            CompletionBatcher::new(
+                delay,
+                pg_pool.clone(),
+                escaped_schema.clone(),
+                worker_id.clone(),
+                hooks.clone(),
+                shutdown_signal.clone(),
+            )
+        });
+
+        let failure_batcher = self.fail_job_batch_delay.map(|delay| {
+            FailureBatcher::new(
+                delay,
+                pg_pool.clone(),
+                escaped_schema.clone(),
+                worker_id.clone(),
+                hooks.clone(),
+                shutdown_signal.clone(),
+            )
+        });
+
         let worker = Worker {
             worker_id,
             concurrency,
@@ -264,6 +297,8 @@ impl WorkerOptions {
             extensions: self.extensions.into(),
             hooks,
             local_queue_config,
+            completion_batcher,
+            failure_batcher,
         };
 
         Ok(worker)
@@ -654,6 +689,54 @@ impl WorkerOptions {
     /// ```
     pub fn local_queue(mut self, config: LocalQueueConfig) -> Self {
         self.local_queue_config = Some(config);
+        self
+    }
+
+    /// Sets the delay before flushing batched job completions.
+    ///
+    /// When configured, job completions are collected in a batch and flushed
+    /// together after the specified delay. This reduces the number of SQL
+    /// round trips and can significantly improve throughput.
+    ///
+    /// # Arguments
+    ///
+    /// * `delay` - The duration to wait before flushing the batch.
+    ///   A small value like 1-5ms is recommended.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use graphile_worker::WorkerOptions;
+    /// # use std::time::Duration;
+    /// let worker = WorkerOptions::default()
+    ///     .complete_job_batch_delay(Duration::from_millis(5));
+    /// ```
+    pub fn complete_job_batch_delay(mut self, delay: Duration) -> Self {
+        self.complete_job_batch_delay = Some(delay);
+        self
+    }
+
+    /// Sets the delay before flushing batched job failures.
+    ///
+    /// When configured, permanent job failures are collected and flushed
+    /// together after the specified delay. Retryable failures are still
+    /// processed individually to ensure proper backoff timing.
+    ///
+    /// # Arguments
+    ///
+    /// * `delay` - The duration to wait before flushing the batch.
+    ///   A small value like 1-5ms is recommended.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use graphile_worker::WorkerOptions;
+    /// # use std::time::Duration;
+    /// let worker = WorkerOptions::default()
+    ///     .fail_job_batch_delay(Duration::from_millis(5));
+    /// ```
+    pub fn fail_job_batch_delay(mut self, delay: Duration) -> Self {
+        self.fail_job_batch_delay = Some(delay);
         self
     }
 }
