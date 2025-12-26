@@ -45,6 +45,9 @@ pub mod runner;
 /// LocalQueue for batch-fetching jobs to improve throughput
 pub mod local_queue;
 
+/// Batchers for batching job completions and failures to reduce SQL round trips
+pub(crate) mod batcher;
+
 /// SQL query implementations for interacting with the database
 pub mod sql;
 
