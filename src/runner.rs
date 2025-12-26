@@ -7,6 +7,7 @@ use std::{collections::HashMap, time::Instant};
 
 use chrono::Utc;
 
+use crate::batcher::{CompletionRequest, FailureRequest};
 use crate::errors::GraphileWorkerError;
 use crate::local_queue::LocalQueue;
 use crate::sql::{get_job::get_job, task_identifiers::SharedTaskDetails};
@@ -87,6 +88,12 @@ pub struct Worker {
     /// Optional local queue config (LocalQueue created lazily in run())
     #[getset(skip)]
     pub(crate) local_queue_config: Option<crate::local_queue::LocalQueueConfig>,
+    /// Optional completion batcher for batching job completions
+    #[getset(skip)]
+    pub(crate) completion_batcher: Option<crate::batcher::CompletionBatcher>,
+    /// Optional failure batcher for batching job failures
+    #[getset(skip)]
+    pub(crate) failure_batcher: Option<crate::batcher::FailureBatcher>,
 }
 
 /// Errors that can occur during worker runtime.
@@ -178,6 +185,13 @@ impl Worker {
         let crontab_scheduler = self.crontab_scheduler();
 
         let result = try_join!(crontab_scheduler, job_runner);
+
+        if let Some(batcher) = &self.completion_batcher {
+            batcher.await_shutdown().await;
+        }
+        if let Some(batcher) = &self.failure_batcher {
+            batcher.await_shutdown().await;
+        }
 
         let reason = match &result {
             Ok(_) => ShutdownReason::Graceful,
@@ -782,81 +796,120 @@ async fn release_job(
 ) -> Result<(), ReleaseJobError> {
     match job_result {
         Ok(_) => {
-            complete_job(
-                worker.pg_pool(),
-                &job,
-                worker.worker_id(),
-                worker.escaped_schema(),
-            )
-            .await
-            .map_err(|e| ReleaseJobError {
-                job_id: *job.id(),
-                source: e,
-            })?;
+            if let Some(batcher) = &worker.completion_batcher {
+                batcher
+                    .complete(CompletionRequest {
+                        job_id: *job.id(),
+                        has_queue: job.job_queue_id().is_some(),
+                        job,
+                        duration,
+                    })
+                    .await;
+            } else {
+                complete_job(
+                    worker.pg_pool(),
+                    &job,
+                    worker.worker_id(),
+                    worker.escaped_schema(),
+                )
+                .await
+                .map_err(|e| ReleaseJobError {
+                    job_id: *job.id(),
+                    source: e,
+                })?;
 
-            worker
-                .hooks
-                .emit(JobCompleteContext {
-                    job,
-                    worker_id: worker.worker_id().clone(),
-                    duration,
-                })
-                .await;
+                worker
+                    .hooks
+                    .emit(JobCompleteContext {
+                        job,
+                        worker_id: worker.worker_id().clone(),
+                        duration,
+                    })
+                    .await;
+            }
         }
         Err(e) => {
             let error_str = format!("{e:?}");
             let will_retry = job.attempts() < job.max_attempts();
 
-            if !will_retry {
-                error!(
-                    error = ?e,
-                    task_id = job.task_id(),
-                    payload = ?job.payload(),
-                    job_id = job.id(),
-                    "Job max attempts reached"
-                );
+            if let Some(batcher) = &worker.failure_batcher {
+                if !will_retry {
+                    error!(
+                        error = ?e,
+                        task_id = job.task_id(),
+                        payload = ?job.payload(),
+                        job_id = job.id(),
+                        "Job max attempts reached"
+                    );
+                } else {
+                    warn!(
+                        error = ?e,
+                        task_id = job.task_id(),
+                        payload = ?job.payload(),
+                        job_id = job.id(),
+                        "Failed task"
+                    );
+                }
 
-                worker
-                    .hooks
-                    .emit(JobPermanentlyFailContext {
-                        job: job.clone(),
-                        worker_id: worker.worker_id().clone(),
-                        error: error_str.clone(),
-                    })
-                    .await;
-            } else {
-                warn!(
-                    error = ?e,
-                    task_id = job.task_id(),
-                    payload = ?job.payload(),
-                    job_id = job.id(),
-                    "Failed task"
-                );
-
-                worker
-                    .hooks
-                    .emit(JobFailContext {
-                        job: job.clone(),
-                        worker_id: worker.worker_id().clone(),
-                        error: error_str.clone(),
+                batcher
+                    .fail(FailureRequest {
+                        job,
+                        error: error_str,
                         will_retry,
                     })
                     .await;
-            }
+            } else {
+                if !will_retry {
+                    error!(
+                        error = ?e,
+                        task_id = job.task_id(),
+                        payload = ?job.payload(),
+                        job_id = job.id(),
+                        "Job max attempts reached"
+                    );
 
-            fail_job(
-                worker.pg_pool(),
-                &job,
-                worker.escaped_schema(),
-                worker.worker_id(),
-                &error_str,
-                None,
-            )
-            .await
-            .map_err(|e| ReleaseJobError {
-                job_id: *job.id(),
-                source: e,
-            })?;
+                    worker
+                        .hooks
+                        .emit(JobPermanentlyFailContext {
+                            job: job.clone(),
+                            worker_id: worker.worker_id().clone(),
+                            error: error_str.clone(),
+                        })
+                        .await;
+                } else {
+                    warn!(
+                        error = ?e,
+                        task_id = job.task_id(),
+                        payload = ?job.payload(),
+                        job_id = job.id(),
+                        "Failed task"
+                    );
+
+                    worker
+                        .hooks
+                        .emit(JobFailContext {
+                            job: job.clone(),
+                            worker_id: worker.worker_id().clone(),
+                            error: error_str.clone(),
+                            will_retry,
+                        })
+                        .await;
+                }
+
+                fail_job(
+                    worker.pg_pool(),
+                    &job,
+                    worker.escaped_schema(),
+                    worker.worker_id(),
+                    &error_str,
+                    None,
+                )
+                .await
+                .map_err(|e| ReleaseJobError {
+                    job_id: *job.id(),
+                    source: e,
+                })?;
+            }
         }
     }
 
