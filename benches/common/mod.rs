@@ -75,7 +75,7 @@ pub async fn create_bench_database() -> BenchDatabase {
     let bench_options = pg_conn_options.database(&db_name);
 
     let bench_pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(8)
+        .max_connections(100) // Support high concurrency benchmarks
         .connect_with(bench_options)
         .await
         .expect("Failed to connect to bench database");
