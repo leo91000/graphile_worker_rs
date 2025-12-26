@@ -118,3 +118,7 @@ harness = false
 [[bench]]
 name = "throughput"
 harness = false
+
+[[bench]]
+name = "perf_test"
+harness = false
