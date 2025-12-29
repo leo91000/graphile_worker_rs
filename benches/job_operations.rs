@@ -5,12 +5,11 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 use graphile_worker::{JobSpec, RawJobSpec};
 use tokio::runtime::Runtime;
 
-async fn setup_worker(db: &BenchDatabase) {
-    let _worker = db
-        .create_worker_options()
-        .init()
+async fn setup_db(db: &BenchDatabase) {
+    db.worker_utils()
+        .migrate()
         .await
-        .expect("Failed to init worker");
+        .expect("Failed to migrate");
 }
 
 fn bench_add_raw_job(c: &mut Criterion) {
@@ -18,7 +17,7 @@ fn bench_add_raw_job(c: &mut Criterion) {
 
     let db = rt.block_on(async {
         let db = create_bench_database().await;
-        setup_worker(&db).await;
+        setup_db(&db).await;
         db
     });
 
@@ -52,7 +51,7 @@ fn bench_add_raw_jobs_batch(c: &mut Criterion) {
 
     let db = rt.block_on(async {
         let db = create_bench_database().await;
-        setup_worker(&db).await;
+        setup_db(&db).await;
         db
     });
 
@@ -97,7 +96,7 @@ fn bench_job_insertion_throughput(c: &mut Criterion) {
 
     let db = rt.block_on(async {
         let db = create_bench_database().await;
-        setup_worker(&db).await;
+        setup_db(&db).await;
         db
     });
 
