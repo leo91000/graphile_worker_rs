@@ -149,8 +149,6 @@ async fn job_signal_stream_internal(
             if n.get() > 1 {
                 let remaining_yields = n.get() - 1;
                 f.yield_n = Some((NonZeroUsize::new(remaining_yields).unwrap(), source));
-            } else {
-                f.yield_n = None;
             }
             return Some((source, f));
         }

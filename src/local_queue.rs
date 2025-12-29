@@ -51,15 +51,21 @@ fn calculate_retry_delay(attempt: u32, options: &RetryOptions) -> Duration {
     Duration::from_millis(jittered as u64)
 }
 
-#[derive(Debug, Clone, Default, Builder)]
-#[builder(build_fn(private, name = "build_internal"), default, pattern = "owned")]
+#[derive(Debug, Clone, Builder)]
+#[builder(build_fn(private, name = "build_internal"), pattern = "owned")]
 pub struct RefetchDelayConfig {
     #[builder(default = "Duration::from_millis(100)")]
     pub duration: Duration,
-    #[builder(default)]
+    #[builder(default = "0")]
     pub threshold: usize,
     #[builder(default, setter(strip_option))]
     pub max_abort_threshold: Option<usize>,
+}
+
+impl Default for RefetchDelayConfig {
+    fn default() -> Self {
+        Self::builder().build()
+    }
 }
 
 impl RefetchDelayConfig {
@@ -90,8 +96,8 @@ impl RefetchDelayConfigBuilder {
     }
 }
 
-#[derive(Debug, Clone, Default, Builder)]
-#[builder(build_fn(private, name = "build_internal"), default, pattern = "owned")]
+#[derive(Debug, Clone, Builder)]
+#[builder(build_fn(private, name = "build_internal"), pattern = "owned")]
 pub struct LocalQueueConfig {
     #[builder(default = "DEFAULT_LOCAL_QUEUE_SIZE")]
     pub size: usize,
@@ -99,6 +105,12 @@ pub struct LocalQueueConfig {
     pub ttl: Duration,
     #[builder(default, setter(strip_option))]
     pub refetch_delay: Option<RefetchDelayConfig>,
+}
+
+impl Default for LocalQueueConfig {
+    fn default() -> Self {
+        Self::builder().build()
+    }
 }
 
 impl LocalQueueConfig {
