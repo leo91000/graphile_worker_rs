@@ -365,7 +365,6 @@ impl Worker {
                             .await;
 
                         run_and_release_job(job.clone(), self, &source).await?;
-                        debug!(job_id = job.id(), "Job processed");
                     }
 
                     Ok(())
@@ -610,7 +609,7 @@ async fn run_and_release_job(
         }
     };
 
-    release_job(job_result, job, worker, duration)
+    release_job(job_result, job.clone(), worker, duration)
         .await
         .map_err(|e| {
             error!("Release job error : {:?}", e);
