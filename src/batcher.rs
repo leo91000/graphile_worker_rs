@@ -10,7 +10,7 @@ use sqlx::PgPool;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio::time::{timeout_at, Instant};
-use tracing::{error, trace};
+use tracing::{error, trace, warn};
 
 use crate::sql::fail_job::fail_job;
 use crate::Job;
@@ -25,6 +25,9 @@ pub struct CompletionRequest {
 pub struct CompletionBatcher {
     tx: mpsc::Sender<CompletionRequest>,
     task: tokio::sync::Mutex<Option<JoinHandle<()>>>,
+    pg_pool: PgPool,
+    escaped_schema: String,
+    worker_id: String,
 }
 
 impl CompletionBatcher {
@@ -41,9 +44,9 @@ impl CompletionBatcher {
         let task = tokio::spawn(completion_batcher_task(
             rx,
             delay,
-            pg_pool,
-            escaped_schema,
-            worker_id,
+            pg_pool.clone(),
+            escaped_schema.clone(),
+            worker_id.clone(),
             hooks,
             shutdown_signal,
         ));
@@ -51,12 +54,17 @@ impl CompletionBatcher {
         Self {
             tx,
             task: tokio::sync::Mutex::new(Some(task)),
+            pg_pool,
+            escaped_schema,
+            worker_id,
         }
     }
 
     pub async fn complete(&self, req: CompletionRequest) {
         if let Err(e) = self.tx.send(req).await {
-            error!(error = ?e, "Failed to send completion request to batcher");
+            warn!("Batcher closed, completing job directly");
+            let req = e.0;
+            complete_job_direct(&req, &self.pg_pool, &self.escaped_schema, &self.worker_id).await;
         }
     }
 
@@ -217,6 +225,49 @@ async fn flush_batch(
     }
 }
 
+async fn complete_job_direct(
+    req: &CompletionRequest,
+    pg_pool: &PgPool,
+    escaped_schema: &str,
+    worker_id: &str,
+) {
+    if req.has_queue {
+        let sql = formatdoc!(
+            r#"
+                WITH j AS (
+                    DELETE FROM {escaped_schema}._private_jobs
+                    WHERE id = $1
+                    RETURNING *
+                )
+                UPDATE {escaped_schema}._private_job_queues AS job_queues
+                SET locked_by = NULL, locked_at = NULL
+                FROM j
+                WHERE job_queues.id = j.job_queue_id AND job_queues.locked_by = $2::text
+            "#
+        );
+
+        if let Err(e) = sqlx::query(&sql)
+            .bind(req.job_id)
+            .bind(worker_id)
+            .execute(pg_pool)
+            .await
+        {
+            error!(error = ?e, job_id = req.job_id, "Failed to complete job directly (with queue)");
+        }
+    } else {
+        let sql = formatdoc!(
+            r#"
+                DELETE FROM {escaped_schema}._private_jobs
+                WHERE id = $1
+            "#
+        );
+
+        if let Err(e) = sqlx::query(&sql).bind(req.job_id).execute(pg_pool).await {
+            error!(error = ?e, job_id = req.job_id, "Failed to complete job directly");
+        }
+    }
+}
+
 pub struct FailureRequest {
     pub job: Arc<Job>,
     pub error: String,
@@ -226,6 +277,9 @@ pub struct FailureRequest {
 pub struct FailureBatcher {
     tx: mpsc::Sender<FailureRequest>,
     task: tokio::sync::Mutex<Option<JoinHandle<()>>>,
+    pg_pool: PgPool,
+    escaped_schema: String,
+    worker_id: String,
 }
 
 impl FailureBatcher {
@@ -242,9 +296,9 @@ impl FailureBatcher {
         let task = tokio::spawn(failure_batcher_task(
             rx,
             delay,
-            pg_pool,
-            escaped_schema,
-            worker_id,
+            pg_pool.clone(),
+            escaped_schema.clone(),
+            worker_id.clone(),
             hooks,
             shutdown_signal,
         ));
@@ -252,12 +306,17 @@ impl FailureBatcher {
         Self {
             tx,
             task: tokio::sync::Mutex::new(Some(task)),
+            pg_pool,
+            escaped_schema,
+            worker_id,
         }
     }
 
     pub async fn fail(&self, req: FailureRequest) {
         if let Err(e) = self.tx.send(req).await {
-            error!(error = ?e, "Failed to send failure request to batcher");
+            warn!("Batcher closed, failing job directly");
+            let req = e.0;
+            fail_job_direct(&req, &self.pg_pool, &self.escaped_schema, &self.worker_id).await;
         }
     }
 
@@ -399,5 +458,25 @@ async fn flush_failure_batch(
                 })
                 .await;
         }
+    }
+}
+
+async fn fail_job_direct(
+    req: &FailureRequest,
+    pg_pool: &PgPool,
+    escaped_schema: &str,
+    worker_id: &str,
+) {
+    if let Err(e) = fail_job(
+        pg_pool,
+        &req.job,
+        escaped_schema,
+        worker_id,
+        &req.error,
+        None,
+    )
+    .await
+    {
+        error!(error = ?e, job_id = ?req.job.id(), "Failed to fail job directly");
     }
 }
