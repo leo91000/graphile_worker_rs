@@ -17,8 +17,13 @@ tls-rustls = ["sqlx/tls-rustls"]
 tls-native-tls = ["sqlx/tls-native-tls"]
 
 [dependencies]
+<<<<<<< Updated upstream
 graphile_worker_crontab_types = { path = "../crontab_types", version = "0.5.10" }
 graphile_worker_lifecycle_hooks = { path = "../lifecycle_hooks", version = "0.2.1" }
+=======
+graphile_worker_crontab_types = { path = "../crontab_types", version = "0.5.11" }
+graphile_worker_lifecycle_hooks = { path = "../lifecycle_hooks", version = "0.3.0" }
+>>>>>>> Stashed changes
 graphile_worker_shutdown_signal = { path = "../shutdown_signal", version = "0.3.9" }
 chrono = { workspace = true }
 sqlx = { workspace = true }

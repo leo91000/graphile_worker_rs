@@ -1,9 +1,30 @@
 # Changelog
 
+<<<<<<< Updated upstream
 ## [0.11.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.10.0...graphile_worker-v0.11.0) - 2025-12-25
 
 ### Other
 
+=======
+## [0.10.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.10.0...graphile_worker-v0.10.1) - 2025-12-30
+
+### Added
+
+- add batch job completion and failure support
+- add Criterion benchmarks for job operations and throughput
+
+### Fixed
+
+- fallback to direct DB call when batcher is closed
+- permanent failures now properly unlock jobs and queues
+- LocalQueueConfig::default() using wrong TTL value
+
+### Other
+
+- *(deps)* update all non-major dependencies
+- use migrate() directly in benchmark setup
+- perfs
+>>>>>>> Stashed changes
 - update flake.lock
 - rename CLAUDE.md to AGENTS.md with symlink
 - add CONTRIBUTING.md
