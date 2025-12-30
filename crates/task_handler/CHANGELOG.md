@@ -1,10 +1,18 @@
 # Changelog
 
+<<<<<<< Updated upstream
 ## [0.5.11](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_handler-v0.5.10...graphile_worker_task_handler-v0.5.11) - 2025-12-25
 
 ### Other
 
 - updated the following local packages: graphile_worker_ctx
+=======
+## [0.5.11](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_handler-v0.5.10...graphile_worker_task_handler-v0.5.11) - 2025-12-30
+
+### Other
+
+- update Cargo.toml dependencies
+>>>>>>> Stashed changes
 
 ## [0.5.10](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_handler-v0.5.9...graphile_worker_task_handler-v0.5.10) - 2025-12-24
 

@@ -6,7 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+<<<<<<< Updated upstream
 ## [0.4.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_ctx-v0.3.2...graphile_worker_ctx-v0.4.0) - 2025-12-25
+=======
+## [0.4.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_ctx-v0.3.2...graphile_worker_ctx-v0.4.0) - 2025-12-30
+>>>>>>> Stashed changes
 
 ### Other
 

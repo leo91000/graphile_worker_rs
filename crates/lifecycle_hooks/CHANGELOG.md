@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+<<<<<<< Updated upstream
 ## [0.2.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_lifecycle_hooks-v0.2.0...graphile_worker_lifecycle_hooks-v0.2.1) - 2025-12-25
+=======
+## [0.3.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_lifecycle_hooks-v0.2.0...graphile_worker_lifecycle_hooks-v0.3.0) - 2025-12-30
+>>>>>>> Stashed changes
 
 ### Other
 

@@ -1,6 +1,10 @@
 # Changelog
 
+<<<<<<< Updated upstream
 ## [0.7.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.6.2...graphile_worker_crontab_runner-v0.7.0) - 2025-12-25
+=======
+## [0.7.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.6.2...graphile_worker_crontab_runner-v0.7.0) - 2025-12-30
+>>>>>>> Stashed changes
 
 ### Other
 
