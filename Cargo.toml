@@ -68,8 +68,8 @@ opentelemetry_0_31 = [
 
 [dependencies]
 graphile_worker_crontab_runner = { path = "./crates/crontab_runner", version = "0.7.0", default-features = false }
-graphile_worker_crontab_types = { path = "./crates/crontab_types", version = "0.5.10" }
-graphile_worker_crontab_parser = { path = "./crates/crontab_parser", version = "0.5.14" }
+graphile_worker_crontab_types = { path = "./crates/crontab_types", version = "0.5.11" }
+graphile_worker_crontab_parser = { path = "./crates/crontab_parser", version = "0.5.15" }
 graphile_worker_job = { path = "./crates/job", version = "0.1.10" }
 graphile_worker_ctx = { path = "./crates/ctx", version = "0.4.0" }
 graphile_worker_migrations = { path = "./crates/migrations", version = "0.4.11", default-features = false }
