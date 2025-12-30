@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -366,41 +365,7 @@ async fn flush_failure_batch(
 
     trace!(batch_size = batch.len(), "Flushing failure batch");
 
-    let (permanent, retryable): (Vec<_>, Vec<_>) = batch.iter().partition(|r| !r.will_retry);
-
-    if !permanent.is_empty() {
-        let mut by_error: HashMap<&str, Vec<i64>> = HashMap::new();
-        for req in &permanent {
-            by_error
-                .entry(req.error.as_str())
-                .or_default()
-                .push(*req.job.id());
-        }
-
-        for (error_msg, ids) in by_error {
-            let sql = formatdoc!(
-                r#"
-                    UPDATE {escaped_schema}._private_jobs AS jobs
-                    SET
-                        last_error = $2::text,
-                        attempts = max_attempts,
-                        updated_at = now()
-                    WHERE id = ANY($1::bigint[])
-                "#
-            );
-
-            if let Err(e) = sqlx::query(&sql)
-                .bind(&ids)
-                .bind(error_msg)
-                .execute(pg_pool)
-                .await
-            {
-                error!(error = ?e, "Failed to permanently fail jobs");
-            }
-        }
-    }
-
-    for req in &retryable {
+    for req in batch {
         if let Err(e) = fail_job(
             pg_pool,
             &req.job,
