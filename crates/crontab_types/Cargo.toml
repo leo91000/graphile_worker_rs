@@ -1,6 +1,6 @@
 [package]
 name = "graphile_worker_crontab_types"
-version = "0.5.10"
+version = "0.5.11"
 edition = "2021"
 license-file = "LICENSE.md"
 description = "Crontab types package for graphile_worker, a high performance Rust/PostgreSQL job queue"

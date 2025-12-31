@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.11.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.11.0...graphile_worker-v0.11.1) - 2025-12-31
+
+### Other
+
+- *(deps)* update rust crate syn to 2.0.112
+
 ## [0.11.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.10.0...graphile_worker-v0.11.0) - 2025-12-25
 
 ### Other
