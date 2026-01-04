@@ -16,7 +16,7 @@ members = ["crates/*"]
 
 [workspace.dependencies]
 tokio = { version = "1.49.0" }
-tokio-util = { version = "0.7.17" }
+tokio-util = { version = "0.7.18" }
 serde = { version = "1.0.228", features = ["derive"] }
 json5 = "1.3.0"
 nom = "8.0.0"
@@ -37,7 +37,7 @@ once_cell = "1.21.3"
 anyhow = "1.0.100"
 cfg-if = "1.0.4"
 futures = "0.3.31"
-syn = "2.0.112"
+syn = "2.0.113"
 quote = "1.0.42"
 indoc = "2.0.7"
 derive_builder = "0.20.2"
