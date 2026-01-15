@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.11.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.11.1...graphile_worker-v0.11.2) - 2026-01-15
+
+### Other
+
+- *(deps)* update rust crate chrono to 0.4.43 ([#367](https://github.com/leo91000/graphile_worker_rs/pull/367))
+- *(deps)* update rust crate tracing-opentelemetry to 0.32.1 ([#366](https://github.com/leo91000/graphile_worker_rs/pull/366))
+- *(deps)* update rust crate syn to 2.0.114 ([#365](https://github.com/leo91000/graphile_worker_rs/pull/365))
+- *(deps)* update rust crate serde_json to 1.0.149 ([#364](https://github.com/leo91000/graphile_worker_rs/pull/364))
+- *(deps)* update rust crate quote to 1.0.43 ([#363](https://github.com/leo91000/graphile_worker_rs/pull/363))
+- *(deps)* update all non-major dependencies ([#361](https://github.com/leo91000/graphile_worker_rs/pull/361))
+- *(deps)* update rust crate tokio to 1.49.0 ([#360](https://github.com/leo91000/graphile_worker_rs/pull/360))
+
 ## [0.11.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.11.0...graphile_worker-v0.11.1) - 2025-12-31
 
 ### Other
