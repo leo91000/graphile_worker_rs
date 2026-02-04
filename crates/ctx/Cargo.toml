@@ -1,6 +1,6 @@
 [package]
 name = "graphile_worker_ctx"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 license-file = "LICENSE.md"
 description = "Worker Context package for graphile_worker, a high performance Rust/PostgreSQL job queue"
@@ -12,9 +12,9 @@ categories = []
 readme = "README.md"
 
 [dependencies]
-graphile_worker_job = { path = "../job", version = "0.1.10" }
+graphile_worker_job = { path = "../job", version = "0.1.11" }
 graphile_worker_extensions = { path = "../extensions", version = "0.1.5" }
-graphile_worker_task_details = { path = "../task_details", version = "0.1.0" }
+graphile_worker_task_details = { path = "../task_details", version = "0.1.1" }
 derive_builder.workspace = true
 getset.workspace = true
 serde_json.workspace = true

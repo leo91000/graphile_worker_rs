@@ -1,6 +1,6 @@
 [package]
 name = "graphile_worker_task_details"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license-file = "LICENSE.md"
 description = "Task details for graphile_worker, mapping task IDs to identifiers"
