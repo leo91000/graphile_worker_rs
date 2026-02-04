@@ -1421,7 +1421,7 @@ impl Plugin for LocalQueueHooksPlugin {
                 counters.get_jobs_complete.fetch_add(1, Ordering::SeqCst);
                 counters
                     .last_jobs_count
-                    .store(ctx.jobs_count, Ordering::SeqCst);
+                    .fetch_max(ctx.jobs_count, Ordering::SeqCst);
             }
         });
 
