@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.3](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.11.2...graphile_worker-v0.11.3) - 2026-02-07
+
+### Other
+
+- *(deps)* update rust crate json5 to 1.3.1 ([#375](https://github.com/leo91000/graphile_worker_rs/pull/375))
+- *(deps)* update rust crate anyhow to 1.0.101 ([#374](https://github.com/leo91000/graphile_worker_rs/pull/374))
+
 ## [0.11.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.11.1...graphile_worker-v0.11.2) - 2026-02-04
 
 ### Fixed
