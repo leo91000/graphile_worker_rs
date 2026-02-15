@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.13](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.12...graphile_worker_migrations-v0.4.13) - 2026-02-15
+
+### Fixed
+
+- eliminate add_jobs key race with transaction locks
+
 ## [0.4.12](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.11...graphile_worker_migrations-v0.4.12) - 2026-02-04
 
 ### Other

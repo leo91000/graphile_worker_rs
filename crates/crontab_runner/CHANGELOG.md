@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.3](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.7.2...graphile_worker_crontab_runner-v0.7.3) - 2026-02-15
+
+### Other
+
+- updated the following local packages: graphile_worker_crontab_types, graphile_worker_lifecycle_hooks
+
 ## [0.7.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.7.1...graphile_worker_crontab_runner-v0.7.2) - 2026-02-04
 
 ### Other
