@@ -18,6 +18,7 @@ pub mod m000015;
 pub mod m000016;
 pub mod m000017;
 pub mod m000018;
+pub mod m000019;
 
 #[derive(Default)]
 pub struct GraphileWorkerMigration {
@@ -86,4 +87,5 @@ pub const GRAPHILE_WORKER_MIGRATIONS: &[GraphileWorkerMigration] = &[
     m000016::M000016_MIGRATION,
     m000017::M000017_MIGRATION,
     m000018::M000018_MIGRATION,
+    m000019::M000019_MIGRATION,
 ];
