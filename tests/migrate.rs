@@ -28,7 +28,7 @@ async fn migration_install_schema_and_second_migration_does_not_harm() {
 
         let migrations = test_db.get_migrations().await;
 
-        assert_eq!(migrations.len(), 18);
+        assert_eq!(migrations.len(), 19);
         let m0 = &migrations[0];
         assert_eq!(m0.id, 1);
 
@@ -83,8 +83,8 @@ async fn migration_can_take_over_from_pre_existing_migrations_table() {
         // Assert migrations table exists and has relevant entries
         let migration_rows = test_db.get_migrations().await;
         assert!(
-            migration_rows.len() >= 18,
-            "There should be at least 18 migrations"
+            migration_rows.len() >= 19,
+            "There should be at least 19 migrations"
         );
         let migration_2 = migration_rows.iter().find(|m| m.id == 2).unwrap();
         assert!(!migration_2.breaking, "Migration 2 should not be breaking");
@@ -151,7 +151,7 @@ async fn aborts_if_database_is_more_up_to_date_than_current_worker() {
             matches!(
                 migration_result,
                 Err(MigrateError::IncompatbleRevision { latest_migration, latest_breaking_migration, highest_migration })
-                if latest_migration == 999999 && latest_breaking_migration == 999999 && highest_migration == 18
+                if latest_migration == 999999 && latest_breaking_migration == 999999 && highest_migration == 19
             ),
             "Expected migration to abort due to database being more up to date than current worker"
         );
