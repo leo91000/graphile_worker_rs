@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.11](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_shutdown_signal-v0.3.10...graphile_worker_shutdown_signal-v0.3.11) - 2026-02-25
+
+### Fixed
+
+- update repository links in all crate manifests
+
 ## [0.3.10](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_shutdown_signal-v0.3.9...graphile_worker_shutdown_signal-v0.3.10) - 2026-02-04
 
 ### Other

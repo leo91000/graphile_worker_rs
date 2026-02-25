@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.11.4](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.11.3...graphile_worker-v0.11.4) - 2026-02-25
+
+### Fixed
+
+- add missing copyright notice to MIT license
+- update repository links in all crate manifests
+
+### Other
+
+- add project copyright notice to license
+- Fix repository link
+
 ## [0.11.3](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.11.2...graphile_worker-v0.11.3) - 2026-02-15
 
 ### Fixed
