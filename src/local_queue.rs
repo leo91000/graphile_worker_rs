@@ -13,7 +13,7 @@ use graphile_worker_lifecycle_hooks::{
     LocalQueueRefetchDelayStartContext, LocalQueueReturnJobsContext, LocalQueueSetModeContext,
 };
 use graphile_worker_shutdown_signal::ShutdownSignal;
-use rand::Rng;
+use rand::RngExt;
 use sqlx::PgPool;
 use thiserror::Error;
 use tokio::sync::{Mutex, Notify, RwLock};

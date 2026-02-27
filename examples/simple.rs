@@ -3,7 +3,7 @@ use std::str::FromStr;
 use chrono::{offset::Utc, Duration};
 use graphile_worker::{IntoTaskHandlerResult, JobSpecBuilder, WorkerContext, WorkerOptions};
 use graphile_worker_task_handler::TaskHandler;
-use rand::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgConnectOptions;
 use tracing_subscriber::{

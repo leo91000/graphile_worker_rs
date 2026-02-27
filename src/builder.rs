@@ -13,7 +13,7 @@ use graphile_worker_lifecycle_hooks::{Event, HookRegistry, Plugin};
 use graphile_worker_migrations::migrate;
 use graphile_worker_shutdown_signal::{shutdown_signal, ShutdownSignal};
 use graphile_worker_task_handler::{run_task_from_worker_ctx, TaskHandler};
-use rand::RngCore;
+use rand::Rng;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::collections::HashMap;
