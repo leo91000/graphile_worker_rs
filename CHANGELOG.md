@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.11.5](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.11.4...graphile_worker-v0.11.5) - 2026-03-06
+
+### Fixed
+
+- update rand trait imports for 0.10
+
+### Other
+
+- *(deps)* update rust crate uuid to 1.22.0 ([#388](https://github.com/leo91000/graphile_worker_rs/pull/388))
+- *(deps)* update rust crate quote to 1.0.45 ([#387](https://github.com/leo91000/graphile_worker_rs/pull/387))
+- *(deps)* update rust crate tokio to 1.50.0 ([#386](https://github.com/leo91000/graphile_worker_rs/pull/386))
+- *(deps)* update all non-major dependencies
+- Update LICENSE.md
+
 ## [0.11.4](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.11.3...graphile_worker-v0.11.4) - 2026-02-25
 
 ### Fixed
