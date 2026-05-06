@@ -36,10 +36,19 @@ Add the library to your project:
 cargo add graphile_worker
 ```
 
-Tokio is the default runtime. To use async-std instead:
+Tokio is the default runtime:
+
+```toml
+graphile_worker = { version = "0.11.4", features = ["tls-rustls"] }
+```
+
+To use async-std instead, disable default features and enable `runtime-async-std`.
+Applications using `#[async_std::main]` also need async-std's `attributes`
+feature:
 
 ```toml
 graphile_worker = { version = "0.11.4", default-features = false, features = ["runtime-async-std", "tls-rustls"] }
+async-std = { version = "1", features = ["attributes"] }
 ```
 
 ## Getting Started
@@ -75,11 +84,27 @@ impl TaskHandler for SendEmail {
 
 ### 2. Configure and Run the Worker
 
-Set up the worker with your configuration options and run it:
+Set up the worker with your configuration options and run it. Use the entrypoint
+for the runtime you enabled:
 
 ```rust,ignore
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    run_worker().await
+}
+```
+
+```rust,ignore
+#[async_std::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    run_worker().await
+}
+```
+
+The worker setup itself is runtime-neutral:
+
+```rust,ignore
+async fn run_worker() -> Result<(), Box<dyn std::error::Error>> {
     // Create a PostgreSQL connection pool
     let pg_pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
@@ -109,23 +134,25 @@ owns the shutdown lifecycle, disable the built-in listeners and call
 `Worker::request_shutdown()` when your orchestrator asks the worker to stop:
 
 ```rust,ignore
+use futures::FutureExt;
+
 let worker = graphile_worker::WorkerOptions::default()
     .listen_os_shutdown_signals(false) // prevent installing Ctrl+C handlers
     // ... other configuration
     .init()
     .await?;
 
-tokio::pin! {
-    let run_loop = worker.run();
-}
+let run_loop = worker.run().fuse();
+let shutdown = on_shutdown().fuse();
+futures::pin_mut!(run_loop, shutdown);
 
-tokio::select! {
+futures::select_biased! {
     // Main worker loop
-    result = &mut run_loop => result?,
+    result = run_loop => result?,
     // Notify the worker when the host framework wants to stop
-    () = on_shutdown() => {
+    () = shutdown => {
         worker.request_shutdown();
-        (&mut run_loop).await; // drain gracefully before returning
+        run_loop.await?; // drain gracefully before returning
     }
 }
 ```

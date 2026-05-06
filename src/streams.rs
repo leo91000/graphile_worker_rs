@@ -167,6 +167,7 @@ async fn job_signal_stream_internal(
             futures::pin_mut!(interval, pg_listener, internal, shutdown);
 
             futures::select_biased! {
+                _ = shutdown => NextSignal::Shutdown,
                 _ = interval => NextSignal::Source(StreamSource::Polling),
                 _ = pg_listener => NextSignal::Source(StreamSource::PgListener),
                 res = internal => {
@@ -176,7 +177,6 @@ async fn job_signal_stream_internal(
                         NextSignal::InternalClosed
                     }
                 },
-                _ = shutdown => NextSignal::Shutdown,
             }
         } else {
             let interval = f.interval.tick().fuse();
@@ -185,9 +185,9 @@ async fn job_signal_stream_internal(
             futures::pin_mut!(interval, pg_listener, shutdown);
 
             futures::select_biased! {
+                _ = shutdown => NextSignal::Shutdown,
                 _ = interval => NextSignal::Source(StreamSource::Polling),
                 _ = pg_listener => NextSignal::Source(StreamSource::PgListener),
-                _ = shutdown => NextSignal::Shutdown,
             }
         };
 

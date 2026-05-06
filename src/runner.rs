@@ -460,6 +460,7 @@ impl Worker {
 
 impl Drop for Worker {
     fn drop(&mut self) {
+        // Safety net for a Worker that is constructed and dropped without request_shutdown being called.
         self.shutdown_notifier.notify_one();
     }
 }
