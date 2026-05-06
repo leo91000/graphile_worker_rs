@@ -20,7 +20,7 @@ runtime-async-std = ["dep:async-std"]
 async-channel = "2.5.0"
 async-lock = "3.4.2"
 async-std = { version = "1.13.2", optional = true }
-event-listener = "5.4.0"
+event-listener = "5.4.1"
 futures.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "time"], optional = true }
