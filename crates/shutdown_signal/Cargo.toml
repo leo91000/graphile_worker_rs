@@ -18,8 +18,8 @@ tracing = { workspace = true }
 async-signal = "0.2.14"
 
 [target.'cfg(windows)'.dependencies]
-event-listener = "5.4.0"
-windows-sys = { version = "0.61.1", features = ["Win32_System_Console"] }
+event-listener = "5.4.1"
+windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
 
 [features]
 default = ["runtime-tokio"]
