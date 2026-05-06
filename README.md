@@ -40,6 +40,8 @@ Tokio is the default runtime:
 
 ```toml
 graphile_worker = { version = "0.11.4", features = ["tls-rustls"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+futures = "0.3"
 ```
 
 To use async-std instead, disable default features and enable `runtime-async-std`.
@@ -49,6 +51,7 @@ feature:
 ```toml
 graphile_worker = { version = "0.11.4", default-features = false, features = ["runtime-async-std", "tls-rustls"] }
 async-std = { version = "1", features = ["attributes"] }
+futures = "0.3"
 ```
 
 ## Getting Started
