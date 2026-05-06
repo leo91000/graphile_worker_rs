@@ -10,8 +10,13 @@ repository = "https://github.com/leo91000/graphile_worker_rs"
 readme = "README.md"
 
 [dependencies]
-tokio = { workspace = true, features = ["sync"] }
+graphile_worker_runtime = { path = "../runtime", version = "0.1.0", default-features = false }
 tracing.workspace = true
+
+[features]
+default = ["runtime-tokio"]
+runtime-tokio = ["graphile_worker_runtime/runtime-tokio"]
+runtime-async-std = ["graphile_worker_runtime/runtime-async-std"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }

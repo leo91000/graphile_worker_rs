@@ -13,6 +13,7 @@ categories = []
 
 [workspace]
 members = ["crates/*"]
+resolver = "2"
 
 [workspace.dependencies]
 tokio = { version = "1.52.2" }
@@ -29,7 +30,6 @@ sqlx = { version = "0.8.6", features = [
   "postgres",
   "json",
   "macros",
-  "runtime-tokio",
 ], default-features = false }
 getset = "0.1.6"
 tracing = "0.1.44"
@@ -43,7 +43,31 @@ indoc = "2.0.7"
 derive_builder = "0.20.2"
 
 [features]
-default = ["tls-rustls"]
+default = ["runtime-tokio", "tls-rustls"]
+runtime-tokio = [
+  "sqlx/runtime-tokio",
+  "graphile_worker_crontab_runner/runtime-tokio",
+  "graphile_worker_job/runtime-tokio",
+  "graphile_worker_ctx/runtime-tokio",
+  "graphile_worker_migrations/runtime-tokio",
+  "graphile_worker_lifecycle_hooks/runtime-tokio",
+  "graphile_worker_task_handler/runtime-tokio",
+  "graphile_worker_task_details/runtime-tokio",
+  "graphile_worker_shutdown_signal/runtime-tokio",
+  "graphile_worker_runtime/runtime-tokio",
+]
+runtime-async-std = [
+  "sqlx/runtime-async-std",
+  "graphile_worker_crontab_runner/runtime-async-std",
+  "graphile_worker_job/runtime-async-std",
+  "graphile_worker_ctx/runtime-async-std",
+  "graphile_worker_migrations/runtime-async-std",
+  "graphile_worker_lifecycle_hooks/runtime-async-std",
+  "graphile_worker_task_handler/runtime-async-std",
+  "graphile_worker_task_details/runtime-async-std",
+  "graphile_worker_shutdown_signal/runtime-async-std",
+  "graphile_worker_runtime/runtime-async-std",
+]
 tls-native-tls = [
   "sqlx/tls-native-tls",
   "graphile_worker_crontab_runner/tls-native-tls",
@@ -70,15 +94,16 @@ opentelemetry_0_31 = [
 graphile_worker_crontab_runner = { path = "./crates/crontab_runner", version = "0.7.4", default-features = false }
 graphile_worker_crontab_types = { path = "./crates/crontab_types", version = "0.5.14" }
 graphile_worker_crontab_parser = { path = "./crates/crontab_parser", version = "0.5.18" }
-graphile_worker_job = { path = "./crates/job", version = "0.1.12" }
-graphile_worker_ctx = { path = "./crates/ctx", version = "0.4.2" }
+graphile_worker_job = { path = "./crates/job", version = "0.1.12", default-features = false }
+graphile_worker_ctx = { path = "./crates/ctx", version = "0.4.2", default-features = false }
 graphile_worker_migrations = { path = "./crates/migrations", version = "0.4.14", default-features = false }
-graphile_worker_task_handler = { path = "./crates/task_handler", version = "0.5.14" }
-graphile_worker_shutdown_signal = { path = "./crates/shutdown_signal", version = "0.3.11" }
+graphile_worker_task_handler = { path = "./crates/task_handler", version = "0.5.14", default-features = false }
+graphile_worker_shutdown_signal = { path = "./crates/shutdown_signal", version = "0.3.11", default-features = false }
 graphile_worker_extensions = { path = "./crates/extensions", version = "0.1.6" }
-graphile_worker_lifecycle_hooks = { path = "./crates/lifecycle_hooks", version = "0.2.5" }
+graphile_worker_lifecycle_hooks = { path = "./crates/lifecycle_hooks", version = "0.2.5", default-features = false }
 graphile_worker_job_spec = { path = "./crates/job_spec", version = "0.1.2" }
-graphile_worker_task_details = { path = "./crates/task_details", version = "0.1.2" }
+graphile_worker_task_details = { path = "./crates/task_details", version = "0.1.2", default-features = false }
+graphile_worker_runtime = { path = "./crates/runtime", version = "0.1.0", default-features = false }
 chrono = { version = "0.4.44", features = ["serde"] }
 futures = "0.3.32"
 getset = "0.1.6"
@@ -90,7 +115,6 @@ sqlx = { version = "0.8.6", features = [
   "json",
   "chrono",
   "macros",
-  "runtime-tokio",
 ], default-features = false }
 thiserror = "2.0.18"
 tracing = "0.1.44"
@@ -106,7 +130,7 @@ tracing-opentelemetry-30 = { package = "tracing-opentelemetry", version = "0.31.
 tracing-opentelemetry = { version = "0.32.1", optional = true }
 
 [dev-dependencies]
-tokio = { version = "1.52.2", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.52.2", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 uuid = { version = "1.23.1", features = ["v7"] }
 criterion = { version = "0.8.2", features = ["async_tokio"] }

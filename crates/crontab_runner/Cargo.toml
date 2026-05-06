@@ -12,14 +12,27 @@ categories = []
 readme = "README.md"
 
 [features]
-default = ["tls-rustls"]
+default = ["runtime-tokio", "tls-rustls"]
+runtime-tokio = [
+  "sqlx/runtime-tokio",
+  "graphile_worker_runtime/runtime-tokio",
+  "graphile_worker_lifecycle_hooks/runtime-tokio",
+  "graphile_worker_shutdown_signal/runtime-tokio",
+]
+runtime-async-std = [
+  "sqlx/runtime-async-std",
+  "graphile_worker_runtime/runtime-async-std",
+  "graphile_worker_lifecycle_hooks/runtime-async-std",
+  "graphile_worker_shutdown_signal/runtime-async-std",
+]
 tls-rustls = ["sqlx/tls-rustls"]
 tls-native-tls = ["sqlx/tls-native-tls"]
 
 [dependencies]
 graphile_worker_crontab_types = { path = "../crontab_types", version = "0.5.14" }
-graphile_worker_lifecycle_hooks = { path = "../lifecycle_hooks", version = "0.2.5" }
-graphile_worker_shutdown_signal = { path = "../shutdown_signal", version = "0.3.11" }
+graphile_worker_lifecycle_hooks = { path = "../lifecycle_hooks", version = "0.2.5", default-features = false }
+graphile_worker_shutdown_signal = { path = "../shutdown_signal", version = "0.3.11", default-features = false }
+graphile_worker_runtime = { path = "../runtime", version = "0.1.0", default-features = false }
 chrono = { workspace = true }
 sqlx = { workspace = true }
 thiserror = { workspace = true }
@@ -28,7 +41,7 @@ serde_json = { workspace = true }
 getset = { workspace = true }
 tracing = { workspace = true }
 once_cell = { workspace = true }
-tokio = { workspace = true, features = ["time"] }
+futures = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "sync"] }

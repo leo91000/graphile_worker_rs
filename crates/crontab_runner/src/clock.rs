@@ -1,4 +1,5 @@
 use chrono::{DateTime, Local};
+use graphile_worker_runtime as runtime;
 use std::future::Future;
 
 pub trait Clock: Send + Sync {
@@ -18,25 +19,24 @@ impl Clock for SystemClock {
     async fn sleep_until(&self, datetime: DateTime<Local>) {
         let dur = datetime - Local::now();
         let Ok(std_dur) = dur.to_std() else { return };
-        tokio::time::sleep(std_dur).await;
+        runtime::sleep(std_dur).await;
     }
 }
 
 pub mod mock {
     use super::*;
     use std::sync::{Arc, Mutex};
-    use tokio::sync::Notify;
 
     pub struct MockClock {
         current_time: Arc<Mutex<DateTime<Local>>>,
-        wake_notify: Arc<Notify>,
+        wake_notify: Arc<runtime::Notify>,
     }
 
     impl MockClock {
         pub fn new(initial_time: DateTime<Local>) -> Self {
             Self {
                 current_time: Arc::new(Mutex::new(initial_time)),
-                wake_notify: Arc::new(Notify::new()),
+                wake_notify: Arc::new(runtime::Notify::new()),
             }
         }
 

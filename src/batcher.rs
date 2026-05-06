@@ -1,15 +1,15 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use futures::FutureExt;
 use graphile_worker_lifecycle_hooks::{
     HookRegistry, JobCompleteContext, JobFailContext, JobPermanentlyFailContext,
 };
+use graphile_worker_runtime as runtime;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use indoc::formatdoc;
 use sqlx::PgPool;
-use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
-use tokio::time::{timeout_at, Instant};
+use std::time::Instant;
 use tracing::{error, trace, warn};
 
 use crate::sql::fail_job::fail_job;
@@ -23,8 +23,8 @@ pub struct CompletionRequest {
 }
 
 pub struct CompletionBatcher {
-    tx: mpsc::Sender<CompletionRequest>,
-    task: tokio::sync::Mutex<Option<JoinHandle<()>>>,
+    tx: runtime::Sender<CompletionRequest>,
+    task: runtime::Mutex<Option<runtime::JoinHandle<()>>>,
     pg_pool: PgPool,
     escaped_schema: String,
     worker_id: String,
@@ -39,9 +39,9 @@ impl CompletionBatcher {
         hooks: Arc<HookRegistry>,
         shutdown_signal: ShutdownSignal,
     ) -> Self {
-        let (tx, rx) = mpsc::channel::<CompletionRequest>(1024);
+        let (tx, rx) = runtime::channel(1024);
 
-        let task = tokio::spawn(completion_batcher_task(
+        let task = runtime::spawn(completion_batcher_task(
             rx,
             delay,
             pg_pool.clone(),
@@ -53,7 +53,7 @@ impl CompletionBatcher {
 
         Self {
             tx,
-            task: tokio::sync::Mutex::new(Some(task)),
+            task: runtime::Mutex::new(Some(task)),
             pg_pool,
             escaped_schema,
             worker_id,
@@ -78,7 +78,7 @@ impl CompletionBatcher {
 }
 
 async fn completion_batcher_task(
-    mut rx: mpsc::Receiver<CompletionRequest>,
+    rx: runtime::Receiver<CompletionRequest>,
     delay: Duration,
     pg_pool: PgPool,
     escaped_schema: String,
@@ -89,23 +89,22 @@ async fn completion_batcher_task(
     let mut batch: Vec<CompletionRequest> = Vec::new();
 
     loop {
-        let first = tokio::select! {
-            biased;
-            _ = &mut shutdown_signal => {
-                drain_and_flush(
-                    &mut rx,
-                    &mut batch,
-                    &pg_pool,
-                    &escaped_schema,
-                    &worker_id,
-                    &hooks,
-                ).await;
-                return;
-            }
-            item = rx.recv() => item,
-        };
+        let first = recv_or_shutdown(&rx, &mut shutdown_signal).await;
 
-        let Some(first) = first else {
+        if first.shutdown {
+            drain_and_flush(
+                &rx,
+                &mut batch,
+                &pg_pool,
+                &escaped_schema,
+                &worker_id,
+                &hooks,
+            )
+            .await;
+            return;
+        }
+
+        let Some(first) = first.item else {
             flush_batch(&batch, &pg_pool, &escaped_schema, &worker_id, &hooks).await;
             return;
         };
@@ -114,11 +113,14 @@ async fn completion_batcher_task(
 
         let deadline = Instant::now() + delay;
         loop {
-            tokio::select! {
-                biased;
-                _ = &mut shutdown_signal => {
+            let wait_item = runtime::timeout_at(deadline, rx.recv()).fuse();
+            let shutdown = (&mut shutdown_signal).fuse();
+            futures::pin_mut!(wait_item, shutdown);
+
+            let result = futures::select_biased! {
+                _ = shutdown => {
                     drain_and_flush(
-                        &mut rx,
+                        &rx,
                         &mut batch,
                         &pg_pool,
                         &escaped_schema,
@@ -127,16 +129,16 @@ async fn completion_batcher_task(
                     ).await;
                     return;
                 }
-                result = timeout_at(deadline, rx.recv()) => {
-                    match result {
-                        Ok(Some(item)) => batch.push(item),
-                        Ok(None) => {
-                            flush_batch(&batch, &pg_pool, &escaped_schema, &worker_id, &hooks).await;
-                            return;
-                        }
-                        Err(_) => break,
-                    }
+                result = wait_item => result,
+            };
+
+            match result {
+                Ok(Ok(item)) => batch.push(item),
+                Ok(Err(_)) => {
+                    flush_batch(&batch, &pg_pool, &escaped_schema, &worker_id, &hooks).await;
+                    return;
                 }
+                Err(_) => break,
             }
         }
 
@@ -145,8 +147,27 @@ async fn completion_batcher_task(
     }
 }
 
+struct RecvOrShutdown<T> {
+    item: Option<T>,
+    shutdown: bool,
+}
+
+async fn recv_or_shutdown<T>(
+    rx: &runtime::Receiver<T>,
+    shutdown_signal: &mut ShutdownSignal,
+) -> RecvOrShutdown<T> {
+    let recv = rx.recv().fuse();
+    let shutdown = shutdown_signal.fuse();
+    futures::pin_mut!(recv, shutdown);
+
+    futures::select_biased! {
+        _ = shutdown => RecvOrShutdown { item: None, shutdown: true },
+        item = recv => RecvOrShutdown { item: item.ok(), shutdown: false },
+    }
+}
+
 async fn drain_and_flush(
-    rx: &mut mpsc::Receiver<CompletionRequest>,
+    rx: &runtime::Receiver<CompletionRequest>,
     batch: &mut Vec<CompletionRequest>,
     pg_pool: &PgPool,
     escaped_schema: &str,
@@ -275,8 +296,8 @@ pub struct FailureRequest {
 }
 
 pub struct FailureBatcher {
-    tx: mpsc::Sender<FailureRequest>,
-    task: tokio::sync::Mutex<Option<JoinHandle<()>>>,
+    tx: runtime::Sender<FailureRequest>,
+    task: runtime::Mutex<Option<runtime::JoinHandle<()>>>,
     pg_pool: PgPool,
     escaped_schema: String,
     worker_id: String,
@@ -291,9 +312,9 @@ impl FailureBatcher {
         hooks: Arc<HookRegistry>,
         shutdown_signal: ShutdownSignal,
     ) -> Self {
-        let (tx, rx) = mpsc::channel::<FailureRequest>(1024);
+        let (tx, rx) = runtime::channel(1024);
 
-        let task = tokio::spawn(failure_batcher_task(
+        let task = runtime::spawn(failure_batcher_task(
             rx,
             delay,
             pg_pool.clone(),
@@ -305,7 +326,7 @@ impl FailureBatcher {
 
         Self {
             tx,
-            task: tokio::sync::Mutex::new(Some(task)),
+            task: runtime::Mutex::new(Some(task)),
             pg_pool,
             escaped_schema,
             worker_id,
@@ -330,7 +351,7 @@ impl FailureBatcher {
 }
 
 async fn failure_batcher_task(
-    mut rx: mpsc::Receiver<FailureRequest>,
+    rx: runtime::Receiver<FailureRequest>,
     delay: Duration,
     pg_pool: PgPool,
     escaped_schema: String,
@@ -341,23 +362,22 @@ async fn failure_batcher_task(
     let mut batch: Vec<FailureRequest> = Vec::new();
 
     loop {
-        let first = tokio::select! {
-            biased;
-            _ = &mut shutdown_signal => {
-                drain_and_flush_failures(
-                    &mut rx,
-                    &mut batch,
-                    &pg_pool,
-                    &escaped_schema,
-                    &worker_id,
-                    &hooks,
-                ).await;
-                return;
-            }
-            item = rx.recv() => item,
-        };
+        let first = recv_or_shutdown(&rx, &mut shutdown_signal).await;
 
-        let Some(first) = first else {
+        if first.shutdown {
+            drain_and_flush_failures(
+                &rx,
+                &mut batch,
+                &pg_pool,
+                &escaped_schema,
+                &worker_id,
+                &hooks,
+            )
+            .await;
+            return;
+        }
+
+        let Some(first) = first.item else {
             flush_failure_batch(&batch, &pg_pool, &escaped_schema, &worker_id, &hooks).await;
             return;
         };
@@ -366,11 +386,14 @@ async fn failure_batcher_task(
 
         let deadline = Instant::now() + delay;
         loop {
-            tokio::select! {
-                biased;
-                _ = &mut shutdown_signal => {
+            let wait_item = runtime::timeout_at(deadline, rx.recv()).fuse();
+            let shutdown = (&mut shutdown_signal).fuse();
+            futures::pin_mut!(wait_item, shutdown);
+
+            let result = futures::select_biased! {
+                _ = shutdown => {
                     drain_and_flush_failures(
-                        &mut rx,
+                        &rx,
                         &mut batch,
                         &pg_pool,
                         &escaped_schema,
@@ -379,16 +402,17 @@ async fn failure_batcher_task(
                     ).await;
                     return;
                 }
-                result = timeout_at(deadline, rx.recv()) => {
-                    match result {
-                        Ok(Some(item)) => batch.push(item),
-                        Ok(None) => {
-                            flush_failure_batch(&batch, &pg_pool, &escaped_schema, &worker_id, &hooks).await;
-                            return;
-                        }
-                        Err(_) => break,
-                    }
+                result = wait_item => result,
+            };
+
+            match result {
+                Ok(Ok(item)) => batch.push(item),
+                Ok(Err(_)) => {
+                    flush_failure_batch(&batch, &pg_pool, &escaped_schema, &worker_id, &hooks)
+                        .await;
+                    return;
                 }
+                Err(_) => break,
             }
         }
 
@@ -398,7 +422,7 @@ async fn failure_batcher_task(
 }
 
 async fn drain_and_flush_failures(
-    rx: &mut mpsc::Receiver<FailureRequest>,
+    rx: &runtime::Receiver<FailureRequest>,
     batch: &mut Vec<FailureRequest>,
     pg_pool: &PgPool,
     escaped_schema: &str,

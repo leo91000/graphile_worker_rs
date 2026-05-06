@@ -1,0 +1,26 @@
+[package]
+name = "graphile_worker_runtime"
+version = "0.1.0"
+edition = "2021"
+license-file = "LICENSE.md"
+description = "Async runtime compatibility package for graphile_worker"
+homepage = "https://docs.rs/graphile_worker_runtime"
+documentation = "https://docs.rs/graphile_worker_runtime"
+repository = "https://github.com/leo91000/graphile_worker_rs"
+keywords = []
+categories = []
+readme = "README.md"
+
+[features]
+default = ["runtime-tokio"]
+runtime-tokio = ["dep:tokio"]
+runtime-async-std = ["dep:async-std"]
+
+[dependencies]
+async-channel = "2.5.0"
+async-lock = "3.4.2"
+async-std = { version = "1.13.2", optional = true }
+event-listener = "5.4.0"
+futures.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt", "time"], optional = true }

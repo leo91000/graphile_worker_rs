@@ -11,7 +11,12 @@ repository = "https://github.com/leo91000/graphile_worker_rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-signal = "0.2.14"
 cfg-if = { workspace = true }
 futures = { workspace = true }
-tokio = { workspace = true, features = ["signal", "macros"] }
 tracing = { workspace = true }
+
+[features]
+default = ["runtime-tokio"]
+runtime-tokio = []
+runtime-async-std = []

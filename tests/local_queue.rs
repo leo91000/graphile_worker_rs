@@ -2,6 +2,7 @@ use graphile_worker::{
     IntoTaskHandlerResult, JobSpec, LocalQueueConfig, RefetchDelayConfig, TaskHandler, Worker,
     WorkerContext,
 };
+use graphile_worker_runtime::sleep as runtime_sleep;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -166,7 +167,7 @@ impl TaskHandler for ShutdownJob {
     const IDENTIFIER: &'static str = "shutdown_job";
 
     async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-        sleep(Duration::from_secs(10)).await;
+        runtime_sleep(Duration::from_secs(10)).await;
         SHUTDOWN_CALL_COUNT.increment().await;
     }
 }
@@ -396,7 +397,7 @@ impl TaskHandler for TtlExpiryJob {
     const IDENTIFIER: &'static str = "ttl_expiry_job";
 
     async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-        sleep(Duration::from_secs(30)).await;
+        runtime_sleep(Duration::from_secs(30)).await;
         TTL_CALL_COUNT.increment().await;
     }
 }
@@ -631,7 +632,7 @@ impl TaskHandler for ConcurrentDistributionJob {
     const IDENTIFIER: &'static str = "concurrent_distribution_job";
 
     async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-        sleep(Duration::from_millis(100)).await;
+        runtime_sleep(Duration::from_millis(100)).await;
         CONCURRENT_CALL_COUNT.increment().await;
     }
 }
@@ -703,7 +704,7 @@ impl TaskHandler for ModeTransitionJob {
     const IDENTIFIER: &'static str = "mode_transition_job";
 
     async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-        sleep(Duration::from_millis(50)).await;
+        runtime_sleep(Duration::from_millis(50)).await;
         MODE_TRANSITION_CALL_COUNT.increment().await;
     }
 }
@@ -1079,7 +1080,7 @@ impl TaskHandler for ReleaseWaitsJob {
 
     async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
         RELEASE_WAITS_CALL_COUNT.increment().await;
-        sleep(Duration::from_millis(200)).await;
+        runtime_sleep(Duration::from_millis(200)).await;
         RELEASE_WAITS_COMPLETED.increment().await;
     }
 }

@@ -13,7 +13,7 @@ use crate::local_queue::LocalQueue;
 use crate::sql::{get_job::get_job, task_identifiers::SharedTaskDetails};
 use crate::streams::{job_signal_stream, job_signal_stream_with_receiver, job_stream};
 use crate::worker_utils::WorkerUtils;
-use futures::{try_join, StreamExt, TryStreamExt};
+use futures::{try_join, FutureExt, StreamExt, TryStreamExt};
 use getset::Getters;
 use graphile_worker_crontab_runner::{cron_main, ScheduleCronJobError};
 use graphile_worker_crontab_types::Crontab;
@@ -25,9 +25,9 @@ use graphile_worker_lifecycle_hooks::{
     JobFailContext, JobFetchContext, JobPermanentlyFailContext, JobStartContext, ShutdownReason,
     WorkerShutdownContext, WorkerStartContext,
 };
+use graphile_worker_runtime as runtime;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
-use tokio::sync::Notify;
 use tracing::{debug, error, info, trace, warn, Instrument, Span};
 
 use crate::builder::WorkerOptions;
@@ -80,7 +80,7 @@ pub struct Worker {
     pub(crate) shutdown_signal: ShutdownSignal,
     /// Internal notifier used to request shutdown programmatically
     #[getset(skip)]
-    pub(crate) shutdown_notifier: Arc<Notify>,
+    pub(crate) shutdown_notifier: Arc<runtime::Notify>,
     /// Extensions that can modify worker behavior
     pub(crate) extensions: ReadOnlyExtensions,
     /// Lifecycle hooks for observing and intercepting worker events
@@ -297,7 +297,7 @@ impl Worker {
     /// - `Err(WorkerRuntimeError)` if an error occurs during execution
     fn create_local_queue(&self) -> Option<(LocalQueue, crate::streams::JobSignalReceiver)> {
         if let Some(ref config) = self.local_queue_config {
-            let (tx, rx) = tokio::sync::mpsc::channel(self.concurrency * 2);
+            let (tx, rx) = runtime::channel(self.concurrency * 2);
             let queue = LocalQueue::new(crate::local_queue::LocalQueueParams {
                 config: config.clone(),
                 pg_pool: self.pg_pool.clone(),
@@ -454,7 +454,13 @@ impl Worker {
     /// Wakes all internal listeners waiting on the shutdown signal so that
     /// `run`/`run_once` loops exit once in-flight work has finished.
     pub fn request_shutdown(&self) {
-        self.shutdown_notifier.notify_waiters();
+        self.shutdown_notifier.notify_one();
+    }
+}
+
+impl Drop for Worker {
+    fn drop(&mut self) {
+        self.shutdown_notifier.notify_one();
     }
 }
 
@@ -629,7 +635,7 @@ enum RunJobError {
     FnNotFound(String),
     /// The task handler panicked during execution
     #[error("Task failed execution to complete : {0}")]
-    TaskPanic(#[from] tokio::task::JoinError),
+    TaskPanic(#[from] runtime::JoinError),
     /// The task handler returned an error string
     #[error("Task returned the following error : {0}")]
     TaskError(String),
@@ -675,7 +681,7 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
     let task_details_guard = worker.task_details.read().await;
     let task_identifier = task_details_guard
         .get(task_id)
-        .ok_or_else(|| RunJobError::IdentifierNotFound(*task_id))?
+        .ok_or(RunJobError::IdentifierNotFound(*task_id))?
         .clone();
     drop(task_details_guard);
 
@@ -710,8 +716,7 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
     // Start timing the execution
     let start = Instant::now();
 
-    // Spawn the task on a separate Tokio task
-    let job_task = tokio::spawn(task_fut.instrument(span));
+    let job_task = runtime::spawn(task_fut.instrument(span));
     let abort_handle = job_task.abort_handle();
 
     // Set up a shutdown handler that waits for the shutdown signal
@@ -719,11 +724,15 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
     let mut shutdown_signal = worker.shutdown_signal().clone();
     let shutdown_timeout = async {
         (&mut shutdown_signal).await;
-        tokio::time::sleep(Duration::from_secs(5)).await;
+        runtime::sleep(Duration::from_secs(5)).await;
     };
 
+    let job_task = job_task.fuse();
+    let shutdown_timeout = shutdown_timeout.fuse();
+    futures::pin_mut!(job_task, shutdown_timeout);
+
     // Wait for either the task to complete or the shutdown timeout to occur
-    tokio::select! {
+    futures::select_biased! {
         res = job_task => {
             match res {
                 Err(e) => Err(RunJobError::TaskPanic(e)),

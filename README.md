@@ -36,6 +36,12 @@ Add the library to your project:
 cargo add graphile_worker
 ```
 
+Tokio is the default runtime. To use async-std instead:
+
+```toml
+graphile_worker = { version = "0.11.4", default-features = false, features = ["runtime-async-std", "tls-rustls"] }
+```
+
 ## Getting Started
 
 ### 1. Define a Task
@@ -543,4 +549,3 @@ This library is a Rust port of the excellent [Graphile Worker](https://github.co
 ## License
 
 MIT License - See [LICENSE.md](LICENSE.md)
-

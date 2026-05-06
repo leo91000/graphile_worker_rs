@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 
 use backfill::register_and_backfill_items;
 use chrono::prelude::*;
+use futures::FutureExt;
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_lifecycle_hooks::{CronJobScheduledContext, CronTickContext, HookRegistry};
 use graphile_worker_shutdown_signal::ShutdownSignal;
@@ -104,10 +105,18 @@ impl<'a, E, C: Clock> CronRunner<'a, E, C> {
         let mut ts = round_date_minute(start, true);
 
         loop {
-            tokio::select! {
-                _ = self.clock.sleep_until(ts) => (),
-                _ = (&mut shutdown_signal) => break Ok(()),
+            let sleep = self.clock.sleep_until(ts).fuse();
+            let shutdown = (&mut shutdown_signal).fuse();
+            futures::pin_mut!(sleep, shutdown);
+
+            let should_shutdown = futures::select_biased! {
+                _ = sleep => false,
+                _ = shutdown => true,
             };
+
+            if should_shutdown {
+                break Ok(());
+            }
 
             let current_ts = round_date_minute(self.clock.now(), false);
             let ts_delta = current_ts - ts;
