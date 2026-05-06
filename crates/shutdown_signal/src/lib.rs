@@ -1,6 +1,5 @@
 use std::pin::Pin;
 
-use cfg_if::cfg_if;
 use futures::{future::Shared, FutureExt};
 use std::future::Future;
 use tracing::info;
@@ -28,60 +27,68 @@ use windows_sys::Win32::System::Console::{
 #[cfg(windows)]
 use windows_sys::core::BOOL;
 
-cfg_if! {
-    if #[cfg(windows)] {
-        static WINDOWS_SHUTDOWN_EVENT: Event = Event::new();
-        static WINDOWS_SHUTDOWN_RECEIVED: AtomicBool = AtomicBool::new(false);
-        static WINDOWS_HANDLER_REGISTERED: OnceLock<()> = OnceLock::new();
+#[cfg(not(any(unix, windows)))]
+compile_error!("Your OS does not support shutdown signal ! Are you targeting wasm ?");
 
-        const WINDOWS_SIGNAL_HANDLED: BOOL = 1;
-        const WINDOWS_SIGNAL_UNHANDLED: BOOL = 0;
+#[cfg(windows)]
+static WINDOWS_SHUTDOWN_EVENT: Event = Event::new();
+#[cfg(windows)]
+static WINDOWS_SHUTDOWN_RECEIVED: AtomicBool = AtomicBool::new(false);
+#[cfg(windows)]
+static WINDOWS_HANDLER_REGISTERED: OnceLock<()> = OnceLock::new();
 
-        unsafe extern "system" fn console_ctrl_handler(ctrl_type: u32) -> BOOL {
-            match ctrl_type {
-                CTRL_C_EVENT | CTRL_CLOSE_EVENT | CTRL_LOGOFF_EVENT | CTRL_SHUTDOWN_EVENT => {
-                    WINDOWS_SHUTDOWN_RECEIVED.store(true, Ordering::Release);
-                    WINDOWS_SHUTDOWN_EVENT.notify(usize::MAX);
-                    WINDOWS_SIGNAL_HANDLED
-                }
-                _ => WINDOWS_SIGNAL_UNHANDLED,
-            }
-        }
+#[cfg(windows)]
+const WINDOWS_SIGNAL_HANDLED: BOOL = 1;
+#[cfg(windows)]
+const WINDOWS_SIGNAL_UNHANDLED: BOOL = 0;
 
-        fn register_windows_shutdown_handler() {
-            WINDOWS_HANDLER_REGISTERED.get_or_init(|| {
-                let result = unsafe { SetConsoleCtrlHandler(Some(console_ctrl_handler), WINDOWS_SIGNAL_HANDLED) };
-                if result == WINDOWS_SIGNAL_UNHANDLED {
-                    panic!("Failed to listen to windows shutdown signal");
-                }
-            });
+#[cfg(windows)]
+unsafe extern "system" fn console_ctrl_handler(ctrl_type: u32) -> BOOL {
+    match ctrl_type {
+        CTRL_C_EVENT | CTRL_CLOSE_EVENT | CTRL_LOGOFF_EVENT | CTRL_SHUTDOWN_EVENT => {
+            WINDOWS_SHUTDOWN_RECEIVED.store(true, Ordering::Release);
+            WINDOWS_SHUTDOWN_EVENT.notify(usize::MAX);
+            WINDOWS_SIGNAL_HANDLED
         }
-
-        async fn raw_shutdown_signal() {
-            register_windows_shutdown_handler();
-            if WINDOWS_SHUTDOWN_RECEIVED.load(Ordering::Acquire) {
-                return;
-            }
-            let listener = WINDOWS_SHUTDOWN_EVENT.listen();
-            if WINDOWS_SHUTDOWN_RECEIVED.load(Ordering::Acquire) {
-                return;
-            }
-            listener.await;
-        }
-    } else if #[cfg(unix)] {
-        async fn raw_shutdown_signal() {
-            let mut signals = Signals::new([
-                Signal::Usr2,
-                Signal::Int,
-                Signal::Pipe,
-                Signal::Term,
-                Signal::Hup,
-            ]).expect("Failed to listen to unix shutdown signal");
-            let _ = signals.next().await;
-        }
-    } else {
-        compile_error!("Your OS does not support shutdown signal ! Are you targeting wasm ?");
+        _ => WINDOWS_SIGNAL_UNHANDLED,
     }
+}
+
+#[cfg(windows)]
+fn register_windows_shutdown_handler() {
+    WINDOWS_HANDLER_REGISTERED.get_or_init(|| {
+        let result =
+            unsafe { SetConsoleCtrlHandler(Some(console_ctrl_handler), WINDOWS_SIGNAL_HANDLED) };
+        if result == WINDOWS_SIGNAL_UNHANDLED {
+            panic!("Failed to listen to windows shutdown signal");
+        }
+    });
+}
+
+#[cfg(windows)]
+async fn raw_shutdown_signal() {
+    register_windows_shutdown_handler();
+    if WINDOWS_SHUTDOWN_RECEIVED.load(Ordering::Acquire) {
+        return;
+    }
+    let listener = WINDOWS_SHUTDOWN_EVENT.listen();
+    if WINDOWS_SHUTDOWN_RECEIVED.load(Ordering::Acquire) {
+        return;
+    }
+    listener.await;
+}
+
+#[cfg(unix)]
+async fn raw_shutdown_signal() {
+    let mut signals = Signals::new([
+        Signal::Usr2,
+        Signal::Int,
+        Signal::Pipe,
+        Signal::Term,
+        Signal::Hup,
+    ])
+    .expect("Failed to listen to unix shutdown signal");
+    let _ = signals.next().await;
 }
 
 /// A shareable future that completes when a shutdown signal is received.
