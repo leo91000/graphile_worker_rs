@@ -110,8 +110,8 @@ impl<'a, E, C: Clock> CronRunner<'a, E, C> {
             futures::pin_mut!(sleep, shutdown);
 
             let should_shutdown = futures::select_biased! {
-                _ = sleep => false,
                 _ = shutdown => true,
+                _ = sleep => false,
             };
 
             if should_shutdown {

@@ -11,9 +11,11 @@ repository = "https://github.com/leo91000/graphile_worker_rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-signal = "0.2.14"
 futures = { workspace = true }
 tracing = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+async-signal = "0.2.14"
 
 [target.'cfg(windows)'.dependencies]
 event-listener = "5.4.0"
