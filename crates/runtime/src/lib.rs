@@ -1,6 +1,6 @@
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Mutex as StdMutex, MutexGuard};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
@@ -200,17 +200,18 @@ impl Interval {
 
 #[derive(Default)]
 pub struct Notify {
-    state: StdMutex<NotifyState>,
+    state: AtomicUsize,
     event: Event,
 }
 
-#[derive(Default)]
-struct NotifyState {
-    permit: bool,
-    waiters: usize,
-    pending: usize,
-    broadcast: usize,
-}
+const NOTIFY_COUNTER_BITS: usize = (usize::BITS as usize - 1) / 3;
+const NOTIFY_COUNTER_MASK: usize = (1 << NOTIFY_COUNTER_BITS) - 1;
+const NOTIFY_PERMIT: usize = 1;
+const NOTIFY_WAITERS_SHIFT: usize = 1;
+const NOTIFY_PENDING_SHIFT: usize = NOTIFY_WAITERS_SHIFT + NOTIFY_COUNTER_BITS;
+const NOTIFY_BROADCAST_SHIFT: usize = NOTIFY_PENDING_SHIFT + NOTIFY_COUNTER_BITS;
+const NOTIFY_WAITER: usize = 1 << NOTIFY_WAITERS_SHIFT;
+const NOTIFY_PENDING: usize = 1 << NOTIFY_PENDING_SHIFT;
 
 impl Notify {
     pub fn new() -> Self {
@@ -219,14 +220,13 @@ impl Notify {
 
     pub fn notify_one(&self) {
         if self.mark_one_notified() {
-            self.event.notify(1);
+            self.event.notify_additional(1);
         }
     }
 
     pub fn notify_waiters(&self) {
-        if self.mark_all_notified() {
-            self.event.notify(usize::MAX);
-        }
+        self.mark_all_notified();
+        self.event.notify(usize::MAX);
     }
 
     pub async fn notified(&self) {
@@ -259,40 +259,102 @@ impl Notify {
     }
 
     fn mark_one_notified(&self) -> bool {
-        let mut state = self.lock_state();
-        if state.waiters > state.pending {
-            state.pending += 1;
-            return true;
-        }
+        loop {
+            let state = self.state.load(Ordering::Acquire);
+            let waiters = notify_waiters(state);
+            let pending = notify_pending(state);
 
-        state.permit = true;
-        false
+            let new_state = if waiters > pending {
+                state + NOTIFY_PENDING
+            } else {
+                state | NOTIFY_PERMIT
+            };
+
+            if self
+                .state
+                .compare_exchange_weak(state, new_state, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
+                return waiters > pending;
+            }
+        }
     }
 
-    fn mark_all_notified(&self) -> bool {
-        let mut state = self.lock_state();
-        if state.waiters == 0 {
-            return false;
-        }
+    fn mark_all_notified(&self) {
+        loop {
+            let state = self.state.load(Ordering::Acquire);
+            let broadcast = notify_broadcast(state);
+            let new_broadcast = (broadcast + 1) & NOTIFY_COUNTER_MASK;
+            let new_state = notify_with_pending(notify_with_broadcast(state, new_broadcast), 0);
 
-        state.pending = 0;
-        state.broadcast = state.broadcast.wrapping_add(1);
-        true
+            if self
+                .state
+                .compare_exchange_weak(state, new_state, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
+                return;
+            }
+        }
     }
 
     fn register_waiter(&self) -> Option<(EventListener, usize)> {
-        let mut state = self.lock_state();
-        if state.permit {
-            state.permit = false;
+        if self.take_permit() {
             return None;
         }
 
-        state.waiters += 1;
-        Some((self.event.listen(), state.broadcast))
+        let listener = self.event.listen();
+        loop {
+            let state = self.state.load(Ordering::Acquire);
+            if notify_has_permit(state) {
+                let new_state = state & !NOTIFY_PERMIT;
+                if self
+                    .state
+                    .compare_exchange_weak(state, new_state, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok()
+                {
+                    return None;
+                }
+                continue;
+            }
+
+            let waiters = notify_waiters(state);
+            assert!(waiters < NOTIFY_COUNTER_MASK, "too many notify waiters");
+
+            if self
+                .state
+                .compare_exchange_weak(
+                    state,
+                    state + NOTIFY_WAITER,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                )
+                .is_ok()
+            {
+                return Some((listener, notify_broadcast(state)));
+            }
+        }
     }
 
-    fn lock_state(&self) -> MutexGuard<'_, NotifyState> {
-        self.state.lock().expect("notify state poisoned")
+    fn take_permit(&self) -> bool {
+        loop {
+            let state = self.state.load(Ordering::Acquire);
+            if !notify_has_permit(state) {
+                return false;
+            }
+
+            if self
+                .state
+                .compare_exchange_weak(
+                    state,
+                    state & !NOTIFY_PERMIT,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                )
+                .is_ok()
+            {
+                return true;
+            }
+        }
     }
 }
 
@@ -303,25 +365,35 @@ struct NotifyWaiter<'a> {
 
 impl NotifyWaiter<'_> {
     fn try_complete(&mut self, broadcast: usize) -> bool {
-        let mut state = self.notify.lock_state();
-        if state.broadcast != broadcast {
-            self.unregister(&mut state);
-            return true;
+        loop {
+            let state = self.notify.state.load(Ordering::Acquire);
+            let current_broadcast = notify_broadcast(state);
+            let pending = notify_pending(state);
+
+            if current_broadcast == broadcast && pending == 0 {
+                return false;
+            }
+
+            let new_pending = if current_broadcast == broadcast {
+                pending - 1
+            } else {
+                pending
+            };
+            let new_state = notify_with_pending(
+                state - NOTIFY_WAITER,
+                new_pending.min(notify_waiters(state) - 1),
+            );
+
+            if self
+                .notify
+                .state
+                .compare_exchange_weak(state, new_state, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
+                self.active = false;
+                return true;
+            }
         }
-
-        if state.pending > 0 {
-            state.pending -= 1;
-            self.unregister(&mut state);
-            return true;
-        }
-
-        false
-    }
-
-    fn unregister(&mut self, state: &mut NotifyState) {
-        state.waiters -= 1;
-        state.pending = state.pending.min(state.waiters);
-        self.active = false;
     }
 }
 
@@ -331,9 +403,54 @@ impl Drop for NotifyWaiter<'_> {
             return;
         }
 
-        let mut state = self.notify.lock_state();
-        self.unregister(&mut state);
+        let notify_another = loop {
+            let state = self.notify.state.load(Ordering::Acquire);
+            let waiters = notify_waiters(state);
+            let pending = notify_pending(state);
+            let new_waiters = waiters - 1;
+            let new_pending = pending.min(new_waiters);
+            let new_state = notify_with_pending(state - NOTIFY_WAITER, new_pending);
+
+            if self
+                .notify
+                .state
+                .compare_exchange_weak(state, new_state, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
+                break pending > 0 && new_waiters > 0;
+            }
+        };
+
+        if notify_another {
+            self.notify.event.notify_additional(1);
+        }
     }
+}
+
+fn notify_has_permit(state: usize) -> bool {
+    state & NOTIFY_PERMIT != 0
+}
+
+fn notify_waiters(state: usize) -> usize {
+    (state >> NOTIFY_WAITERS_SHIFT) & NOTIFY_COUNTER_MASK
+}
+
+fn notify_pending(state: usize) -> usize {
+    (state >> NOTIFY_PENDING_SHIFT) & NOTIFY_COUNTER_MASK
+}
+
+fn notify_broadcast(state: usize) -> usize {
+    (state >> NOTIFY_BROADCAST_SHIFT) & NOTIFY_COUNTER_MASK
+}
+
+fn notify_with_pending(state: usize, pending: usize) -> usize {
+    let cleared = state & !(NOTIFY_COUNTER_MASK << NOTIFY_PENDING_SHIFT);
+    cleared | (pending << NOTIFY_PENDING_SHIFT)
+}
+
+fn notify_with_broadcast(state: usize, broadcast: usize) -> usize {
+    let cleared = state & !(NOTIFY_COUNTER_MASK << NOTIFY_BROADCAST_SHIFT);
+    cleared | (broadcast << NOTIFY_BROADCAST_SHIFT)
 }
 
 #[cfg(not(feature = "runtime-async-std"))]
