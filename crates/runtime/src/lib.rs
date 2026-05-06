@@ -249,32 +249,12 @@ impl Notify {
         self.event.notify(usize::MAX);
     }
 
-    pub async fn notified(&self) {
-        let (mut listener, broadcast) = match self.register_waiter() {
-            Some(waiter) => waiter,
-            None => return,
-        };
-        let mut waiter = NotifyWaiter {
+    pub fn notified(&self) -> Notified<'_> {
+        Notified {
             notify: self,
-            active: true,
-        };
-
-        if waiter.try_complete(broadcast) {
-            return;
-        }
-
-        loop {
-            listener.await;
-
-            if waiter.try_complete(broadcast) {
-                return;
-            }
-
-            listener = self.event.listen();
-
-            if waiter.try_complete(broadcast) {
-                return;
-            }
+            broadcast: notify_broadcast(self.state.load(Ordering::Acquire)),
+            waiter: None,
+            listener: None,
         }
     }
 
@@ -305,7 +285,10 @@ impl Notify {
             let state = self.state.load(Ordering::Acquire);
             let broadcast = notify_broadcast(state);
             let new_broadcast = (broadcast + 1) & NOTIFY_COUNTER_MASK;
-            let new_state = notify_with_pending(notify_with_broadcast(state, new_broadcast), 0);
+            let new_state = notify_with_waiters(
+                notify_with_pending(notify_with_broadcast(state, new_broadcast), 0),
+                0,
+            );
 
             if self
                 .state
@@ -317,14 +300,13 @@ impl Notify {
         }
     }
 
-    fn register_waiter(&self) -> Option<(EventListener, usize)> {
-        if self.take_permit() {
-            return None;
-        }
-
-        let listener = self.event.listen();
+    fn register_waiter(&self, broadcast: usize) -> Option<EventListener> {
         loop {
             let state = self.state.load(Ordering::Acquire);
+            if notify_broadcast(state) != broadcast {
+                return None;
+            }
+
             if notify_has_permit(state) {
                 let new_state = state & !NOTIFY_PERMIT;
                 if self
@@ -340,6 +322,7 @@ impl Notify {
             let waiters = notify_waiters(state);
             assert!(waiters < NOTIFY_COUNTER_MASK, "too many notify waiters");
 
+            let listener = self.event.listen();
             if self
                 .state
                 .compare_exchange_weak(
@@ -350,29 +333,7 @@ impl Notify {
                 )
                 .is_ok()
             {
-                return Some((listener, notify_broadcast(state)));
-            }
-        }
-    }
-
-    fn take_permit(&self) -> bool {
-        loop {
-            let state = self.state.load(Ordering::Acquire);
-            if !notify_has_permit(state) {
-                return false;
-            }
-
-            if self
-                .state
-                .compare_exchange_weak(
-                    state,
-                    state & !NOTIFY_PERMIT,
-                    Ordering::AcqRel,
-                    Ordering::Acquire,
-                )
-                .is_ok()
-            {
-                return true;
+                return Some(listener);
             }
         }
     }
@@ -380,29 +341,35 @@ impl Notify {
 
 struct NotifyWaiter<'a> {
     notify: &'a Notify,
+    broadcast: usize,
     active: bool,
 }
 
 impl NotifyWaiter<'_> {
-    fn try_complete(&mut self, broadcast: usize) -> bool {
+    fn try_complete(&mut self) -> bool {
         loop {
             let state = self.notify.state.load(Ordering::Acquire);
             let current_broadcast = notify_broadcast(state);
             let pending = notify_pending(state);
 
-            if current_broadcast == broadcast && pending == 0 {
+            if current_broadcast != self.broadcast {
+                self.active = false;
+                return true;
+            }
+
+            if pending == 0 {
                 return false;
             }
 
-            let new_pending = if current_broadcast == broadcast {
-                pending - 1
-            } else {
-                pending
-            };
-            let new_state = notify_with_pending(
-                state - NOTIFY_WAITER,
-                new_pending.min(notify_waiters(state) - 1),
-            );
+            let waiters = notify_waiters(state);
+            if waiters == 0 {
+                self.active = false;
+                return true;
+            }
+
+            let new_pending = pending - 1;
+            let new_state =
+                notify_with_pending(state - NOTIFY_WAITER, new_pending.min(waiters - 1));
 
             if self
                 .notify
@@ -425,7 +392,15 @@ impl Drop for NotifyWaiter<'_> {
 
         let notify_another = loop {
             let state = self.notify.state.load(Ordering::Acquire);
+            if notify_broadcast(state) != self.broadcast {
+                break false;
+            }
+
             let waiters = notify_waiters(state);
+            if waiters == 0 {
+                break false;
+            }
+
             let pending = notify_pending(state);
             let new_waiters = waiters - 1;
             let new_pending = pending.min(new_waiters);
@@ -443,6 +418,56 @@ impl Drop for NotifyWaiter<'_> {
 
         if notify_another {
             self.notify.event.notify_additional(1);
+        }
+    }
+}
+
+pub struct Notified<'a> {
+    notify: &'a Notify,
+    broadcast: usize,
+    waiter: Option<NotifyWaiter<'a>>,
+    listener: Option<EventListener>,
+}
+
+impl Future for Notified<'_> {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.as_mut().get_mut();
+
+        loop {
+            if this.waiter.is_none() {
+                let listener = match this.notify.register_waiter(this.broadcast) {
+                    Some(listener) => listener,
+                    None => return Poll::Ready(()),
+                };
+
+                this.waiter = Some(NotifyWaiter {
+                    notify: this.notify,
+                    broadcast: this.broadcast,
+                    active: true,
+                });
+                this.listener = Some(listener);
+            }
+
+            if this.waiter.as_mut().expect("notify waiter").try_complete() {
+                this.waiter = None;
+                this.listener = None;
+                return Poll::Ready(());
+            }
+
+            let listener = this.listener.as_mut().expect("notify listener");
+            if Pin::new(listener).poll(cx).is_pending() {
+                return Poll::Pending;
+            }
+
+            if this.waiter.as_mut().expect("notify waiter").try_complete() {
+                this.waiter = None;
+                this.listener = None;
+                return Poll::Ready(());
+            }
+
+            this.listener = Some(this.notify.event.listen());
         }
     }
 }
@@ -466,6 +491,11 @@ fn notify_broadcast(state: usize) -> usize {
 fn notify_with_pending(state: usize, pending: usize) -> usize {
     let cleared = state & !(NOTIFY_COUNTER_MASK << NOTIFY_PENDING_SHIFT);
     cleared | (pending << NOTIFY_PENDING_SHIFT)
+}
+
+fn notify_with_waiters(state: usize, waiters: usize) -> usize {
+    let cleared = state & !(NOTIFY_COUNTER_MASK << NOTIFY_WAITERS_SHIFT);
+    cleared | (waiters << NOTIFY_WAITERS_SHIFT)
 }
 
 fn notify_with_broadcast(state: usize, broadcast: usize) -> usize {
@@ -536,6 +566,42 @@ mod tests {
             futures::pin_mut!(pending);
 
             assert!(matches!(futures::poll!(pending.as_mut()), Poll::Pending));
+        });
+    }
+
+    #[test]
+    fn notify_waiters_wakes_futures_created_before_first_poll() {
+        block_on(async {
+            let notify = Notify::new();
+            let pending = notify.notified().fuse();
+            futures::pin_mut!(pending);
+
+            notify.notify_waiters();
+
+            assert!(matches!(futures::poll!(pending.as_mut()), Poll::Ready(())));
+        });
+    }
+
+    #[test]
+    fn notify_one_after_notify_waiters_stores_permit() {
+        block_on(async {
+            let notify = Notify::new();
+            let first = notify.notified().fuse();
+            let second = notify.notified().fuse();
+            futures::pin_mut!(first, second);
+
+            assert!(matches!(futures::poll!(first.as_mut()), Poll::Pending));
+            assert!(matches!(futures::poll!(second.as_mut()), Poll::Pending));
+
+            notify.notify_waiters();
+            notify.notify_one();
+
+            assert!(matches!(futures::poll!(first.as_mut()), Poll::Ready(())));
+            assert!(matches!(futures::poll!(second.as_mut()), Poll::Ready(())));
+
+            let permit = notify.notified().fuse();
+            futures::pin_mut!(permit);
+            assert!(matches!(futures::poll!(permit.as_mut()), Poll::Ready(())));
         });
     }
 
