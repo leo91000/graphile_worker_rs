@@ -44,7 +44,7 @@ enum JoinHandleInner<T> {
     #[cfg(feature = "runtime-tokio")]
     Tokio(tokio::task::JoinHandle<Result<T, Aborted>>),
     #[cfg(feature = "runtime-async-std")]
-    AsyncStd(async_std::task::JoinHandle<Result<T, Aborted>>),
+    AsyncStd(async_std::task::JoinHandle<Result<T, JoinError>>),
 }
 
 impl<T> JoinHandle<T> {
@@ -67,12 +67,7 @@ impl<T: Send + 'static> Future for JoinHandle<T> {
                 })
             }
             #[cfg(feature = "runtime-async-std")]
-            JoinHandleInner::AsyncStd(handle) => {
-                Pin::new(handle).poll(cx).map(|result| match result {
-                    Ok(value) => Ok(value),
-                    Err(_) => Err(JoinError::Aborted),
-                })
-            }
+            JoinHandleInner::AsyncStd(handle) => Pin::new(handle).poll(cx),
         }
     }
 }
@@ -120,6 +115,14 @@ where
     F: Future<Output = Result<T, Aborted>> + Send + 'static,
     T: Send + 'static,
 {
+    let future = async move {
+        match futures::FutureExt::catch_unwind(std::panic::AssertUnwindSafe(future)).await {
+            Ok(Ok(value)) => Ok(value),
+            Ok(Err(_)) => Err(JoinError::Aborted),
+            Err(payload) => Err(JoinError::Failed(panic_payload_to_string(payload))),
+        }
+    };
+
     JoinHandle {
         abort_handle,
         inner: JoinHandleInner::AsyncStd(async_std::task::spawn(future)),
@@ -162,14 +165,31 @@ pub async fn timeout_at<F>(deadline: Instant, future: F) -> Result<F::Output, Ti
 where
     F: Future,
 {
+    if deadline <= Instant::now() {
+        return Err(TimeoutError);
+    }
+
     let future = futures::FutureExt::fuse(future);
     let timeout = futures::FutureExt::fuse(sleep_until(deadline));
     futures::pin_mut!(future, timeout);
 
     futures::select_biased! {
-        result = future => Ok(result),
         _ = timeout => Err(TimeoutError),
+        result = future => Ok(result),
     }
+}
+
+#[cfg(feature = "runtime-async-std")]
+fn panic_payload_to_string(payload: Box<dyn std::any::Any + Send>) -> String {
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        return (*message).to_string();
+    }
+
+    if let Some(message) = payload.downcast_ref::<String>() {
+        return message.clone();
+    }
+
+    "task panicked".to_string()
 }
 
 pub fn interval(duration: Duration) -> Interval {
@@ -465,15 +485,13 @@ fn missing_runtime<T>() -> T {
 #[cfg(test)]
 mod tests {
     use std::task::Poll;
-
-    #[cfg(all(feature = "runtime-tokio", not(feature = "runtime-async-std")))]
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use futures::{executor::block_on, FutureExt};
 
-    use super::Notify;
     #[cfg(all(feature = "runtime-tokio", not(feature = "runtime-async-std")))]
-    use super::{sleep, spawn};
+    use super::sleep;
+    use super::{timeout_at, Notify};
 
     #[test]
     fn notify_one_coalesces_pending_permits() {
@@ -549,11 +567,36 @@ mod tests {
         });
     }
 
+    #[test]
+    fn timeout_at_prefers_expired_deadline_over_ready_future() {
+        block_on(async {
+            let result = timeout_at(Instant::now() - Duration::from_millis(1), async { 42 }).await;
+
+            assert!(result.is_err());
+        });
+    }
+
+    #[cfg(feature = "runtime-async-std")]
+    #[test]
+    fn async_std_spawn_maps_task_panics_to_join_error() {
+        block_on(async {
+            let result = super::spawn(async {
+                panic!("boom");
+            })
+            .await;
+
+            match result {
+                Err(super::JoinError::Failed(message)) => assert!(message.contains("boom")),
+                other => panic!("expected failed join error, got {other:?}"),
+            }
+        });
+    }
+
     #[cfg(all(feature = "runtime-tokio", not(feature = "runtime-async-std")))]
     #[test]
     #[should_panic(expected = "Tokio runtime")]
     fn tokio_only_spawn_requires_tokio_runtime() {
-        drop(spawn(async {}));
+        drop(super::spawn(async {}));
     }
 
     #[cfg(all(feature = "runtime-tokio", not(feature = "runtime-async-std")))]
