@@ -86,7 +86,16 @@ where
     let future = Abortable::new(future, abort_registration);
     let abort_handle = AbortHandle(abort_handle);
 
-    #[cfg(feature = "runtime-tokio")]
+    #[cfg(all(feature = "runtime-tokio", not(feature = "runtime-async-std")))]
+    {
+        let handle = tokio::runtime::Handle::try_current().unwrap_or_else(|_| missing_runtime());
+        JoinHandle {
+            abort_handle,
+            inner: JoinHandleInner::Tokio(handle.spawn(future)),
+        }
+    }
+
+    #[cfg(all(feature = "runtime-tokio", feature = "runtime-async-std"))]
     if let Ok(handle) = tokio::runtime::Handle::try_current() {
         return JoinHandle {
             abort_handle,
@@ -99,7 +108,7 @@ where
         async_std_spawn(future, abort_handle)
     }
 
-    #[cfg(not(feature = "runtime-async-std"))]
+    #[cfg(not(any(feature = "runtime-tokio", feature = "runtime-async-std")))]
     {
         missing_runtime()
     }
@@ -118,7 +127,13 @@ where
 }
 
 pub fn sleep(duration: Duration) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-    #[cfg(feature = "runtime-tokio")]
+    #[cfg(all(feature = "runtime-tokio", not(feature = "runtime-async-std")))]
+    {
+        tokio::runtime::Handle::try_current().unwrap_or_else(|_| missing_runtime());
+        Box::pin(tokio::time::sleep(duration))
+    }
+
+    #[cfg(all(feature = "runtime-tokio", feature = "runtime-async-std"))]
     if tokio::runtime::Handle::try_current().is_ok() {
         return Box::pin(tokio::time::sleep(duration));
     }
@@ -128,7 +143,7 @@ pub fn sleep(duration: Duration) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         Box::pin(async_std::task::sleep(duration))
     }
 
-    #[cfg(not(feature = "runtime-async-std"))]
+    #[cfg(not(any(feature = "runtime-tokio", feature = "runtime-async-std")))]
     {
         missing_runtime()
     }
@@ -334,9 +349,14 @@ fn missing_runtime<T>() -> T {
 mod tests {
     use std::task::Poll;
 
+    #[cfg(all(feature = "runtime-tokio", not(feature = "runtime-async-std")))]
+    use std::time::Duration;
+
     use futures::{executor::block_on, FutureExt};
 
     use super::Notify;
+    #[cfg(all(feature = "runtime-tokio", not(feature = "runtime-async-std")))]
+    use super::{sleep, spawn};
 
     #[test]
     fn notify_one_coalesces_pending_permits() {
@@ -410,5 +430,19 @@ mod tests {
                 assert!(matches!(futures::poll!(second.as_mut()), Poll::Ready(())));
             }
         });
+    }
+
+    #[cfg(all(feature = "runtime-tokio", not(feature = "runtime-async-std")))]
+    #[test]
+    #[should_panic(expected = "Tokio runtime")]
+    fn tokio_only_spawn_requires_tokio_runtime() {
+        drop(spawn(async {}));
+    }
+
+    #[cfg(all(feature = "runtime-tokio", not(feature = "runtime-async-std")))]
+    #[test]
+    #[should_panic(expected = "Tokio runtime")]
+    fn tokio_only_sleep_requires_tokio_runtime() {
+        drop(sleep(Duration::ZERO));
     }
 }
