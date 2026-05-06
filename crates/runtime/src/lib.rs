@@ -193,6 +193,8 @@ fn panic_payload_to_string(payload: Box<dyn std::any::Any + Send>) -> String {
 }
 
 pub fn interval(duration: Duration) -> Interval {
+    assert!(duration > Duration::ZERO, "`period` must be non-zero.");
+
     Interval {
         duration,
         next: Instant::now(),
@@ -521,7 +523,7 @@ mod tests {
 
     #[cfg(all(feature = "runtime-tokio", not(feature = "runtime-async-std")))]
     use super::sleep;
-    use super::{timeout_at, Notify};
+    use super::{interval, timeout_at, Notify};
 
     #[test]
     fn notify_one_coalesces_pending_permits() {
@@ -640,6 +642,12 @@ mod tests {
 
             assert!(result.is_err());
         });
+    }
+
+    #[test]
+    #[should_panic(expected = "`period` must be non-zero.")]
+    fn interval_rejects_zero_duration() {
+        let _ = interval(Duration::ZERO);
     }
 
     #[cfg(feature = "runtime-async-std")]
