@@ -12,7 +12,6 @@ repository = "https://github.com/leo91000/graphile_worker_rs"
 
 [dependencies]
 async-signal = "0.2.14"
-cfg-if = { workspace = true }
 futures = { workspace = true }
 tracing = { workspace = true }
 
