@@ -85,10 +85,6 @@ opentelemetry_0_31 = [
     "opentelemetry",
     "tracing-opentelemetry",
 ]
-# For now we don't support async std
-# runtime-async-std-rustls = ["sqlx/runtime-async-std-rustls"]
-# runtime-async-std-native-tls = ["sqlx/runtime-async-std-native-tls"]
-
 [dependencies]
 graphile_worker_crontab_runner = { path = "./crates/crontab_runner", version = "0.7.4", default-features = false }
 graphile_worker_crontab_types = { path = "./crates/crontab_types", version = "0.5.14" }

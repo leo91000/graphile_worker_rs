@@ -5,7 +5,7 @@ use futures::{stream, FutureExt, Stream};
 use graphile_worker_runtime as runtime;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use sqlx::{postgres::PgListener, PgPool};
-use tracing::error;
+use tracing::{error, warn};
 
 use crate::{
     errors::Result,
@@ -196,7 +196,11 @@ async fn job_signal_stream_internal(
                 f.yield_n = Some((NonZeroUsize::new(f.concurrency).unwrap(), source));
                 Some((source, f))
             }
-            NextSignal::InternalClosed | NextSignal::Shutdown => None,
+            NextSignal::InternalClosed => {
+                warn!("Job signal stream internal channel closed");
+                None
+            }
+            NextSignal::Shutdown => None,
         }
     });
 

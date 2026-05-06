@@ -4,12 +4,18 @@ test:
   cargo test --all
 
 test-runtime runtime="runtime-tokio":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  if [ -z "${DATABASE_URL:-}" ]; then
+    just test-docker-runtime '{{runtime}}'
+    exit 0
+  fi
   cargo test --all --no-default-features --features '{{runtime}},tls-rustls'
 
 test-docker:
   docker rm -f graphile-worker-rs-test 2> /dev/null || true
   docker run -d --name graphile-worker-rs-test -p 54233:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=postgres postgres
-  docker exec graphile-worker-rs-test bash -c 'while ! pg_isready -U postgres -h localhost; do sleep 1; done'
+  docker exec graphile-worker-rs-test bash -c 'for i in $(seq 30); do pg_isready -U postgres -h localhost && exit 0; sleep 1; done; echo "Postgres not ready after 30s" >&2; exit 1'
   DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo test --all
   docker rm -f graphile-worker-rs-test
 
@@ -19,7 +25,7 @@ test-docker-runtime runtime="runtime-tokio":
   docker rm -f graphile-worker-rs-test 2> /dev/null || true
   docker run -d --name graphile-worker-rs-test -p 54233:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=postgres postgres
   trap 'docker rm -f graphile-worker-rs-test' EXIT
-  docker exec graphile-worker-rs-test bash -c 'while ! pg_isready -U postgres -h localhost; do sleep 1; done'
+  docker exec graphile-worker-rs-test bash -c 'for i in $(seq 30); do pg_isready -U postgres -h localhost && exit 0; sleep 1; done; echo "Postgres not ready after 30s" >&2; exit 1'
   DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo test --all --no-default-features --features '{{runtime}},tls-rustls'
 
 test-docker-all-runtimes:
@@ -28,14 +34,14 @@ test-docker-all-runtimes:
   docker rm -f graphile-worker-rs-test 2> /dev/null || true
   docker run -d --name graphile-worker-rs-test -p 54233:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=postgres postgres
   trap 'docker rm -f graphile-worker-rs-test' EXIT
-  docker exec graphile-worker-rs-test bash -c 'while ! pg_isready -U postgres -h localhost; do sleep 1; done'
+  docker exec graphile-worker-rs-test bash -c 'for i in $(seq 30); do pg_isready -U postgres -h localhost && exit 0; sleep 1; done; echo "Postgres not ready after 30s" >&2; exit 1'
   DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo test --all --no-default-features --features 'runtime-tokio,tls-rustls'
   DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo test --all --no-default-features --features 'runtime-async-std,tls-rustls'
 
 coverage-docker:
   docker rm -f graphile-worker-rs-test 2> /dev/null || true
   docker run -d --name graphile-worker-rs-test -p 54233:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=postgres postgres
-  docker exec graphile-worker-rs-test bash -c 'while ! pg_isready -U postgres -h localhost; do sleep 1; done'
+  docker exec graphile-worker-rs-test bash -c 'for i in $(seq 30); do pg_isready -U postgres -h localhost && exit 0; sleep 1; done; echo "Postgres not ready after 30s" >&2; exit 1'
   DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo tarpaulin --all --out Xml
   docker rm -f graphile-worker-rs-test
 
