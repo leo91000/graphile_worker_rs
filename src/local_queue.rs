@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use chrono::Utc;
 use derive_builder::Builder;
+use futures::FutureExt;
 use graphile_worker_job::Job;
 pub use graphile_worker_lifecycle_hooks::LocalQueueMode;
 use graphile_worker_lifecycle_hooks::{
@@ -12,14 +13,13 @@ use graphile_worker_lifecycle_hooks::{
     LocalQueueRefetchDelayAbortContext, LocalQueueRefetchDelayExpiredContext,
     LocalQueueRefetchDelayStartContext, LocalQueueReturnJobsContext, LocalQueueSetModeContext,
 };
+use graphile_worker_runtime as runtime;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use rand::RngExt;
 use sqlx::PgPool;
 use thiserror::Error;
-use tokio::sync::{Mutex, Notify, RwLock};
 
 use crate::streams::JobSignalSender;
-use tokio::task::AbortHandle;
 use tracing::{debug, error, trace, warn};
 
 use crate::sql::batch_get_jobs::batch_get_jobs;
@@ -153,8 +153,8 @@ struct RefetchDelayState {
     active: AtomicBool,
     fetch_on_complete: AtomicBool,
     counter: AtomicUsize,
-    abort_threshold: RwLock<usize>,
-    abort_notify: Notify,
+    abort_threshold: runtime::RwLock<usize>,
+    abort_notify: runtime::Notify,
 }
 
 impl Default for RefetchDelayState {
@@ -163,22 +163,22 @@ impl Default for RefetchDelayState {
             active: AtomicBool::new(false),
             fetch_on_complete: AtomicBool::new(false),
             counter: AtomicUsize::new(0),
-            abort_threshold: RwLock::new(usize::MAX),
-            abort_notify: Notify::new(),
+            abort_threshold: runtime::RwLock::new(usize::MAX),
+            abort_notify: runtime::Notify::new(),
         }
     }
 }
 
 struct LocalQueueState {
-    mode: RwLock<LocalQueueMode>,
-    job_queue: Mutex<VecDeque<Job>>,
+    mode: runtime::RwLock<LocalQueueMode>,
+    job_queue: runtime::Mutex<VecDeque<Job>>,
     job_signal_sender: JobSignalSender,
     fetch_in_progress: AtomicBool,
     fetch_again: AtomicBool,
     refetch_delay: RefetchDelayState,
-    state_notify: Notify,
-    ttl_timer_handle: Mutex<Option<AbortHandle>>,
-    run_complete_notify: Notify,
+    state_notify: runtime::Notify,
+    ttl_timer_handle: runtime::Mutex<Option<runtime::AbortHandle>>,
+    run_complete_notify: runtime::Notify,
     config: LocalQueueConfig,
     pg_pool: PgPool,
     escaped_schema: String,
@@ -193,15 +193,15 @@ struct LocalQueueState {
 impl LocalQueueState {
     fn new(params: LocalQueueParams) -> Self {
         Self {
-            mode: RwLock::new(LocalQueueMode::Starting),
-            job_queue: Mutex::new(VecDeque::new()),
+            mode: runtime::RwLock::new(LocalQueueMode::Starting),
+            job_queue: runtime::Mutex::new(VecDeque::new()),
             job_signal_sender: params.job_signal_sender,
             fetch_in_progress: AtomicBool::new(false),
             fetch_again: AtomicBool::new(false),
             refetch_delay: RefetchDelayState::default(),
-            state_notify: Notify::new(),
-            ttl_timer_handle: Mutex::new(None),
-            run_complete_notify: Notify::new(),
+            state_notify: runtime::Notify::new(),
+            ttl_timer_handle: runtime::Mutex::new(None),
+            run_complete_notify: runtime::Notify::new(),
             config: params.config,
             pg_pool: params.pg_pool,
             escaped_schema: params.escaped_schema,
@@ -333,18 +333,18 @@ impl LocalQueue {
         let queue: LocalQueue = params.into();
 
         let queue_clone = queue.clone();
-        tokio::spawn(async move {
+        drop(runtime::spawn(async move {
             queue_clone.run().await;
-        });
+        }));
 
         if let Some(signal) = shutdown_signal {
             let queue_for_shutdown = queue.clone();
-            tokio::spawn(async move {
+            drop(runtime::spawn(async move {
                 signal.await;
                 if let Err(e) = queue_for_shutdown.release().await {
                     warn!(error = %e, "Error releasing LocalQueue on shutdown");
                 }
-            });
+            }));
         }
 
         queue
@@ -389,10 +389,13 @@ impl LocalQueue {
                 let refetch_delay_wants_fetch = self.take_refetch_delay_fetch_on_complete();
 
                 if !should_fetch_again && !refetch_delay_wants_fetch {
-                    tokio::select! {
-                        _ = tokio::time::sleep(self.0.poll_interval) => {}
-                        _ = self.0.state_notify.notified() => {}
-                    }
+                    let sleep = runtime::sleep(self.0.poll_interval).fuse();
+                    let notified = self.0.state_notify.notified().fuse();
+                    futures::pin_mut!(sleep, notified);
+                    futures::select_biased! {
+                        _ = sleep => {}
+                        _ = notified => {}
+                    };
                 }
             } else if mode == LocalQueueMode::Polling && !self.0.continuous {
                 self.set_mode(LocalQueueMode::Released).await;
@@ -503,16 +506,19 @@ impl LocalQueue {
             .await;
 
         let queue_clone = self.clone();
-        tokio::spawn(async move {
-            tokio::select! {
-                _ = tokio::time::sleep(duration) => {
+        drop(runtime::spawn(async move {
+            let sleep = runtime::sleep(duration).fuse();
+            let notified = queue_clone.0.refetch_delay.abort_notify.notified().fuse();
+            futures::pin_mut!(sleep, notified);
+            futures::select_biased! {
+                _ = sleep => {
                     queue_clone.refetch_delay_complete(false).await;
                 }
-                _ = queue_clone.0.refetch_delay.abort_notify.notified() => {
+                _ = notified => {
                     queue_clone.refetch_delay_complete(true).await;
                 }
-            }
-        });
+            };
+        }));
     }
 
     async fn refetch_delay_complete(&self, aborted: bool) {
@@ -589,8 +595,8 @@ impl LocalQueue {
         }
 
         let queue_clone = self.clone();
-        let join_handle = tokio::spawn(async move {
-            tokio::time::sleep(ttl).await;
+        let join_handle = runtime::spawn(async move {
+            runtime::sleep(ttl).await;
 
             let mode = *queue_clone.0.mode.read().await;
             if mode == LocalQueueMode::Waiting {
@@ -627,7 +633,7 @@ impl LocalQueue {
                         error = %e,
                         "Failed to return jobs, retrying"
                     );
-                    tokio::time::sleep(delay).await;
+                    runtime::sleep(delay).await;
                 }
             }
         }

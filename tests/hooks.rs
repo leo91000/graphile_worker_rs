@@ -9,6 +9,7 @@ use graphile_worker::{
     LocalQueueSetMode, Plugin, RefetchDelayConfig, TaskHandler, Worker, WorkerContext, WorkerInit,
     WorkerShutdown, WorkerStart,
 };
+use graphile_worker_runtime::sleep as runtime_sleep;
 use serde::{Deserialize, Serialize};
 use tokio::{
     task::spawn_local,
@@ -1609,7 +1610,7 @@ impl TaskHandler for SlowLocalQueueJob {
     const IDENTIFIER: &'static str = "slow_local_queue_job";
 
     async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-        sleep(Duration::from_secs(10)).await;
+        runtime_sleep(Duration::from_secs(10)).await;
         Ok::<(), String>(())
     }
 }

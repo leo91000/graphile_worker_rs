@@ -3,11 +3,29 @@ set dotenv-load
 test:
   cargo test --all
 
+test-runtime runtime="runtime-tokio":
+  cargo test --all --no-default-features --features '{{runtime}},tls-rustls'
+
 test-docker:
   docker rm -f graphile-worker-rs-test 2> /dev/null || true
   docker run -d --name graphile-worker-rs-test -p 54233:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=postgres postgres
   docker exec graphile-worker-rs-test bash -c 'while ! pg_isready -U postgres -h localhost; do sleep 1; done'
   DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo test --all
+  docker rm -f graphile-worker-rs-test
+
+test-docker-runtime runtime="runtime-tokio":
+  docker rm -f graphile-worker-rs-test 2> /dev/null || true
+  docker run -d --name graphile-worker-rs-test -p 54233:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=postgres postgres
+  docker exec graphile-worker-rs-test bash -c 'while ! pg_isready -U postgres -h localhost; do sleep 1; done'
+  DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo test --all --no-default-features --features '{{runtime}},tls-rustls'
+  docker rm -f graphile-worker-rs-test
+
+test-docker-all-runtimes:
+  docker rm -f graphile-worker-rs-test 2> /dev/null || true
+  docker run -d --name graphile-worker-rs-test -p 54233:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=postgres postgres
+  docker exec graphile-worker-rs-test bash -c 'while ! pg_isready -U postgres -h localhost; do sleep 1; done'
+  DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo test --all --no-default-features --features 'runtime-tokio,tls-rustls'
+  DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo test --all --no-default-features --features 'runtime-async-std,tls-rustls'
   docker rm -f graphile-worker-rs-test
 
 coverage-docker:

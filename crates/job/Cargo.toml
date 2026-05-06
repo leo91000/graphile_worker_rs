@@ -17,3 +17,8 @@ derive_builder.workspace = true
 chrono.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
+
+[features]
+default = ["runtime-tokio"]
+runtime-tokio = ["sqlx/runtime-tokio"]
+runtime-async-std = ["sqlx/runtime-async-std"]

@@ -1,10 +1,10 @@
 use std::{num::NonZeroUsize, time::Duration};
 
 use chrono::Utc;
-use futures::{stream, Stream};
+use futures::{stream, FutureExt, Stream};
+use graphile_worker_runtime as runtime;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use sqlx::{postgres::PgListener, PgPool};
-use tokio::sync::mpsc;
 use tracing::error;
 
 use crate::{
@@ -31,10 +31,10 @@ pub enum StreamSource {
 
 /// Sender for injecting job signals into the stream.
 /// Used by LocalQueue to signal when jobs are available in the cache.
-pub type JobSignalSender = mpsc::Sender<()>;
+pub type JobSignalSender = runtime::Sender<()>;
 
 /// Receiver for job signals from LocalQueue.
-pub type JobSignalReceiver = mpsc::Receiver<()>;
+pub type JobSignalReceiver = runtime::Receiver<()>;
 
 /// Internal data structure for managing the job signal stream.
 ///
@@ -42,7 +42,7 @@ pub type JobSignalReceiver = mpsc::Receiver<()>;
 /// interval-based polling and PostgreSQL notifications.
 struct JobSignalStreamData {
     /// Timer for regular polling intervals
-    interval: tokio::time::Interval,
+    interval: runtime::Interval,
     /// Listener for PostgreSQL notifications
     pg_listener: PgListener,
     /// Signal that completes when the worker should shut down
@@ -52,16 +52,16 @@ struct JobSignalStreamData {
     /// When a job signal is received, yields multiple items to allow for concurrent processing
     yield_n: Option<(NonZeroUsize, StreamSource)>,
     /// Optional receiver for internal job signals (from LocalQueue)
-    internal_rx: Option<mpsc::Receiver<()>>,
+    internal_rx: Option<runtime::Receiver<()>>,
 }
 
 impl JobSignalStreamData {
     fn new(
-        interval: tokio::time::Interval,
+        interval: runtime::Interval,
         pg_listener: PgListener,
         shutdown_signal: ShutdownSignal,
         concurrency: usize,
-        internal_rx: Option<mpsc::Receiver<()>>,
+        internal_rx: Option<runtime::Receiver<()>>,
     ) -> Self {
         JobSignalStreamData {
             interval,
@@ -131,9 +131,9 @@ async fn job_signal_stream_internal(
     poll_interval: Duration,
     shutdown_signal: ShutdownSignal,
     concurrency: usize,
-    internal_rx: Option<mpsc::Receiver<()>>,
+    internal_rx: Option<runtime::Receiver<()>>,
 ) -> Result<impl Stream<Item = StreamSource>> {
-    let interval = tokio::time::interval(poll_interval);
+    let interval = runtime::interval(poll_interval);
 
     let mut pg_listener = PgListener::connect_with(&pg_pool).await?;
     pg_listener.listen("jobs:insert").await?;
@@ -153,40 +153,50 @@ async fn job_signal_stream_internal(
             return Some((source, f));
         }
 
-        if let Some(ref mut rx) = f.internal_rx {
-            tokio::select! {
-                biased;
-                _ = f.interval.tick() => {
-                    f.yield_n = Some((NonZeroUsize::new(f.concurrency).unwrap(), StreamSource::Polling));
-                    Some((StreamSource::Polling, f))
-                },
-                _ = f.pg_listener.recv() => {
-                    f.yield_n = Some((NonZeroUsize::new(f.concurrency).unwrap(), StreamSource::PgListener));
-                    Some((StreamSource::PgListener, f))
-                },
-                res = rx.recv() => {
-                    if res.is_some() {
-                        f.yield_n = Some((NonZeroUsize::new(f.concurrency).unwrap(), StreamSource::Internal));
-                        Some((StreamSource::Internal, f))
+        enum NextSignal {
+            Source(StreamSource),
+            InternalClosed,
+            Shutdown,
+        }
+
+        let next = if let Some(ref mut rx) = f.internal_rx {
+            let interval = f.interval.tick().fuse();
+            let pg_listener = f.pg_listener.recv().fuse();
+            let internal = rx.recv().fuse();
+            let shutdown = (&mut f.shutdown_signal).fuse();
+            futures::pin_mut!(interval, pg_listener, internal, shutdown);
+
+            futures::select_biased! {
+                _ = interval => NextSignal::Source(StreamSource::Polling),
+                _ = pg_listener => NextSignal::Source(StreamSource::PgListener),
+                res = internal => {
+                    if res.is_ok() {
+                        NextSignal::Source(StreamSource::Internal)
                     } else {
-                        None
+                        NextSignal::InternalClosed
                     }
                 },
-                _ = &mut f.shutdown_signal => None,
+                _ = shutdown => NextSignal::Shutdown,
             }
         } else {
-            tokio::select! {
-                biased;
-                _ = f.interval.tick() => {
-                    f.yield_n = Some((NonZeroUsize::new(f.concurrency).unwrap(), StreamSource::Polling));
-                    Some((StreamSource::Polling, f))
-                },
-                _ = f.pg_listener.recv() => {
-                    f.yield_n = Some((NonZeroUsize::new(f.concurrency).unwrap(), StreamSource::PgListener));
-                    Some((StreamSource::PgListener, f))
-                },
-                _ = &mut f.shutdown_signal => None,
+            let interval = f.interval.tick().fuse();
+            let pg_listener = f.pg_listener.recv().fuse();
+            let shutdown = (&mut f.shutdown_signal).fuse();
+            futures::pin_mut!(interval, pg_listener, shutdown);
+
+            futures::select_biased! {
+                _ = interval => NextSignal::Source(StreamSource::Polling),
+                _ = pg_listener => NextSignal::Source(StreamSource::PgListener),
+                _ = shutdown => NextSignal::Shutdown,
             }
+        };
+
+        match next {
+            NextSignal::Source(source) => {
+                f.yield_n = Some((NonZeroUsize::new(f.concurrency).unwrap(), source));
+                Some((source, f))
+            }
+            NextSignal::InternalClosed | NextSignal::Shutdown => None,
         }
     });
 
@@ -261,7 +271,11 @@ pub fn job_stream(
         let shutdown_fut = shutdown_signal.clone();
 
         async move {
-            tokio::select! {
+            let job_fut = job_fut.fuse();
+            let shutdown_fut = shutdown_fut.fuse();
+            futures::pin_mut!(job_fut, shutdown_fut);
+
+            futures::select_biased! {
                 res = job_fut => res,
                 _ = shutdown_fut => None
             }

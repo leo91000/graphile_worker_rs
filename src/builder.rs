@@ -11,6 +11,7 @@ use graphile_worker_ctx::WorkerContext;
 use graphile_worker_extensions::Extensions;
 use graphile_worker_lifecycle_hooks::{Event, HookRegistry, Plugin};
 use graphile_worker_migrations::migrate;
+use graphile_worker_runtime::Notify;
 use graphile_worker_shutdown_signal::{shutdown_signal, ShutdownSignal};
 use graphile_worker_task_handler::{run_task_from_worker_ctx, TaskHandler};
 use rand::Rng;
@@ -21,7 +22,6 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::sync::Notify;
 
 /// Creates a shutdown signal that can be triggered manually via the returned notifier.
 fn manual_shutdown_signal_pair() -> (ShutdownSignal, Arc<Notify>) {
@@ -39,10 +39,13 @@ fn manual_shutdown_signal_pair() -> (ShutdownSignal, Arc<Notify>) {
 /// Resolves as soon as either of the provided shutdown signals completes.
 fn combine_shutdown_signals(left: ShutdownSignal, right: ShutdownSignal) -> ShutdownSignal {
     async move {
-        tokio::select! {
+        let left = left.fuse();
+        let right = right.fuse();
+        futures::pin_mut!(left, right);
+        futures::select_biased! {
             _ = left => (),
             _ = right => (),
-        }
+        };
     }
     .boxed()
     .shared()

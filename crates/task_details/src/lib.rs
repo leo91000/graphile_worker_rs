@@ -1,6 +1,6 @@
+use graphile_worker_runtime::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tracing::warn;
 
 #[derive(Debug, Clone, Default)]
@@ -49,11 +49,11 @@ impl SharedTaskDetails {
         Self(Arc::new(RwLock::new(details)))
     }
 
-    pub async fn read(&self) -> tokio::sync::RwLockReadGuard<'_, TaskDetails> {
+    pub async fn read(&self) -> RwLockReadGuard<'_, TaskDetails> {
         self.0.read().await
     }
 
-    pub async fn write(&self) -> tokio::sync::RwLockWriteGuard<'_, TaskDetails> {
+    pub async fn write(&self) -> RwLockWriteGuard<'_, TaskDetails> {
         self.0.write().await
     }
 

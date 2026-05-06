@@ -12,7 +12,9 @@ categories = []
 readme = "README.md"
 
 [features]
-default = ["tls-rustls"]
+default = ["runtime-tokio", "tls-rustls"]
+runtime-tokio = ["sqlx/runtime-tokio"]
+runtime-async-std = ["sqlx/runtime-async-std"]
 tls-rustls = ["sqlx/tls-rustls"]
 tls-native-tls = ["sqlx/tls-native-tls"]
 

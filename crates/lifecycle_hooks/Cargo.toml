@@ -12,7 +12,7 @@ categories = []
 readme = "README.md"
 
 [dependencies]
-graphile_worker_job = { path = "../job", version = "0.1.12" }
+graphile_worker_job = { path = "../job", version = "0.1.12", default-features = false }
 graphile_worker_extensions = { path = "../extensions", version = "0.1.6" }
 graphile_worker_crontab_types = { path = "../crontab_types", version = "0.5.14" }
 graphile_worker_job_spec = { path = "../job_spec", version = "0.1.2" }
@@ -20,3 +20,8 @@ chrono.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
 futures.workspace = true
+
+[features]
+default = ["runtime-tokio"]
+runtime-tokio = ["sqlx/runtime-tokio", "graphile_worker_job/runtime-tokio"]
+runtime-async-std = ["sqlx/runtime-async-std", "graphile_worker_job/runtime-async-std"]
