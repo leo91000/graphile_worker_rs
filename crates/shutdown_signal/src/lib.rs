@@ -1,16 +1,72 @@
 use std::pin::Pin;
 
-use async_signal::{Signal, Signals};
 use cfg_if::cfg_if;
-use futures::{future::Shared, FutureExt, StreamExt};
+use futures::{future::Shared, FutureExt};
 use std::future::Future;
 use tracing::info;
 
+#[cfg(unix)]
+use async_signal::{Signal, Signals};
+
+#[cfg(unix)]
+use futures::StreamExt;
+
+#[cfg(windows)]
+use event_listener::Event;
+
+#[cfg(windows)]
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    OnceLock,
+};
+
+#[cfg(windows)]
+use windows_sys::Win32::System::Console::{
+    SetConsoleCtrlHandler, CTRL_CLOSE_EVENT, CTRL_C_EVENT, CTRL_LOGOFF_EVENT, CTRL_SHUTDOWN_EVENT,
+};
+
+#[cfg(windows)]
+use windows_sys::core::BOOL;
+
 cfg_if! {
     if #[cfg(windows)] {
+        static WINDOWS_SHUTDOWN_EVENT: Event = Event::new();
+        static WINDOWS_SHUTDOWN_RECEIVED: AtomicBool = AtomicBool::new(false);
+        static WINDOWS_HANDLER_REGISTERED: OnceLock<()> = OnceLock::new();
+
+        const WINDOWS_SIGNAL_HANDLED: BOOL = 1;
+        const WINDOWS_SIGNAL_UNHANDLED: BOOL = 0;
+
+        unsafe extern "system" fn console_ctrl_handler(ctrl_type: u32) -> BOOL {
+            match ctrl_type {
+                CTRL_C_EVENT | CTRL_CLOSE_EVENT | CTRL_LOGOFF_EVENT | CTRL_SHUTDOWN_EVENT => {
+                    WINDOWS_SHUTDOWN_RECEIVED.store(true, Ordering::Release);
+                    WINDOWS_SHUTDOWN_EVENT.notify(usize::MAX);
+                    WINDOWS_SIGNAL_HANDLED
+                }
+                _ => WINDOWS_SIGNAL_UNHANDLED,
+            }
+        }
+
+        fn register_windows_shutdown_handler() {
+            WINDOWS_HANDLER_REGISTERED.get_or_init(|| {
+                let result = unsafe { SetConsoleCtrlHandler(Some(console_ctrl_handler), WINDOWS_SIGNAL_HANDLED) };
+                if result == WINDOWS_SIGNAL_UNHANDLED {
+                    panic!("Failed to listen to windows shutdown signal");
+                }
+            });
+        }
+
         async fn raw_shutdown_signal() {
-            let mut signals = Signals::new([Signal::Int]).expect("Failed to listen to windows shutdown signal");
-            let _ = signals.next().await;
+            register_windows_shutdown_handler();
+            if WINDOWS_SHUTDOWN_RECEIVED.load(Ordering::Acquire) {
+                return;
+            }
+            let listener = WINDOWS_SHUTDOWN_EVENT.listen();
+            if WINDOWS_SHUTDOWN_RECEIVED.load(Ordering::Acquire) {
+                return;
+            }
+            listener.await;
         }
     } else if #[cfg(unix)] {
         async fn raw_shutdown_signal() {
