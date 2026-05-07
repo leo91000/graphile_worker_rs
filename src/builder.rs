@@ -263,25 +263,25 @@ impl WorkerOptions {
         };
 
         let completion_batcher = self.complete_job_batch_delay.map(|delay| {
-            CompletionBatcher::new(
+            Arc::new(CompletionBatcher::new(
                 delay,
                 pg_pool.clone(),
                 escaped_schema.clone(),
                 worker_id.clone(),
                 hooks.clone(),
                 shutdown_signal.clone(),
-            )
+            ))
         });
 
         let failure_batcher = self.fail_job_batch_delay.map(|delay| {
-            FailureBatcher::new(
+            Arc::new(FailureBatcher::new(
                 delay,
                 pg_pool.clone(),
                 escaped_schema.clone(),
                 worker_id.clone(),
                 hooks.clone(),
                 shutdown_signal.clone(),
-            )
+            ))
         });
 
         let worker = Worker {
@@ -444,7 +444,7 @@ impl WorkerOptions {
         };
 
         self.jobs
-            .insert(identifier.to_string(), Box::new(worker_fn));
+            .insert(identifier.to_string(), Arc::new(worker_fn));
         self
     }
 
