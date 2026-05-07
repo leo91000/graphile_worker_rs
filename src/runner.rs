@@ -657,13 +657,25 @@ enum RunJobError {
     FnNotFound(String),
     /// The task handler panicked during execution
     #[error("Task failed execution to complete : {0}")]
-    TaskPanic(#[from] runtime::JoinError),
+    TaskPanic(String),
     /// The task handler returned an error string
     #[error("Task returned the following error : {0}")]
     TaskError(String),
     /// The task was aborted due to a shutdown signal
     #[error("Task was aborted by shutdown signal")]
     TaskAborted,
+}
+
+fn panic_payload_to_string(payload: Box<dyn std::any::Any + Send>) -> String {
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        return (*message).to_string();
+    }
+
+    if let Some(message) = payload.downcast_ref::<String>() {
+        return message.clone();
+    }
+
+    "task panicked".to_string()
 }
 
 /// Executes a job's task handler function.
@@ -731,9 +743,6 @@ async fn run_job(job: Arc<Job>, worker: &Worker, source: &StreamSource) -> Resul
     // Start timing the execution
     let start = Instant::now();
 
-    let job_task = runtime::spawn(task_fut.instrument(span));
-    let abort_handle = job_task.abort_handle();
-
     // Set up a shutdown handler that waits for the shutdown signal
     // and then gives tasks 5 seconds to complete before aborting them
     let mut shutdown_signal = worker.shutdown_signal().clone();
@@ -742,7 +751,9 @@ async fn run_job(job: Arc<Job>, worker: &Worker, source: &StreamSource) -> Resul
         runtime::sleep(Duration::from_secs(5)).await;
     };
 
-    let job_task = job_task.fuse();
+    let job_task = std::panic::AssertUnwindSafe(task_fut.instrument(span))
+        .catch_unwind()
+        .fuse();
     let shutdown_timeout = shutdown_timeout.fuse();
     futures::pin_mut!(job_task, shutdown_timeout);
 
@@ -750,13 +761,12 @@ async fn run_job(job: Arc<Job>, worker: &Worker, source: &StreamSource) -> Resul
     futures::select_biased! {
         res = job_task => {
             match res {
-                Err(e) => Err(RunJobError::TaskPanic(e)),
                 Ok(Err(e)) => Err(RunJobError::TaskError(e)),
-                Ok(Ok(_)) => Ok(()),
+                Ok(Ok(())) => Ok(()),
+                Err(e) => Err(RunJobError::TaskPanic(panic_payload_to_string(e))),
             }
         }
         _ = shutdown_timeout => {
-            abort_handle.abort();
             let payload = job.payload().to_string();
             warn!(task_identifier, payload, job_id = job.id(), "Job interrupted by shutdown signal after 5 seconds timeout");
             Err(RunJobError::TaskAborted)
