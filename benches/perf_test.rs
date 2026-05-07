@@ -1,6 +1,7 @@
 mod common;
 
 use common::{create_bench_database, BenchPayload};
+use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use graphile_worker::{
     IntoTaskHandlerResult, JobSpec, LocalQueueConfig, RawJobSpec, TaskHandler, WorkerContext,
 };
@@ -25,7 +26,7 @@ impl TaskHandler for BenchPayload {
     }
 }
 
-async fn run_benchmark(with_local_queue: bool) -> f64 {
+async fn run_benchmark(with_local_queue: bool) -> Duration {
     let db = create_bench_database().await;
     let utils = db.worker_utils();
     utils.migrate().await.expect("Failed to migrate");
@@ -74,19 +75,29 @@ async fn run_benchmark(with_local_queue: bool) -> f64 {
     );
 
     db.drop().await;
-    jobs_per_sec
+    elapsed
 }
 
-fn main() {
+fn bench_local_queue_execution(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
 
-    rt.block_on(async {
-        println!("=== Performance Test ({} jobs) ===\n", JOB_COUNT);
+    let mut group = c.benchmark_group("perf_test");
+    group.sample_size(10);
+    group.measurement_time(Duration::from_secs(30));
+    group.throughput(Throughput::Elements(JOB_COUNT as u64));
 
-        println!("Testing WITH local queue...");
-        let with_lq = run_benchmark(true).await;
-
-        println!("\n=== Summary ===");
-        println!("With local queue: {:.0} jobs/sec", with_lq);
+    group.bench_function("local_queue_200k_execution", |b| {
+        b.to_async(&rt).iter_custom(|iters| async move {
+            let mut total_elapsed = Duration::ZERO;
+            for _ in 0..iters {
+                total_elapsed += run_benchmark(true).await;
+            }
+            total_elapsed
+        });
     });
+
+    group.finish();
 }
+
+criterion_group!(benches, bench_local_queue_execution);
+criterion_main!(benches);

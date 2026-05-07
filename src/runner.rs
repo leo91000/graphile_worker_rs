@@ -352,19 +352,27 @@ impl Worker {
                         local_queue.pulse(1).await;
                     }
 
-                    let job = local_queue.get_job(&self.forbidden_flags).await;
+                    let mut source = source;
+                    loop {
+                        let job = local_queue.get_job(&self.forbidden_flags).await;
 
-                    if let Some(job) = job {
+                        let Some(job) = job else {
+                            break;
+                        };
+
                         let job = Arc::new(job);
 
-                        self.hooks
-                            .emit(JobFetchContext {
-                                job: job.clone(),
-                                worker_id: self.worker_id().clone(),
-                            })
-                            .await;
+                        if !self.hooks.is_empty() {
+                            self.hooks
+                                .emit(JobFetchContext {
+                                    job: job.clone(),
+                                    worker_id: self.worker_id().clone(),
+                                })
+                                .await;
+                        }
 
                         run_and_release_job(job.clone(), self, &source).await?;
+                        source = StreamSource::Internal;
                     }
 
                     Ok(())
@@ -444,9 +452,14 @@ impl Worker {
     /// A new `WorkerUtils` instance configured with this worker's database connection
     /// pool and schema.
     pub fn create_utils(&self) -> WorkerUtils {
-        WorkerUtils::new(self.pg_pool.clone(), self.escaped_schema.clone())
-            .with_hooks(self.hooks.clone())
-            .with_task_details(self.task_details.clone())
+        let utils = WorkerUtils::new(self.pg_pool.clone(), self.escaped_schema.clone())
+            .with_task_details(self.task_details.clone());
+
+        if self.hooks.is_empty() {
+            utils
+        } else {
+            utils.with_hooks(self.hooks.clone())
+        }
     }
 
     /// Requests a graceful shutdown of the worker.
@@ -518,13 +531,15 @@ async fn process_one_job(
         Some(job) => {
             let job = Arc::new(job);
 
-            worker
-                .hooks
-                .emit(JobFetchContext {
-                    job: job.clone(),
-                    worker_id: worker.worker_id().clone(),
-                })
-                .await;
+            if !worker.hooks.is_empty() {
+                worker
+                    .hooks
+                    .emit(JobFetchContext {
+                        job: job.clone(),
+                        worker_id: worker.worker_id().clone(),
+                    })
+                    .await;
+            }
 
             run_and_release_job(job.clone(), worker, &source).await?;
             Ok(Some(
@@ -560,59 +575,65 @@ async fn run_and_release_job(
     worker: &Worker,
     source: &StreamSource,
 ) -> Result<(), ProcessJobError> {
-    let before_result = worker
-        .hooks
-        .intercept(BeforeJobRunContext {
-            job: job.clone(),
-            worker_id: worker.worker_id().clone(),
-            payload: job.payload().clone(),
-        })
-        .await;
+    let (job_result, duration) = if worker.hooks.is_empty() {
+        let start = Instant::now();
+        let job_result = run_job(job.clone(), worker, source).await;
+        (job_result, start.elapsed())
+    } else {
+        let before_result = worker
+            .hooks
+            .intercept(BeforeJobRunContext {
+                job: job.clone(),
+                worker_id: worker.worker_id().clone(),
+                payload: job.payload().clone(),
+            })
+            .await;
 
-    let (job_result, duration) = match before_result {
-        HookResult::Continue => {
-            worker
-                .hooks
-                .emit(JobStartContext {
-                    job: job.clone(),
-                    worker_id: worker.worker_id().clone(),
-                })
-                .await;
+        match before_result {
+            HookResult::Continue => {
+                worker
+                    .hooks
+                    .emit(JobStartContext {
+                        job: job.clone(),
+                        worker_id: worker.worker_id().clone(),
+                    })
+                    .await;
 
-            let start = Instant::now();
-            let job_result = run_job(&job, worker, source).await;
-            let duration = start.elapsed();
+                let start = Instant::now();
+                let job_result = run_job(job.clone(), worker, source).await;
+                let duration = start.elapsed();
 
-            let result_for_hook = job_result
-                .as_ref()
-                .map(|_| ())
-                .map_err(|e| format!("{e:?}"));
-            let after_result = worker
-                .hooks
-                .intercept(AfterJobRunContext {
-                    job: job.clone(),
-                    worker_id: worker.worker_id().clone(),
-                    result: result_for_hook,
-                    duration,
-                })
-                .await;
+                let result_for_hook = job_result
+                    .as_ref()
+                    .map(|_| ())
+                    .map_err(|e| format!("{e:?}"));
+                let after_result = worker
+                    .hooks
+                    .intercept(AfterJobRunContext {
+                        job: job.clone(),
+                        worker_id: worker.worker_id().clone(),
+                        result: result_for_hook,
+                        duration,
+                    })
+                    .await;
 
-            match after_result {
-                HookResult::Continue => (job_result, duration),
-                HookResult::Skip => (Ok(()), duration),
-                HookResult::Fail(msg) => (Err(RunJobError::TaskError(msg)), duration),
+                match after_result {
+                    HookResult::Continue => (job_result, duration),
+                    HookResult::Skip => (Ok(()), duration),
+                    HookResult::Fail(msg) => (Err(RunJobError::TaskError(msg)), duration),
+                }
             }
-        }
-        HookResult::Skip => {
-            debug!(job_id = job.id(), "Job skipped by before_job_run hook");
-            (Ok(()), Duration::ZERO)
-        }
-        HookResult::Fail(msg) => {
-            debug!(
-                job_id = job.id(),
-                "Job failed by before_job_run hook: {}", msg
-            );
-            (Err(RunJobError::TaskError(msg)), Duration::ZERO)
+            HookResult::Skip => {
+                debug!(job_id = job.id(), "Job skipped by before_job_run hook");
+                (Ok(()), Duration::ZERO)
+            }
+            HookResult::Fail(msg) => {
+                debug!(
+                    job_id = job.id(),
+                    "Job failed by before_job_run hook: {}", msg
+                );
+                (Err(RunJobError::TaskError(msg)), Duration::ZERO)
+            }
         }
     };
 
@@ -674,42 +695,35 @@ enum RunJobError {
         otel.name = tracing::field::Empty
     )
 )]
-async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<(), RunJobError> {
-    link_to_job_create_span(job.payload().clone());
+async fn run_job(job: Arc<Job>, worker: &Worker, source: &StreamSource) -> Result<(), RunJobError> {
+    link_to_job_create_span(job.payload());
     let task_id = job.task_id();
-
-    // Look up the task identifier (string) from the task ID (integer)
-    let task_details_guard = worker.task_details.read().await;
-    let task_identifier = task_details_guard
-        .get(task_id)
-        .ok_or(RunJobError::IdentifierNotFound(*task_id))?
-        .clone();
-    drop(task_details_guard);
+    let task_identifier = job.task_identifier();
+    if task_identifier.is_empty() {
+        return Err(RunJobError::IdentifierNotFound(*task_id));
+    }
 
     let span = Span::current();
     span.record("otel.name", task_identifier.as_str());
     span.record("messaging.destination.name", task_identifier.as_str());
 
-    // Find the handler function for this task identifier
     let task_fn = worker
         .jobs()
-        .get(&task_identifier)
+        .get(task_identifier)
         .ok_or_else(|| RunJobError::FnNotFound(task_identifier.clone()))?;
 
     debug!(source = ?source, job_id = job.id(), task_identifier, task_id, "Found task");
-    let payload = job.payload().to_string();
 
     // Create a context for the task handler
-    let worker_ctx = WorkerContext::builder()
-        .payload(job.payload().clone())
-        .pg_pool(worker.pg_pool().clone())
-        .escaped_schema(worker.escaped_schema().clone())
-        .job(job.clone())
-        .worker_id(worker.worker_id().clone())
-        .extensions(worker.extensions().clone())
-        .task_details(worker.task_details().clone())
-        .use_local_time(worker.use_local_time)
-        .build();
+    let worker_ctx = WorkerContext::from_shared_job(
+        job.clone(),
+        worker.pg_pool().clone(),
+        worker.escaped_schema().clone(),
+        worker.worker_id().clone(),
+        worker.extensions().clone(),
+        worker.task_details().clone(),
+        worker.use_local_time,
+    );
 
     // Get the future that will execute the task
     let task_fut = task_fn(worker_ctx);
@@ -743,6 +757,7 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
         }
         _ = shutdown_timeout => {
             abort_handle.abort();
+            let payload = job.payload().to_string();
             warn!(task_identifier, payload, job_id = job.id(), "Job interrupted by shutdown signal after 5 seconds timeout");
             Err(RunJobError::TaskAborted)
         }
@@ -751,13 +766,16 @@ async fn run_job(job: &Job, worker: &Worker, source: &StreamSource) -> Result<()
     // Calculate execution duration
     let duration = start.elapsed();
 
-    info!(
-        task_identifier,
-        payload,
-        job_id = job.id(),
-        duration = duration.as_millis(),
-        "Completed task with success"
-    );
+    if tracing::enabled!(tracing::Level::INFO) {
+        let payload = job.payload().to_string();
+        info!(
+            task_identifier,
+            payload,
+            job_id = job.id(),
+            duration = duration.as_millis(),
+            "Completed task with success"
+        );
+    }
 
     // TODO: Handle batch jobs (vec of futures returned by
     // function)
@@ -827,14 +845,16 @@ async fn release_job(
                     source: e,
                 })?;
 
-                worker
-                    .hooks
-                    .emit(JobCompleteContext {
-                        job,
-                        worker_id: worker.worker_id().clone(),
-                        duration,
-                    })
-                    .await;
+                if !worker.hooks.is_empty() {
+                    worker
+                        .hooks
+                        .emit(JobCompleteContext {
+                            job,
+                            worker_id: worker.worker_id().clone(),
+                            duration,
+                        })
+                        .await;
+                }
             }
         }
         Err(e) => {
@@ -877,14 +897,16 @@ async fn release_job(
                         "Job max attempts reached"
                     );
 
-                    worker
-                        .hooks
-                        .emit(JobPermanentlyFailContext {
-                            job: job.clone(),
-                            worker_id: worker.worker_id().clone(),
-                            error: error_str.clone(),
-                        })
-                        .await;
+                    if !worker.hooks.is_empty() {
+                        worker
+                            .hooks
+                            .emit(JobPermanentlyFailContext {
+                                job: job.clone(),
+                                worker_id: worker.worker_id().clone(),
+                                error: error_str.clone(),
+                            })
+                            .await;
+                    }
                 } else {
                     warn!(
                         error = ?e,
@@ -894,15 +916,17 @@ async fn release_job(
                         "Failed task"
                     );
 
-                    worker
-                        .hooks
-                        .emit(JobFailContext {
-                            job: job.clone(),
-                            worker_id: worker.worker_id().clone(),
-                            error: error_str.clone(),
-                            will_retry,
-                        })
-                        .await;
+                    if !worker.hooks.is_empty() {
+                        worker
+                            .hooks
+                            .emit(JobFailContext {
+                                job: job.clone(),
+                                worker_id: worker.worker_id().clone(),
+                                error: error_str.clone(),
+                                will_retry,
+                            })
+                            .await;
+                    }
                 }
 
                 fail_job(

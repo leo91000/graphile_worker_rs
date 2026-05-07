@@ -12,8 +12,10 @@ use sqlx::PgPool;
 use std::time::Instant;
 use tracing::{error, trace, warn};
 
-use crate::sql::fail_job::fail_job;
+use crate::sql::fail_job::{fail_job, fail_jobs, FailedJob};
 use crate::Job;
+
+const BATCHER_CHANNEL_CAPACITY: usize = 4096;
 
 pub struct CompletionRequest {
     pub job_id: i64,
@@ -39,7 +41,7 @@ impl CompletionBatcher {
         hooks: Arc<HookRegistry>,
         shutdown_signal: ShutdownSignal,
     ) -> Self {
-        let (tx, rx) = runtime::channel(1024);
+        let (tx, rx) = runtime::channel(BATCHER_CHANNEL_CAPACITY);
 
         let task = runtime::spawn(completion_batcher_task(
             rx,
@@ -193,15 +195,23 @@ async fn flush_batch(
 
     trace!(batch_size = batch.len(), "Flushing completion batch");
 
-    let (with_queue, without_queue): (Vec<_>, Vec<_>) = batch.iter().partition(|r| r.has_queue);
+    let mut with_queue_ids = Vec::new();
+    let mut without_queue_ids = Vec::with_capacity(batch.len());
 
-    if !with_queue.is_empty() {
-        let ids: Vec<i64> = with_queue.iter().map(|r| r.job_id).collect();
+    for req in batch {
+        if req.has_queue {
+            with_queue_ids.push(req.job_id);
+        } else {
+            without_queue_ids.push(req.job_id);
+        }
+    }
+
+    if !with_queue_ids.is_empty() {
         let sql = formatdoc!(
             r#"
                 WITH j AS (
                     DELETE FROM {escaped_schema}._private_jobs
-                    USING unnest($1::bigint[]) n(n) WHERE id = n
+                    WHERE id = ANY($1::bigint[])
                     RETURNING *
                 )
                 UPDATE {escaped_schema}._private_job_queues AS job_queues
@@ -212,7 +222,7 @@ async fn flush_batch(
         );
 
         if let Err(e) = sqlx::query(&sql)
-            .bind(&ids)
+            .bind(&with_queue_ids)
             .bind(worker_id)
             .execute(pg_pool)
             .await
@@ -221,28 +231,34 @@ async fn flush_batch(
         }
     }
 
-    if !without_queue.is_empty() {
-        let ids: Vec<i64> = without_queue.iter().map(|r| r.job_id).collect();
+    if !without_queue_ids.is_empty() {
         let sql = formatdoc!(
             r#"
                 DELETE FROM {escaped_schema}._private_jobs
-                USING unnest($1::bigint[]) n(n) WHERE id = n
+                WHERE id = ANY($1::bigint[])
             "#
         );
 
-        if let Err(e) = sqlx::query(&sql).bind(&ids).execute(pg_pool).await {
+        if let Err(e) = sqlx::query(&sql)
+            .bind(&without_queue_ids)
+            .execute(pg_pool)
+            .await
+        {
             error!(error = ?e, "Failed to complete jobs without queue");
         }
     }
 
-    for req in batch {
-        hooks
-            .emit(JobCompleteContext {
-                job: req.job.clone(),
-                worker_id: worker_id.to_string(),
-                duration: req.duration,
-            })
-            .await;
+    if !hooks.is_empty() {
+        let worker_id = worker_id.to_string();
+        for req in batch {
+            hooks
+                .emit(JobCompleteContext {
+                    job: req.job.clone(),
+                    worker_id: worker_id.clone(),
+                    duration: req.duration,
+                })
+                .await;
+        }
     }
 }
 
@@ -312,7 +328,7 @@ impl FailureBatcher {
         hooks: Arc<HookRegistry>,
         shutdown_signal: ShutdownSignal,
     ) -> Self {
-        let (tx, rx) = runtime::channel(1024);
+        let (tx, rx) = runtime::channel(BATCHER_CHANNEL_CAPACITY);
 
         let task = runtime::spawn(failure_batcher_task(
             rx,
@@ -448,39 +464,54 @@ async fn flush_failure_batch(
 
     trace!(batch_size = batch.len(), "Flushing failure batch");
 
-    for req in batch {
-        if let Err(e) = fail_job(
-            pg_pool,
-            &req.job,
-            escaped_schema,
-            worker_id,
-            &req.error,
-            None,
-        )
-        .await
-        {
-            error!(error = ?e, job_id = ?req.job.id(), "Failed to fail job");
+    let failed_jobs: Vec<FailedJob<'_>> = batch
+        .iter()
+        .map(|req| FailedJob {
+            job: req.job.as_ref(),
+            error: &req.error,
+        })
+        .collect();
+
+    if let Err(e) = fail_jobs(pg_pool, &failed_jobs, escaped_schema, worker_id).await {
+        error!(error = ?e, batch_size = batch.len(), "Failed to fail jobs");
+
+        for req in batch {
+            if let Err(e) = fail_job(
+                pg_pool,
+                &req.job,
+                escaped_schema,
+                worker_id,
+                &req.error,
+                None,
+            )
+            .await
+            {
+                error!(error = ?e, job_id = ?req.job.id(), "Failed to fail job");
+            }
         }
     }
 
-    for req in batch {
-        if req.will_retry {
-            hooks
-                .emit(JobFailContext {
-                    job: req.job.clone(),
-                    worker_id: worker_id.to_string(),
-                    error: req.error.clone(),
-                    will_retry: true,
-                })
-                .await;
-        } else {
-            hooks
-                .emit(JobPermanentlyFailContext {
-                    job: req.job.clone(),
-                    worker_id: worker_id.to_string(),
-                    error: req.error.clone(),
-                })
-                .await;
+    if !hooks.is_empty() {
+        let worker_id = worker_id.to_string();
+        for req in batch {
+            if req.will_retry {
+                hooks
+                    .emit(JobFailContext {
+                        job: req.job.clone(),
+                        worker_id: worker_id.clone(),
+                        error: req.error.clone(),
+                        will_retry: true,
+                    })
+                    .await;
+            } else {
+                hooks
+                    .emit(JobPermanentlyFailContext {
+                        job: req.job.clone(),
+                        worker_id: worker_id.clone(),
+                        error: req.error.clone(),
+                    })
+                    .await;
+            }
         }
     }
 }

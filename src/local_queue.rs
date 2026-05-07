@@ -569,9 +569,7 @@ impl LocalQueue {
         let job_count = jobs.len();
         {
             let mut job_queue = self.0.job_queue.lock().await;
-            for job in jobs {
-                job_queue.push_back(job);
-            }
+            job_queue.extend(jobs);
         }
 
         self.set_mode(LocalQueueMode::Waiting).await;
@@ -694,7 +692,7 @@ impl LocalQueue {
             &task_details,
             &self.0.escaped_schema,
             &self.0.worker_id,
-            &flags_to_skip.to_vec(),
+            flags_to_skip,
             now,
         )
         .await
@@ -725,8 +723,6 @@ impl LocalQueue {
 
             if remaining == 0 {
                 self.set_mode(LocalQueueMode::Polling).await;
-            } else {
-                let _ = self.0.job_signal_sender.try_send(());
             }
 
             return Some(job);

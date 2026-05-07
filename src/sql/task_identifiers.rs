@@ -24,6 +24,10 @@ pub async fn get_tasks_details<'e>(
     escaped_schema: &str,
     task_names: Vec<String>,
 ) -> Result<TaskDetails> {
+    if task_names.is_empty() {
+        return Ok(TaskDetails::new());
+    }
+
     let insert_tasks_query = format!("insert into {escaped_schema}._private_tasks as tasks (identifier) select unnest($1::text[]) on conflict do nothing");
     query(&insert_tasks_query)
         .bind(&task_names)

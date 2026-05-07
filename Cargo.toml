@@ -140,3 +140,7 @@ harness = false
 [[bench]]
 name = "perf_test"
 harness = false
+
+[[bench]]
+name = "failure"
+harness = false
