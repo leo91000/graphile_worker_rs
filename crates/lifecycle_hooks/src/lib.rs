@@ -26,6 +26,10 @@ pub struct TypeErasedHooks {
 }
 
 impl TypeErasedHooks {
+    pub fn is_empty(&self) -> bool {
+        self.handlers.is_empty()
+    }
+
     pub fn get_handlers<E: Event>(&self) -> Option<&HandlerVec<E::Context, E::Output>> {
         self.handlers
             .get(&TypeId::of::<E>())
@@ -41,6 +45,10 @@ impl TypeErasedHooks {
     }
 
     pub async fn emit<C: Emittable>(&self, ctx: C) {
+        if self.is_empty() {
+            return;
+        }
+
         ctx.emit_to(self).await
     }
 
@@ -50,6 +58,10 @@ impl TypeErasedHooks {
 }
 
 impl HookRegistry {
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
     pub async fn emit<C: Emittable>(&self, ctx: C) {
         self.inner.emit(ctx).await
     }

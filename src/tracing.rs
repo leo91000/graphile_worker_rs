@@ -3,7 +3,7 @@ pub(crate) use functions::{add_tracing_info, link_to_job_create_span};
 #[cfg(not(any(feature = "opentelemetry_0_30", feature = "opentelemetry_0_31")))]
 mod functions {
     pub(crate) fn add_tracing_info(_payload: &mut serde_json::Value) {}
-    pub(crate) fn link_to_job_create_span(_payload: serde_json::Value) {}
+    pub(crate) fn link_to_job_create_span(_payload: &serde_json::Value) {}
 }
 
 #[cfg(any(feature = "opentelemetry_0_30", feature = "opentelemetry_0_31"))]
@@ -47,7 +47,7 @@ mod functions {
         }
     }
 
-    pub(crate) fn link_to_job_create_span(payload: serde_json::Value) {
+    pub(crate) fn link_to_job_create_span(payload: &serde_json::Value) {
         let obj = match payload.as_object() {
             Some(obj) => obj,
             None => return,

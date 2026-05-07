@@ -15,7 +15,7 @@ pub async fn get_job<'e>(
     task_details: &TaskDetails,
     escaped_schema: &str,
     worker_id: &str,
-    flags_to_skip: &Vec<String>,
+    flags_to_skip: &[String],
     now: Option<DateTime<Utc>>,
 ) -> Result<Option<Job>> {
     let has_flags = !flags_to_skip.is_empty();

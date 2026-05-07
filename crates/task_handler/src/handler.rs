@@ -122,7 +122,7 @@ pub async fn run_task_from_worker_ctx<T: TaskHandler>(
     worker_context: WorkerContext,
 ) -> Result<(), String> {
     // Deserialize the job payload into the task handler type
-    let job = serde_json::from_value::<T>(worker_context.payload().clone());
+    let job = T::deserialize(worker_context.payload());
     let Ok(job) = job else {
         let e = job.err().unwrap();
         return Err(format!("{e:?}"));

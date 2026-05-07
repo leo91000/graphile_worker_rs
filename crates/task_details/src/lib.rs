@@ -23,6 +23,12 @@ impl TaskDetails {
         self.0.get(id)
     }
 
+    pub fn get_id(&self, identifier: &str) -> Option<i32> {
+        self.0
+            .iter()
+            .find_map(|(id, value)| (value == identifier).then_some(*id))
+    }
+
     pub fn get_or_empty(&self, job_id: &i64, task_id: &i32) -> String {
         match self.0.get(task_id) {
             Some(identifier) => identifier.to_owned(),
@@ -136,6 +142,15 @@ mod tests {
 
         let result = details.get_or_empty(&100, &5);
         assert_eq!(result, "my_task");
+    }
+
+    #[test]
+    fn task_details_get_id_found() {
+        let mut details = TaskDetails::new();
+        details.insert(5, "my_task".to_string());
+
+        assert_eq!(details.get_id("my_task"), Some(5));
+        assert_eq!(details.get_id("other_task"), None);
     }
 
     #[test]

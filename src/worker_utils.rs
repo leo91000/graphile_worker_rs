@@ -10,7 +10,10 @@ use graphile_worker_task_handler::TaskHandler;
 use indoc::formatdoc;
 use serde::Serialize;
 use sqlx::{PgExecutor, PgPool};
-use tracing::Span;
+use std::collections::HashSet;
+use tracing::{debug, Span};
+
+const BULK_INSERT_ANALYZE_THRESHOLD: usize = 10_000;
 
 /// Types of database cleanup tasks that can be performed on the Graphile Worker schema.
 ///
@@ -197,15 +200,12 @@ impl WorkerUtils {
         }
     }
 
-    async fn prepare_batch_jobs<'a, I>(
+    async fn prepare_batch_jobs<'a>(
         &self,
-        jobs: I,
-    ) -> Result<(Vec<JobToAdd<'a>>, bool), GraphileWorkerError>
-    where
-        I: IntoIterator<Item = (&'a str, serde_json::Value, &'a JobSpec)>,
-    {
-        let jobs: Vec<_> = jobs.into_iter().collect();
+        jobs: Vec<(&'a str, serde_json::Value, &'a JobSpec)>,
+    ) -> Result<(Vec<JobToAdd<'a>>, bool), GraphileWorkerError> {
         let mut jobs_to_add = Vec::with_capacity(jobs.len());
+        let mut job_key_preserve_run_at = false;
 
         for (identifier, mut payload, spec) in jobs {
             add_tracing_info(&mut payload);
@@ -214,6 +214,11 @@ impl WorkerUtils {
                 .invoke_before_job_schedule(identifier, payload, spec)
                 .await?;
 
+            job_key_preserve_run_at |= spec
+                .job_key_mode()
+                .as_ref()
+                .is_some_and(|m| matches!(m, crate::JobKeyMode::PreserveRunAt));
+
             jobs_to_add.push(JobToAdd {
                 identifier,
                 payload,
@@ -221,14 +226,24 @@ impl WorkerUtils {
             });
         }
 
-        let job_key_preserve_run_at = jobs_to_add.iter().any(|j| {
-            j.spec
-                .job_key_mode()
-                .as_ref()
-                .is_some_and(|m| matches!(m, crate::JobKeyMode::PreserveRunAt))
-        });
-
         Ok((jobs_to_add, job_key_preserve_run_at))
+    }
+
+    async fn analyze_jobs_after_large_batch(&self, job_count: usize) {
+        if job_count < BULK_INSERT_ANALYZE_THRESHOLD {
+            return;
+        }
+
+        let sql = formatdoc!(
+            r#"
+                analyze {escaped_schema}._private_jobs;
+            "#,
+            escaped_schema = self.escaped_schema
+        );
+
+        if let Err(error) = sqlx::query(&sql).execute(&self.pg_pool).await {
+            debug!(?error, "Failed to analyze jobs after large batch insert");
+        }
     }
 
     /// Adds a job to the queue with type safety.
@@ -422,17 +437,17 @@ impl WorkerUtils {
         }
 
         let identifier = T::IDENTIFIER;
-        let job_inputs = jobs.iter().map(|(payload, spec)| {
-            let payload_value = serde_json::to_value(payload.clone())?;
-            Ok((identifier, payload_value, *spec))
-        });
-        let job_inputs: Result<Vec<_>, GraphileWorkerError> = job_inputs.collect();
+        let mut job_inputs = Vec::with_capacity(jobs.len());
+        for (payload, spec) in jobs {
+            let payload_value = serde_json::to_value(payload)?;
+            job_inputs.push((identifier, payload_value, *spec));
+        }
 
-        let (jobs_to_add, job_key_preserve_run_at) = self.prepare_batch_jobs(job_inputs?).await?;
+        let (jobs_to_add, job_key_preserve_run_at) = self.prepare_batch_jobs(job_inputs).await?;
 
         let task_details = self.task_details.read().await;
 
-        add_jobs(
+        let added_jobs = add_jobs(
             &self.pg_pool,
             &self.escaped_schema,
             &jobs_to_add,
@@ -440,7 +455,12 @@ impl WorkerUtils {
             job_key_preserve_run_at,
             self.use_local_time,
         )
-        .await
+        .await?;
+        drop(task_details);
+
+        self.analyze_jobs_after_large_batch(jobs.len()).await;
+
+        Ok(added_jobs)
     }
 
     /// Adds multiple jobs with raw identifiers and payloads in a single batch operation.
@@ -499,23 +519,25 @@ impl WorkerUtils {
             return Ok(vec![]);
         }
 
-        let job_inputs = jobs
+        let job_inputs: Vec<_> = jobs
             .iter()
-            .map(|job| (job.identifier.as_str(), job.payload.clone(), &job.spec));
+            .map(|job| (job.identifier.as_str(), job.payload.clone(), &job.spec))
+            .collect();
 
         let (jobs_to_add, job_key_preserve_run_at) = self.prepare_batch_jobs(job_inputs).await?;
 
-        let unique_identifiers: Vec<String> = jobs
-            .iter()
-            .map(|j| j.identifier.clone())
-            .collect::<std::collections::HashSet<_>>()
-            .into_iter()
-            .collect();
+        let mut seen_identifiers = HashSet::with_capacity(jobs.len());
+        let mut unique_identifiers = Vec::new();
+        for job in jobs {
+            if seen_identifiers.insert(job.identifier.as_str()) {
+                unique_identifiers.push(job.identifier.clone());
+            }
+        }
 
         let task_details =
             get_tasks_details(&self.pg_pool, &self.escaped_schema, unique_identifiers).await?;
 
-        add_jobs(
+        let added_jobs = add_jobs(
             &self.pg_pool,
             &self.escaped_schema,
             &jobs_to_add,
@@ -523,7 +545,12 @@ impl WorkerUtils {
             job_key_preserve_run_at,
             self.use_local_time,
         )
-        .await
+        .await?;
+        drop(task_details);
+
+        self.analyze_jobs_after_large_batch(jobs.len()).await;
+
+        Ok(added_jobs)
     }
 
     /// Removes a job from the queue by its job key.
