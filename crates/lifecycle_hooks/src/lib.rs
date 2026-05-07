@@ -70,3 +70,26 @@ impl HookRegistry {
         self.inner.intercept(ctx).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use graphile_worker_job::Job;
+
+    use super::*;
+
+    #[test]
+    fn emit_on_empty_registry_returns() {
+        futures::executor::block_on(async {
+            TypeErasedHooks::default()
+                .emit(JobCompleteContext {
+                    job: Arc::new(Job::builder().build()),
+                    worker_id: "worker".to_string(),
+                    duration: Duration::ZERO,
+                })
+                .await;
+        });
+    }
+}
