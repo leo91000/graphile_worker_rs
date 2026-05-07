@@ -13,7 +13,7 @@ use crate::local_queue::LocalQueue;
 use crate::sql::{get_job::get_job, task_identifiers::SharedTaskDetails};
 use crate::streams::{job_signal_stream, job_signal_stream_with_receiver, job_stream};
 use crate::worker_utils::WorkerUtils;
-use futures::{try_join, FutureExt, StreamExt, TryStreamExt};
+use futures::{stream::FuturesUnordered, try_join, FutureExt, Stream, StreamExt};
 use getset::Getters;
 use graphile_worker_crontab_runner::{cron_main, ScheduleCronJobError};
 use graphile_worker_crontab_types::Crontab;
@@ -40,7 +40,7 @@ use crate::{sql::fail_job::fail_job, streams::StreamSource};
 /// A task handler is a closure that takes a `WorkerContext` and returns a future
 /// that resolves to a `Result<(), String>`. The string in the error case represents
 /// the error message if the task fails.
-pub type WorkerFn = Box<
+pub type WorkerFn = Arc<
     dyn Fn(WorkerContext) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> + Send + Sync,
 >;
 
@@ -90,10 +90,26 @@ pub struct Worker {
     pub(crate) local_queue_config: Option<crate::local_queue::LocalQueueConfig>,
     /// Optional completion batcher for batching job completions
     #[getset(skip)]
-    pub(crate) completion_batcher: Option<crate::batcher::CompletionBatcher>,
+    pub(crate) completion_batcher: Option<Arc<crate::batcher::CompletionBatcher>>,
     /// Optional failure batcher for batching job failures
     #[getset(skip)]
-    pub(crate) failure_batcher: Option<crate::batcher::FailureBatcher>,
+    pub(crate) failure_batcher: Option<Arc<crate::batcher::FailureBatcher>>,
+}
+
+#[derive(Clone)]
+struct WorkerRunner {
+    worker_id: String,
+    jobs: HashMap<String, WorkerFn>,
+    pg_pool: sqlx::PgPool,
+    escaped_schema: String,
+    task_details: SharedTaskDetails,
+    forbidden_flags: Vec<String>,
+    use_local_time: bool,
+    shutdown_signal: ShutdownSignal,
+    extensions: ReadOnlyExtensions,
+    hooks: Arc<HookRegistry>,
+    completion_batcher: Option<Arc<crate::batcher::CompletionBatcher>>,
+    failure_batcher: Option<Arc<crate::batcher::FailureBatcher>>,
 }
 
 /// Errors that can occur during worker runtime.
@@ -105,6 +121,8 @@ pub enum WorkerRuntimeError {
     /// An error occurred while processing or releasing a job
     #[error("Unexpected error occured while processing job : '{0}'")]
     ProcessJob(#[from] ProcessJobError),
+    #[error("Worker task failed : '{0}'")]
+    WorkerTask(#[from] runtime::JoinError),
     /// Failed to listen to PostgreSQL notifications for new jobs
     #[error("Failed to listen to postgres notifications : '{0}'")]
     PgListen(#[from] GraphileWorkerError),
@@ -239,44 +257,53 @@ impl Worker {
             self.use_local_time,
         );
 
+        let runner = self.runner();
+
         job_stream
-            .for_each_concurrent(self.concurrency, |mut job| async move {
-                loop {
-                    let job_id = *job.id();
-                    let has_queue = job.job_queue_id().is_some();
-                    let result =
-                        run_and_release_job(Arc::new(job), self, &StreamSource::RunOnce).await;
+            .for_each_concurrent(self.concurrency, {
+                let runner = runner.clone();
+                move |mut job| {
+                    let runner = runner.clone();
+                    async move {
+                        loop {
+                            let job_id = *job.id();
+                            let has_queue = job.job_queue_id().is_some();
+                            let result =
+                                run_and_release_job(Arc::new(job), &runner, &StreamSource::RunOnce)
+                                    .await;
 
-                    match result {
-                        Ok(_) => {
-                            info!(job_id, "Job processed");
-                        }
-                        Err(e) => {
-                            error!("Error while processing job : {:?}", e);
-                        }
-                    };
+                            match result {
+                                Ok(_) => {
+                                    info!(job_id, "Job processed");
+                                }
+                                Err(e) => {
+                                    error!("Error while processing job : {:?}", e);
+                                }
+                            };
 
-                    if !has_queue {
-                        break;
+                            if !has_queue {
+                                break;
+                            }
+                            info!(job_id, "Job has queue, fetching another job");
+                            let now = runner.use_local_time.then(Utc::now);
+                            let task_details_guard = runner.task_details.read().await;
+                            let new_job = get_job(
+                                &runner.pg_pool,
+                                &task_details_guard,
+                                &runner.escaped_schema,
+                                &runner.worker_id,
+                                &runner.forbidden_flags,
+                                now,
+                            )
+                            .await
+                            .unwrap_or(None);
+                            drop(task_details_guard);
+                            let Some(new_job) = new_job else {
+                                break;
+                            };
+                            job = new_job;
+                        }
                     }
-                    info!(job_id, "Job has queue, fetching another job");
-                    let now = self.use_local_time.then(Utc::now);
-                    let task_details_guard = self.task_details.read().await;
-                    let new_job = get_job(
-                        self.pg_pool(),
-                        &task_details_guard,
-                        self.escaped_schema(),
-                        self.worker_id(),
-                        self.forbidden_flags(),
-                        now,
-                    )
-                    .await
-                    .unwrap_or(None);
-                    drop(task_details_guard);
-                    let Some(new_job) = new_job else {
-                        break;
-                    };
-                    job = new_job;
                 }
             })
             .await;
@@ -317,6 +344,23 @@ impl Worker {
         }
     }
 
+    fn runner(&self) -> WorkerRunner {
+        WorkerRunner {
+            worker_id: self.worker_id.clone(),
+            jobs: self.jobs.clone(),
+            pg_pool: self.pg_pool.clone(),
+            escaped_schema: self.escaped_schema.clone(),
+            task_details: self.task_details.clone(),
+            forbidden_flags: self.forbidden_flags.clone(),
+            use_local_time: self.use_local_time,
+            shutdown_signal: self.shutdown_signal.clone(),
+            extensions: self.extensions.clone(),
+            hooks: self.hooks.clone(),
+            completion_batcher: self.completion_batcher.clone(),
+            failure_batcher: self.failure_batcher.clone(),
+        }
+    }
+
     async fn job_runner_internal(
         &self,
         local_queue: Option<(LocalQueue, crate::streams::JobSignalReceiver)>,
@@ -337,48 +381,31 @@ impl Worker {
             self.pg_pool.clone(),
             self.poll_interval,
             self.shutdown_signal.clone(),
-            self.concurrency,
+            1,
             job_signal_rx,
         )
         .await?;
 
         debug!("Listening for jobs with LocalQueue...");
-        job_signal
-            .map(Ok::<_, ProcessJobError>)
-            .try_for_each_concurrent(self.concurrency, |source| {
-                let local_queue = local_queue.clone();
-                async move {
-                    if matches!(source, StreamSource::PgListener) {
-                        local_queue.pulse(1).await;
-                    }
+        let (source_tx, source_rx) = runtime::channel(self.concurrency * 4);
+        let worker_handles = FuturesUnordered::new();
+        let runner = self.runner();
 
-                    let mut source = source;
-                    loop {
-                        let job = local_queue.get_job(&self.forbidden_flags).await;
-
-                        let Some(job) = job else {
-                            break;
-                        };
-
-                        let job = Arc::new(job);
-
-                        if !self.hooks.is_empty() {
-                            self.hooks
-                                .emit(JobFetchContext {
-                                    job: job.clone(),
-                                    worker_id: self.worker_id().clone(),
-                                })
-                                .await;
-                        }
-
-                        run_and_release_job(job.clone(), self, &source).await?;
-                        source = StreamSource::Internal;
-                    }
-
-                    Ok(())
+        for _ in 0..self.concurrency {
+            let local_queue = local_queue.clone();
+            let runner = runner.clone();
+            let source_rx = source_rx.clone();
+            worker_handles.push(runtime::spawn(async move {
+                while let Ok(source) = source_rx.recv().await {
+                    process_local_queue_source(&runner, &local_queue, source).await?;
                 }
-            })
-            .await?;
+
+                Ok::<(), ProcessJobError>(())
+            }));
+        }
+        drop(source_rx);
+
+        dispatch_job_signals(job_signal, source_tx, worker_handles, self.concurrency).await?;
 
         if let Err(e) = local_queue.release().await {
             warn!(error = %e, "Error releasing LocalQueue");
@@ -393,23 +420,33 @@ impl Worker {
             self.pg_pool.clone(),
             self.poll_interval,
             self.shutdown_signal.clone(),
-            self.concurrency,
+            1,
         )
         .await?;
 
         debug!("Listening for jobs...");
-        job_signal
-            .map(Ok::<_, ProcessJobError>)
-            .try_for_each_concurrent(self.concurrency, |source| async move {
-                let res = process_one_job(self, source).await?;
+        let (source_tx, source_rx) = runtime::channel(self.concurrency * 4);
+        let worker_handles = FuturesUnordered::new();
+        let runner = self.runner();
 
-                if let Some(job) = res {
-                    debug!(job_id = job.id(), "Job processed");
+        for _ in 0..self.concurrency {
+            let runner = runner.clone();
+            let source_rx = source_rx.clone();
+            worker_handles.push(runtime::spawn(async move {
+                while let Ok(source) = source_rx.recv().await {
+                    let res = process_one_job(&runner, source).await?;
+
+                    if let Some(job) = res {
+                        debug!(job_id = job.id(), "Job processed");
+                    }
                 }
 
-                Ok(())
-            })
-            .await?;
+                Ok::<(), ProcessJobError>(())
+            }));
+        }
+        drop(source_rx);
+
+        dispatch_job_signals(job_signal, source_tx, worker_handles, self.concurrency).await?;
 
         Ok(())
     }
@@ -489,6 +526,106 @@ pub enum ProcessJobError {
     GetJobError(#[from] GraphileWorkerError),
 }
 
+async fn dispatch_job_signals<S>(
+    job_signal: S,
+    source_tx: runtime::Sender<StreamSource>,
+    mut worker_handles: FuturesUnordered<runtime::JoinHandle<Result<(), ProcessJobError>>>,
+    fanout: usize,
+) -> Result<(), WorkerRuntimeError>
+where
+    S: Stream<Item = StreamSource>,
+{
+    let job_signal = job_signal.fuse();
+    futures::pin_mut!(job_signal);
+
+    loop {
+        let next_source = job_signal.next().fuse();
+        let worker_done = worker_handles.next().fuse();
+        futures::pin_mut!(next_source, worker_done);
+
+        futures::select_biased! {
+            worker_result = worker_done => {
+                match worker_result {
+                    Some(Ok(Ok(()))) => {
+                        if worker_handles.is_empty() {
+                            break;
+                        }
+                    }
+                    Some(Ok(Err(e))) => {
+                        source_tx.close();
+                        return Err(e.into());
+                    }
+                    Some(Err(e)) => {
+                        source_tx.close();
+                        return Err(e.into());
+                    }
+                    None => break,
+                }
+            }
+            source = next_source => {
+                let Some(source) = source else {
+                    break;
+                };
+
+                let mut closed = false;
+                for _ in 0..fanout {
+                    if source_tx.try_send(source).is_err() && source_tx.send(source).await.is_err() {
+                        closed = true;
+                        break;
+                    }
+                }
+                if closed {
+                    break;
+                }
+            }
+        }
+    }
+
+    drop(source_tx);
+
+    while let Some(result) = worker_handles.next().await {
+        result??;
+    }
+
+    Ok(())
+}
+
+async fn process_local_queue_source(
+    worker: &WorkerRunner,
+    local_queue: &LocalQueue,
+    source: StreamSource,
+) -> Result<(), ProcessJobError> {
+    if matches!(source, StreamSource::PgListener) {
+        local_queue.pulse(1).await;
+    }
+
+    let mut source = source;
+    loop {
+        let job = local_queue.get_job(&worker.forbidden_flags).await;
+
+        let Some(job) = job else {
+            break;
+        };
+
+        let job = Arc::new(job);
+
+        if !worker.hooks.is_empty() {
+            worker
+                .hooks
+                .emit(JobFetchContext {
+                    job: job.clone(),
+                    worker_id: worker.worker_id.clone(),
+                })
+                .await;
+        }
+
+        run_and_release_job(job.clone(), worker, &source).await?;
+        source = StreamSource::Internal;
+    }
+
+    Ok(())
+}
+
 /// Fetches and processes a single job from the queue.
 ///
 /// This function attempts to get a job from the database, process it by
@@ -507,17 +644,17 @@ pub enum ProcessJobError {
 /// - `Ok(None)` if no job was available
 /// - `Err(ProcessJobError)` if an error occurred during processing
 async fn process_one_job(
-    worker: &Worker,
+    worker: &WorkerRunner,
     source: StreamSource,
 ) -> Result<Option<Job>, ProcessJobError> {
     let now = worker.use_local_time.then(Utc::now);
     let task_details_guard = worker.task_details.read().await;
     let job = get_job(
-        worker.pg_pool(),
+        &worker.pg_pool,
         &task_details_guard,
-        worker.escaped_schema(),
-        worker.worker_id(),
-        worker.forbidden_flags(),
+        &worker.escaped_schema,
+        &worker.worker_id,
+        &worker.forbidden_flags,
         now,
     )
     .await
@@ -536,7 +673,7 @@ async fn process_one_job(
                     .hooks
                     .emit(JobFetchContext {
                         job: job.clone(),
-                        worker_id: worker.worker_id().clone(),
+                        worker_id: worker.worker_id.clone(),
                     })
                     .await;
             }
@@ -572,7 +709,7 @@ async fn process_one_job(
 /// - `Err(ProcessJobError)` if an error occurred during processing or releasing
 async fn run_and_release_job(
     job: Arc<Job>,
-    worker: &Worker,
+    worker: &WorkerRunner,
     source: &StreamSource,
 ) -> Result<(), ProcessJobError> {
     let (job_result, duration) = if worker.hooks.is_empty() {
@@ -584,7 +721,7 @@ async fn run_and_release_job(
             .hooks
             .intercept(BeforeJobRunContext {
                 job: job.clone(),
-                worker_id: worker.worker_id().clone(),
+                worker_id: worker.worker_id.clone(),
                 payload: job.payload().clone(),
             })
             .await;
@@ -595,7 +732,7 @@ async fn run_and_release_job(
                     .hooks
                     .emit(JobStartContext {
                         job: job.clone(),
-                        worker_id: worker.worker_id().clone(),
+                        worker_id: worker.worker_id.clone(),
                     })
                     .await;
 
@@ -611,7 +748,7 @@ async fn run_and_release_job(
                     .hooks
                     .intercept(AfterJobRunContext {
                         job: job.clone(),
-                        worker_id: worker.worker_id().clone(),
+                        worker_id: worker.worker_id.clone(),
                         result: result_for_hook,
                         duration,
                     })
@@ -707,7 +844,11 @@ fn panic_payload_to_string(payload: Box<dyn std::any::Any + Send>) -> String {
         otel.name = tracing::field::Empty
     )
 )]
-async fn run_job(job: Arc<Job>, worker: &Worker, source: &StreamSource) -> Result<(), RunJobError> {
+async fn run_job(
+    job: Arc<Job>,
+    worker: &WorkerRunner,
+    source: &StreamSource,
+) -> Result<(), RunJobError> {
     link_to_job_create_span(job.payload());
     let task_id = job.task_id();
     let task_identifier = job.task_identifier();
@@ -720,7 +861,7 @@ async fn run_job(job: Arc<Job>, worker: &Worker, source: &StreamSource) -> Resul
     span.record("messaging.destination.name", task_identifier.as_str());
 
     let task_fn = worker
-        .jobs()
+        .jobs
         .get(task_identifier)
         .ok_or_else(|| RunJobError::FnNotFound(task_identifier.clone()))?;
 
@@ -729,11 +870,11 @@ async fn run_job(job: Arc<Job>, worker: &Worker, source: &StreamSource) -> Resul
     // Create a context for the task handler
     let worker_ctx = WorkerContext::from_shared_job(
         job.clone(),
-        worker.pg_pool().clone(),
-        worker.escaped_schema().clone(),
-        worker.worker_id().clone(),
-        worker.extensions().clone(),
-        worker.task_details().clone(),
+        worker.pg_pool.clone(),
+        worker.escaped_schema.clone(),
+        worker.worker_id.clone(),
+        worker.extensions.clone(),
+        worker.task_details.clone(),
         worker.use_local_time,
     );
 
@@ -745,7 +886,7 @@ async fn run_job(job: Arc<Job>, worker: &Worker, source: &StreamSource) -> Resul
 
     // Set up a shutdown handler that waits for the shutdown signal
     // and then gives tasks 5 seconds to complete before aborting them
-    let mut shutdown_signal = worker.shutdown_signal().clone();
+    let mut shutdown_signal = worker.shutdown_signal.clone();
     let shutdown_timeout = async {
         (&mut shutdown_signal).await;
         runtime::sleep(Duration::from_secs(5)).await;
@@ -828,7 +969,7 @@ pub struct ReleaseJobError {
 async fn release_job(
     job_result: Result<(), RunJobError>,
     job: Arc<Job>,
-    worker: &Worker,
+    worker: &WorkerRunner,
     duration: Duration,
 ) -> Result<(), ReleaseJobError> {
     match job_result {
@@ -844,10 +985,10 @@ async fn release_job(
                     .await;
             } else {
                 complete_job(
-                    worker.pg_pool(),
+                    &worker.pg_pool,
                     &job,
-                    worker.worker_id(),
-                    worker.escaped_schema(),
+                    &worker.worker_id,
+                    &worker.escaped_schema,
                 )
                 .await
                 .map_err(|e| ReleaseJobError {
@@ -860,7 +1001,7 @@ async fn release_job(
                         .hooks
                         .emit(JobCompleteContext {
                             job,
-                            worker_id: worker.worker_id().clone(),
+                            worker_id: worker.worker_id.clone(),
                             duration,
                         })
                         .await;
@@ -912,7 +1053,7 @@ async fn release_job(
                             .hooks
                             .emit(JobPermanentlyFailContext {
                                 job: job.clone(),
-                                worker_id: worker.worker_id().clone(),
+                                worker_id: worker.worker_id.clone(),
                                 error: error_str.clone(),
                             })
                             .await;
@@ -931,7 +1072,7 @@ async fn release_job(
                             .hooks
                             .emit(JobFailContext {
                                 job: job.clone(),
-                                worker_id: worker.worker_id().clone(),
+                                worker_id: worker.worker_id.clone(),
                                 error: error_str.clone(),
                                 will_retry,
                             })
@@ -940,10 +1081,10 @@ async fn release_job(
                 }
 
                 fail_job(
-                    worker.pg_pool(),
+                    &worker.pg_pool,
                     &job,
-                    worker.escaped_schema(),
-                    worker.worker_id(),
+                    &worker.escaped_schema,
+                    &worker.worker_id,
                     &error_str,
                     None,
                 )
