@@ -1,4 +1,7 @@
-use graphile_worker::{IntoTaskHandlerResult, JobSpec, TaskHandler, Worker, WorkerContext};
+use graphile_worker::{
+    HookRegistry, IntoTaskHandlerResult, JobComplete, JobFail, JobPermanentlyFail, JobSpec, Plugin,
+    TaskHandler, Worker, WorkerContext,
+};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -25,6 +28,58 @@ impl CompletedCounter {
 
     fn get(&self) -> u32 {
         self.0.load(Ordering::SeqCst)
+    }
+}
+
+#[derive(Debug, Default)]
+struct BatcherHookCounters {
+    complete: AtomicU32,
+    fail: AtomicU32,
+    permanent: AtomicU32,
+}
+
+#[derive(Clone, Debug)]
+struct BatcherHooksPlugin {
+    counters: Arc<BatcherHookCounters>,
+}
+
+impl BatcherHooksPlugin {
+    fn new() -> Self {
+        Self {
+            counters: Arc::new(BatcherHookCounters::default()),
+        }
+    }
+
+    fn counters(&self) -> Arc<BatcherHookCounters> {
+        self.counters.clone()
+    }
+}
+
+impl Plugin for BatcherHooksPlugin {
+    fn register(self, hooks: &mut HookRegistry) {
+        let counters = self.counters.clone();
+        hooks.on(JobComplete, move |_ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.complete.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+
+        let counters = self.counters.clone();
+        hooks.on(JobFail, move |_ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.fail.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+
+        let counters = self.counters.clone();
+        hooks.on(JobPermanentlyFail, move |_ctx| {
+            let counters = counters.clone();
+            async move {
+                counters.permanent.fetch_add(1, Ordering::SeqCst);
+            }
+        });
     }
 }
 
@@ -58,6 +113,90 @@ impl TaskHandler for FailJob {
         }
         Err::<(), String>(format!("Job {} failed", self.id))
     }
+}
+
+#[tokio::test]
+async fn test_batchers_emit_lifecycle_hooks() {
+    with_test_db(|test_db| async move {
+        let utils = test_db.worker_utils();
+        utils.migrate().await.expect("Failed to migrate");
+
+        let attempts = CompletedCounter::new();
+        let plugin = BatcherHooksPlugin::new();
+        let hook_counters = plugin.counters();
+
+        let worker = Arc::new(
+            Worker::options()
+                .pg_pool(test_db.test_pool.clone())
+                .concurrency(4)
+                .poll_interval(Duration::from_millis(50))
+                .complete_job_batch_delay(Duration::from_millis(10))
+                .fail_job_batch_delay(Duration::from_millis(10))
+                .add_extension(attempts.clone())
+                .add_plugin(plugin)
+                .define_job::<SuccessJob>()
+                .define_job::<FailJob>()
+                .init()
+                .await
+                .expect("Failed to create worker"),
+        );
+
+        let worker_clone = worker.clone();
+        let worker_handle = spawn_local(async move {
+            worker_clone.run().await.expect("Failed to run worker");
+        });
+
+        utils
+            .add_job(SuccessJob { id: 1 }, JobSpec::default())
+            .await
+            .expect("Failed to add success job");
+        utils
+            .add_job(
+                SuccessJob { id: 2 },
+                JobSpec::builder().queue_name("hooked_complete_queue").build(),
+            )
+            .await
+            .expect("Failed to add queued success job");
+        utils
+            .add_job(FailJob { id: 1 }, JobSpec::builder().max_attempts(3).build())
+            .await
+            .expect("Failed to add retryable fail job");
+        utils
+            .add_job(
+                FailJob { id: 2 },
+                JobSpec::builder()
+                    .queue_name("hooked_fail_queue")
+                    .max_attempts(1)
+                    .build(),
+            )
+            .await
+            .expect("Failed to add permanent fail job");
+
+        let start = Instant::now();
+        while hook_counters.complete.load(Ordering::SeqCst) < 2
+            || hook_counters.fail.load(Ordering::SeqCst) < 1
+            || hook_counters.permanent.load(Ordering::SeqCst) < 1
+        {
+            if start.elapsed() > Duration::from_secs(5) {
+                panic!(
+                    "Batch hooks should have fired by now, complete: {}, fail: {}, permanent: {}, attempts: {}",
+                    hook_counters.complete.load(Ordering::SeqCst),
+                    hook_counters.fail.load(Ordering::SeqCst),
+                    hook_counters.permanent.load(Ordering::SeqCst),
+                    attempts.get()
+                );
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+
+        assert_eq!(hook_counters.complete.load(Ordering::SeqCst), 2);
+        assert_eq!(hook_counters.fail.load(Ordering::SeqCst), 1);
+        assert_eq!(hook_counters.permanent.load(Ordering::SeqCst), 1);
+
+        worker.request_shutdown();
+        let _ = worker_handle.await;
+    })
+    .await;
 }
 
 #[tokio::test]

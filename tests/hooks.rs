@@ -1259,6 +1259,21 @@ impl Plugin for ExtendedHooksPlugin {
     }
 }
 
+#[derive(Clone)]
+struct AfterJobRunResultPlugin {
+    result: HookResult,
+}
+
+impl Plugin for AfterJobRunResultPlugin {
+    fn register(self, hooks: &mut HookRegistry) {
+        let result = self.result.clone();
+        hooks.on(AfterJobRun, move |_ctx| {
+            let result = result.clone();
+            async move { result }
+        });
+    }
+}
+
 #[tokio::test]
 async fn test_after_job_run_hook() {
     with_test_db(|test_db| async move {
@@ -1310,6 +1325,81 @@ async fn test_after_job_run_hook() {
         assert_eq!(counters.after_job_run.load(Ordering::SeqCst), 1);
 
         worker_fut.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn test_after_job_run_terminal_results() {
+    with_test_db(|test_db| async move {
+        let utils = test_db.worker_utils();
+        utils.migrate().await.expect("Failed to migrate");
+
+        let skip_worker = test_db
+            .create_worker_options()
+            .define_job::<TestJob>()
+            .add_plugin(AfterJobRunResultPlugin {
+                result: HookResult::Skip,
+            })
+            .init()
+            .await
+            .expect("Failed to create skip worker");
+
+        utils
+            .add_job(
+                TestJob {
+                    value: 1,
+                    skip: false,
+                    force_fail: false,
+                    should_error: false,
+                },
+                JobSpec::default(),
+            )
+            .await
+            .expect("Failed to add skip job");
+
+        skip_worker
+            .run_once()
+            .await
+            .expect("Failed to run skip worker");
+
+        assert!(test_db.get_jobs().await.is_empty());
+
+        let fail_worker = test_db
+            .create_worker_options()
+            .define_job::<TestJob>()
+            .add_plugin(AfterJobRunResultPlugin {
+                result: HookResult::Fail("after hook failed".to_string()),
+            })
+            .init()
+            .await
+            .expect("Failed to create fail worker");
+
+        utils
+            .add_job(
+                TestJob {
+                    value: 2,
+                    skip: false,
+                    force_fail: false,
+                    should_error: false,
+                },
+                JobSpec::builder().max_attempts(1).build(),
+            )
+            .await
+            .expect("Failed to add fail job");
+
+        fail_worker
+            .run_once()
+            .await
+            .expect("Failed to run fail worker");
+
+        let jobs = test_db.get_jobs().await;
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].attempts, 1);
+        assert!(jobs[0]
+            .last_error
+            .as_ref()
+            .is_some_and(|error| error.contains("after hook failed")));
     })
     .await;
 }

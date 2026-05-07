@@ -235,6 +235,11 @@ mod tests {
         ReadOnlyExtensions::new(Extensions::default())
     }
 
+    #[derive(Clone, Debug)]
+    struct TestExtension {
+        value: &'static str,
+    }
+
     #[tokio::test]
     async fn test_worker_context_builder() {
         let job = create_test_job();
@@ -277,6 +282,37 @@ mod tests {
             .build();
 
         assert!(!ctx.use_local_time());
+    }
+
+    #[tokio::test]
+    async fn test_worker_context_from_shared_job_uses_job_payload() {
+        let job = std::sync::Arc::new(create_test_job());
+        let pool = create_test_pool();
+        let mut extensions = Extensions::default();
+        extensions.insert(TestExtension { value: "present" });
+        let extensions = ReadOnlyExtensions::new(extensions);
+        let task_details = SharedTaskDetails::default();
+
+        let ctx = WorkerContext::from_shared_job(
+            job.clone(),
+            pool,
+            "graphile_worker".to_string(),
+            "worker-1".to_string(),
+            extensions,
+            task_details,
+            true,
+        );
+
+        assert_eq!(ctx.payload(), job.payload());
+        assert_eq!(ctx.job().id(), job.id());
+        assert_eq!(ctx.escaped_schema(), "graphile_worker");
+        assert_eq!(ctx.worker_id(), "worker-1");
+        assert!(ctx.use_local_time());
+        assert_eq!(
+            ctx.extensions().get::<TestExtension>().unwrap().value,
+            "present"
+        );
+        assert_eq!(ctx.get_ext::<TestExtension>().unwrap().value, "present");
     }
 
     #[tokio::test]

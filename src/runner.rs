@@ -815,6 +815,24 @@ fn panic_payload_to_string(payload: Box<dyn std::any::Any + Send>) -> String {
     "task panicked".to_string()
 }
 
+#[cfg(test)]
+mod tests {
+    use super::panic_payload_to_string;
+
+    #[test]
+    fn panic_payload_to_string_handles_static_str() {
+        assert_eq!(
+            panic_payload_to_string(Box::new("static panic")),
+            "static panic"
+        );
+    }
+
+    #[test]
+    fn panic_payload_to_string_handles_unknown_payload() {
+        assert_eq!(panic_payload_to_string(Box::new(1usize)), "task panicked");
+    }
+}
+
 /// Executes a job's task handler function.
 ///
 /// This function looks up the appropriate task handler for the job, creates
