@@ -523,7 +523,7 @@ mod tests {
 
     #[cfg(all(feature = "runtime-tokio", not(feature = "runtime-async-std")))]
     use super::sleep;
-    use super::{interval, timeout_at, Notify};
+    use super::{interval, timeout_at, JoinError, Notify};
 
     #[test]
     fn notify_one_coalesces_pending_permits() {
@@ -640,6 +640,68 @@ mod tests {
         block_on(async {
             let result = timeout_at(Instant::now() - Duration::from_millis(1), async { 42 }).await;
 
+            assert!(result.is_err());
+        });
+    }
+
+    #[cfg(all(feature = "runtime-tokio", not(feature = "runtime-async-std")))]
+    #[test]
+    fn tokio_spawn_completes_aborts_and_reports_panics() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+
+        runtime.block_on(async {
+            assert_eq!(super::spawn(async { 42 }).await.unwrap(), 42);
+
+            let handle = super::spawn(async {
+                sleep(Duration::from_secs(60)).await;
+                7
+            });
+            handle.abort_handle().abort();
+            assert!(matches!(handle.await, Err(JoinError::Aborted)));
+
+            let result = super::spawn(async {
+                panic!("spawn panic");
+            })
+            .await;
+
+            match result {
+                Err(JoinError::Failed(message)) => assert!(message.contains("spawn panic")),
+                other => panic!("expected failed join error, got {other:?}"),
+            }
+        });
+    }
+
+    #[cfg(all(feature = "runtime-tokio", not(feature = "runtime-async-std")))]
+    #[test]
+    fn timeout_at_returns_ready_future_before_deadline() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+
+        runtime.block_on(async {
+            let result = timeout_at(Instant::now() + Duration::from_secs(60), async { 42 }).await;
+            assert_eq!(result.unwrap(), 42);
+        });
+    }
+
+    #[cfg(all(feature = "runtime-tokio", not(feature = "runtime-async-std")))]
+    #[test]
+    fn timeout_at_times_out_pending_future() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+
+        runtime.block_on(async {
+            let result = timeout_at(
+                Instant::now() + Duration::from_millis(10),
+                futures::future::pending::<()>(),
+            )
+            .await;
             assert!(result.is_err());
         });
     }

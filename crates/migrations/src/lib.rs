@@ -224,3 +224,37 @@ fn check_migration_error(
         (_, Ok(())) => Ok(()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn last_migration_detects_pending_migrations() {
+        assert!(LastMigration::default().is_before_number(1));
+
+        let last_migration = LastMigration {
+            id: Some(12),
+            ..Default::default()
+        };
+        assert!(!last_migration.is_before_number(12));
+        assert!(last_migration.is_before_number(13));
+
+        let negative_migration = LastMigration {
+            id: Some(-1),
+            ..Default::default()
+        };
+        assert!(negative_migration.is_before_number(1));
+    }
+
+    #[test]
+    fn check_migration_error_handles_generic_results() {
+        assert!(check_migration_error(1, Ok(())).is_ok());
+
+        let error = check_migration_error(1, Err(SqlxError::RowNotFound)).unwrap_err();
+        assert!(matches!(
+            error,
+            MigrateError::SqlError(SqlxError::RowNotFound)
+        ));
+    }
+}

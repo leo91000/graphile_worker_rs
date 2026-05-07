@@ -77,6 +77,7 @@ mod tests {
     use std::time::Duration;
 
     use graphile_worker_job::Job;
+    use serde_json::json;
 
     use super::*;
 
@@ -91,5 +92,31 @@ mod tests {
                 })
                 .await;
         });
+    }
+
+    #[test]
+    fn hook_output_defaults_and_registry_registration_paths() {
+        assert!(!<() as HookOutput>::is_terminal(&()));
+        assert_eq!(<() as HookOutput>::chain_value(&()), None);
+        let _: () = <() as HookOutput>::default_with_value(());
+
+        assert!(!HookResult::Continue.is_terminal());
+        assert!(HookResult::Skip.is_terminal());
+        assert!(HookResult::Fail("failed".to_string()).is_terminal());
+
+        let value = json!({ "ok": true });
+        let schedule_result = JobScheduleResult::Continue(value.clone());
+        assert!(!schedule_result.is_terminal());
+        assert_eq!(schedule_result.chain_value(), Some(value.clone()));
+        assert!(JobScheduleResult::Skip.is_terminal());
+        assert!(JobScheduleResult::Fail("failed".to_string()).is_terminal());
+        match JobScheduleResult::default_with_value(value.clone()) {
+            JobScheduleResult::Continue(actual) => assert_eq!(actual, value),
+            _ => panic!("expected continue"),
+        }
+
+        let mut registry = HookRegistry::new();
+        registry.on(JobComplete, |_ctx| async {});
+        assert!(!registry.is_empty());
     }
 }
