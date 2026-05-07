@@ -123,3 +123,24 @@ pub fn parse_crontab(crontab: &str) -> Result<Vec<Crontab>, CrontabParseError> {
     let (_, result) = nom_crontab(crontab)?;
     Ok(result)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_error_captures_nom_details() {
+        let error: CrontabParseError = crate::nom_task_identifier::nom_task_identifier("0bad")
+            .unwrap_err()
+            .into();
+        assert!(!error.msg.is_empty());
+        assert!(!error.input.is_empty());
+    }
+
+    #[test]
+    fn incomplete_nom_error_maps_to_fail() {
+        let error: CrontabParseError = nom::Err::Incomplete(nom::Needed::Unknown).into();
+        assert_eq!(error.input, "");
+        assert_eq!(error.error_kind, ErrorKind::Fail);
+    }
+}

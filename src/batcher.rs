@@ -538,3 +538,89 @@ async fn fail_job_direct(
         error!(error = ?e, job_id = ?req.job.id(), "Failed to fail job directly");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::FutureExt;
+    use sqlx::postgres::PgPoolOptions;
+
+    fn database_pool() -> Option<PgPool> {
+        let database_url = std::env::var("DATABASE_URL").ok()?;
+        PgPoolOptions::new()
+            .max_connections(1)
+            .connect_lazy(&database_url)
+            .ok()
+    }
+
+    fn ready_shutdown_signal() -> ShutdownSignal {
+        futures::future::ready(()).boxed().shared()
+    }
+
+    fn job(id: i64, job_queue_id: Option<i32>) -> Arc<Job> {
+        let mut builder = Job::builder().id(id);
+        if let Some(job_queue_id) = job_queue_id {
+            builder = builder.job_queue_id(job_queue_id);
+        }
+        Arc::new(builder.task_identifier("test_job").build())
+    }
+
+    #[tokio::test]
+    async fn completion_batcher_falls_back_after_shutdown() {
+        let Some(pg_pool) = database_pool() else {
+            return;
+        };
+
+        let batcher = CompletionBatcher::new(
+            Duration::from_secs(60),
+            pg_pool,
+            "missing_schema".to_string(),
+            "worker".to_string(),
+            Arc::new(HookRegistry::default()),
+            ready_shutdown_signal(),
+        );
+        batcher.await_shutdown().await;
+
+        batcher
+            .complete(CompletionRequest {
+                job_id: 1,
+                has_queue: true,
+                job: job(1, Some(1)),
+                duration: Duration::ZERO,
+            })
+            .await;
+        batcher
+            .complete(CompletionRequest {
+                job_id: 2,
+                has_queue: false,
+                job: job(2, None),
+                duration: Duration::ZERO,
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn failure_batcher_falls_back_after_shutdown() {
+        let Some(pg_pool) = database_pool() else {
+            return;
+        };
+
+        let batcher = FailureBatcher::new(
+            Duration::from_secs(60),
+            pg_pool,
+            "missing_schema".to_string(),
+            "worker".to_string(),
+            Arc::new(HookRegistry::default()),
+            ready_shutdown_signal(),
+        );
+        batcher.await_shutdown().await;
+
+        batcher
+            .fail(FailureRequest {
+                job: job(3, None),
+                error: "direct failure".to_string(),
+                will_retry: true,
+            })
+            .await;
+    }
+}
