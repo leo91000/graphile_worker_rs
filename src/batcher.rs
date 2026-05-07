@@ -9,7 +9,6 @@ use graphile_worker_runtime as runtime;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use indoc::formatdoc;
 use sqlx::PgPool;
-use std::time::Instant;
 use tracing::{error, trace, warn};
 
 use crate::sql::fail_job::{fail_job, fail_jobs, FailedJob};
@@ -113,11 +112,13 @@ async fn completion_batcher_task(
 
         batch.push(first);
 
-        let deadline = Instant::now() + delay;
+        let timeout = runtime::sleep(delay).fuse();
+        futures::pin_mut!(timeout);
+
         loop {
-            let wait_item = runtime::timeout_at(deadline, rx.recv()).fuse();
+            let recv = rx.recv().fuse();
             let shutdown = (&mut shutdown_signal).fuse();
-            futures::pin_mut!(wait_item, shutdown);
+            futures::pin_mut!(recv, shutdown);
 
             let result = futures::select_biased! {
                 _ = shutdown => {
@@ -131,16 +132,16 @@ async fn completion_batcher_task(
                     ).await;
                     return;
                 }
-                result = wait_item => result,
+                _ = timeout => break,
+                result = recv => result,
             };
 
             match result {
-                Ok(Ok(item)) => batch.push(item),
-                Ok(Err(_)) => {
+                Ok(item) => batch.push(item),
+                Err(_) => {
                     flush_batch(&batch, &pg_pool, &escaped_schema, &worker_id, &hooks).await;
                     return;
                 }
-                Err(_) => break,
             }
         }
 
@@ -400,11 +401,13 @@ async fn failure_batcher_task(
 
         batch.push(first);
 
-        let deadline = Instant::now() + delay;
+        let timeout = runtime::sleep(delay).fuse();
+        futures::pin_mut!(timeout);
+
         loop {
-            let wait_item = runtime::timeout_at(deadline, rx.recv()).fuse();
+            let recv = rx.recv().fuse();
             let shutdown = (&mut shutdown_signal).fuse();
-            futures::pin_mut!(wait_item, shutdown);
+            futures::pin_mut!(recv, shutdown);
 
             let result = futures::select_biased! {
                 _ = shutdown => {
@@ -418,17 +421,17 @@ async fn failure_batcher_task(
                     ).await;
                     return;
                 }
-                result = wait_item => result,
+                _ = timeout => break,
+                result = recv => result,
             };
 
             match result {
-                Ok(Ok(item)) => batch.push(item),
-                Ok(Err(_)) => {
+                Ok(item) => batch.push(item),
+                Err(_) => {
                     flush_failure_batch(&batch, &pg_pool, &escaped_schema, &worker_id, &hooks)
                         .await;
                     return;
                 }
-                Err(_) => break,
             }
         }
 
