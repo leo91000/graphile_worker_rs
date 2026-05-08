@@ -672,6 +672,9 @@ impl WorkerOptions {
     /// `LocalQueueConfig::queue_count` can be raised above 1 to run multiple
     /// independent local queues in the same worker. `size` is applied per queue,
     /// so total local capacity is `size * queue_count`.
+    /// There is no universal best setting for throughput; benchmark realistic
+    /// jobs with your own PostgreSQL latency, pool size, worker concurrency, and
+    /// local queue settings before tuning this in production.
     ///
     /// Workers with `forbidden_flags` will bypass the LocalQueue and fetch
     /// jobs directly from the database.
