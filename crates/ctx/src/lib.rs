@@ -76,7 +76,7 @@ impl WorkerContext {
         &self.pg_pool
     }
 
-    pub fn escaped_schema(&self) -> &String {
+    pub fn escaped_schema(&self) -> &str {
         &self.escaped_schema
     }
 
@@ -84,7 +84,7 @@ impl WorkerContext {
         self.job.as_ref()
     }
 
-    pub fn worker_id(&self) -> &String {
+    pub fn worker_id(&self) -> &str {
         &self.worker_id
     }
 
@@ -96,8 +96,8 @@ impl WorkerContext {
         &self.task_details
     }
 
-    pub fn use_local_time(&self) -> &bool {
-        &self.use_local_time
+    pub fn use_local_time(&self) -> bool {
+        self.use_local_time
     }
 
     /// Retrieves a reference to an extension value by its type.
