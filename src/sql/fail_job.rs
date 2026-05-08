@@ -75,6 +75,7 @@ pub async fn fail_job(
     Ok(())
 }
 
+#[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn fail_jobs(
     executor: impl for<'e> PgExecutor<'e>,
     jobs: &[FailedJob<'_>],

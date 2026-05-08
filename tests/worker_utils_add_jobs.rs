@@ -810,7 +810,10 @@ async fn context_ext_exposes_worker_utils_methods() {
                     .add_raw_job(
                         "ctx_ext_utility_child_job",
                         serde_json::json!({ "value": 4 }),
-                        JobSpecBuilder::new().max_attempts(1).build(),
+                        JobSpecBuilder::new()
+                            .run_at(chrono::Utc::now() + chrono::Duration::hours(1))
+                            .max_attempts(1)
+                            .build(),
                     )
                     .await
                     .map_err(|error| error.to_string())?;
@@ -822,7 +825,9 @@ async fn context_ext_exposes_worker_utils_methods() {
                     .add_raw_job(
                         "ctx_ext_utility_child_job",
                         serde_json::json!({ "value": 5 }),
-                        JobSpec::default(),
+                        JobSpecBuilder::new()
+                            .run_at(chrono::Utc::now() + chrono::Duration::hours(1))
+                            .build(),
                     )
                     .await
                     .map_err(|error| error.to_string())?;

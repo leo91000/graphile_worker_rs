@@ -817,6 +817,8 @@ fn panic_payload_to_string(payload: Box<dyn std::any::Any + Send>) -> String {
 
 #[cfg(test)]
 mod tests {
+    use crate::streams::StreamSource;
+
     use super::panic_payload_to_string;
 
     #[test]
@@ -830,6 +832,21 @@ mod tests {
     #[test]
     fn panic_payload_to_string_handles_unknown_payload() {
         assert_eq!(panic_payload_to_string(Box::new(1usize)), "task panicked");
+    }
+
+    #[test]
+    fn panic_payload_to_string_handles_string_payload() {
+        assert_eq!(
+            panic_payload_to_string(Box::new(String::from("dynamic panic"))),
+            "dynamic panic"
+        );
+    }
+
+    #[test]
+    fn stream_source_is_copy_for_worker_fanout() {
+        fn assert_copy<T: Copy>() {}
+
+        assert_copy::<StreamSource>();
     }
 }
 
