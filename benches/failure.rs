@@ -133,7 +133,10 @@ async fn run_failure_benchmark(kind: FailureKind) -> Duration {
     let elapsed = start.elapsed();
 
     worker.request_shutdown();
-    let _ = handle.await;
+    handle
+        .await
+        .expect("Worker task panicked")
+        .expect("Worker failed");
 
     db.drop().await;
     elapsed

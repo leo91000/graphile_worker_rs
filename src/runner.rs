@@ -413,7 +413,8 @@ impl Worker {
         }
         drop(source_rx);
 
-        dispatch_job_signals(job_signal, source_tx, worker_handles, self.concurrency).await?;
+        let dispatch_result =
+            dispatch_job_signals(job_signal, source_tx, worker_handles, self.concurrency).await;
 
         for local_queue in local_queues {
             if let Err(e) = local_queue.release().await {
@@ -421,6 +422,7 @@ impl Worker {
             }
         }
 
+        dispatch_result?;
         Ok(())
     }
 

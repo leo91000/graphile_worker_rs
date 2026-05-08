@@ -66,7 +66,10 @@ async fn run_benchmark(with_local_queue: bool) -> Duration {
     let elapsed = start.elapsed();
 
     worker.request_shutdown();
-    let _ = handle.await;
+    handle
+        .await
+        .expect("Worker task panicked")
+        .expect("Worker failed");
 
     let jobs_per_sec = JOB_COUNT as f64 / elapsed.as_secs_f64();
     println!(

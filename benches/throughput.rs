@@ -112,9 +112,7 @@ fn bench_job_execution_throughput(c: &mut Criterion) {
                         setup_and_add_jobs(&db, job_count).await;
 
                         let worker_clone = Arc::clone(&worker);
-                        let worker_handle = tokio::spawn(async move {
-                            let _ = worker_clone.run().await;
-                        });
+                        let worker_handle = tokio::spawn(async move { worker_clone.run().await });
 
                         let start = std::time::Instant::now();
 
@@ -125,7 +123,10 @@ fn bench_job_execution_throughput(c: &mut Criterion) {
                         total_elapsed += start.elapsed();
 
                         worker.request_shutdown();
-                        let _ = worker_handle.await;
+                        worker_handle
+                            .await
+                            .expect("Worker task panicked")
+                            .expect("Worker failed");
                         db.clear_jobs().await;
                     }
 
@@ -166,9 +167,7 @@ fn bench_job_latency(c: &mut Criterion) {
                 );
 
                 let worker_clone = Arc::clone(&worker);
-                let worker_handle = tokio::spawn(async move {
-                    let _ = worker_clone.run().await;
-                });
+                let worker_handle = tokio::spawn(async move { worker_clone.run().await });
 
                 for i in 0..iters {
                     let utils = db.worker_utils();
@@ -188,7 +187,10 @@ fn bench_job_latency(c: &mut Criterion) {
                 }
 
                 worker.request_shutdown();
-                let _ = worker_handle.await;
+                worker_handle
+                    .await
+                    .expect("Worker task panicked")
+                    .expect("Worker failed");
                 db.clear_jobs().await;
 
                 total_elapsed

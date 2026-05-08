@@ -212,7 +212,7 @@ async fn local_queue_can_run_multiple_local_queues() {
             async move {
                 Worker::options()
                     .pg_pool(test_pool)
-                    .concurrency(4)
+                    .concurrency(5)
                     .local_queue(LocalQueueConfig::default().with_size(3).with_queue_count(4))
                     .define_job::<MultiLocalQueueJob>()
                     .add_plugin(plugin)
