@@ -1,7 +1,7 @@
 use indoc::formatdoc;
 use sqlx::{query, PgExecutor};
 
-use crate::errors::GraphileWorkerError;
+use crate::errors::Result;
 
 use crate::Job;
 
@@ -18,7 +18,7 @@ pub async fn fail_job(
     worker_id: &str,
     message: &str,
     replacement_payload: Option<Vec<String>>,
-) -> Result<(), GraphileWorkerError> {
+) -> Result<()> {
     let replacement_payload = replacement_payload.and_then(|v| serde_json::to_string(&v).ok());
 
     if job.job_queue_id().is_some() {
@@ -80,7 +80,7 @@ pub async fn fail_jobs(
     jobs: &[FailedJob<'_>],
     escaped_schema: &str,
     worker_id: &str,
-) -> Result<(), GraphileWorkerError> {
+) -> Result<()> {
     if jobs.is_empty() {
         return Ok(());
     }

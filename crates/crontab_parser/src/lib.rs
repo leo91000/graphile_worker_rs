@@ -135,6 +135,7 @@ mod tests {
             .into();
         assert!(!error.msg.is_empty());
         assert!(!error.input.is_empty());
+        assert_eq!(error.error_kind, ErrorKind::Satisfy);
     }
 
     #[test]

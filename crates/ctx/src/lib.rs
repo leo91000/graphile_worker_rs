@@ -188,7 +188,7 @@ impl WorkerContextBuilder {
 
     pub fn build(self) -> WorkerContext {
         WorkerContext {
-            payload: Some(self.payload.unwrap_or_else(|| missing_field("payload"))),
+            payload: self.payload,
             pg_pool: self.pg_pool.unwrap_or_else(|| missing_field("pg_pool")),
             escaped_schema: self
                 .escaped_schema
@@ -316,14 +316,14 @@ mod tests {
     }
 
     #[tokio::test]
-    #[should_panic(expected = "UninitializedField(\"payload\")")]
-    async fn test_worker_context_builder_missing_payload() {
+    async fn test_worker_context_builder_uses_job_payload_when_payload_missing() {
         let job = create_test_job();
+        let expected_payload = job.payload().clone();
         let pool = create_test_pool();
         let extensions = create_extensions();
         let task_details = SharedTaskDetails::default();
 
-        WorkerContext::builder()
+        let ctx = WorkerContext::builder()
             .pg_pool(pool)
             .escaped_schema("schema".to_string())
             .job(job)
@@ -331,5 +331,7 @@ mod tests {
             .extensions(extensions)
             .task_details(task_details)
             .build();
+
+        assert_eq!(ctx.payload(), &expected_payload);
     }
 }
