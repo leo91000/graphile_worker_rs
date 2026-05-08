@@ -18,6 +18,7 @@ use getset::Getters;
 use graphile_worker_crontab_runner::{cron_main, ScheduleCronJobError};
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_ctx::WorkerContext;
+use graphile_worker_database::Database;
 use graphile_worker_extensions::ReadOnlyExtensions;
 use graphile_worker_job::Job;
 use graphile_worker_lifecycle_hooks::{
@@ -65,7 +66,7 @@ pub struct Worker {
     /// Map of task identifiers to their handler functions
     pub(crate) jobs: HashMap<String, WorkerFn>,
     /// Database connection pool
-    pub(crate) pg_pool: sqlx::PgPool,
+    pub(crate) database: Database,
     /// Database schema name (properly escaped for SQL)
     pub(crate) escaped_schema: String,
     /// Mapping of task IDs to their string identifiers
@@ -100,7 +101,7 @@ pub struct Worker {
 struct WorkerRunner {
     worker_id: String,
     jobs: HashMap<String, WorkerFn>,
-    pg_pool: sqlx::PgPool,
+    database: Database,
     escaped_schema: String,
     task_details: SharedTaskDetails,
     forbidden_flags: Vec<String>,
@@ -175,6 +176,19 @@ impl Worker {
         WorkerOptions::default()
     }
 
+    #[cfg(feature = "driver-sqlx")]
+    pub fn try_pg_pool(&self) -> Option<&sqlx::PgPool> {
+        self.database
+            .downcast_ref::<graphile_worker_database::sqlx::SqlxDatabase>()
+            .map(|database| database.pool())
+    }
+
+    #[cfg(feature = "driver-sqlx")]
+    pub fn pg_pool(&self) -> &sqlx::PgPool {
+        self.try_pg_pool()
+            .expect("Worker does not use the SQLx database driver")
+    }
+
     /// Runs the worker until the shutdown signal is triggered.
     ///
     /// This method starts both the job runner and the crontab scheduler (if any crontabs are configured),
@@ -192,7 +206,7 @@ impl Worker {
     pub async fn run(&self) -> Result<(), WorkerRuntimeError> {
         self.hooks
             .emit(WorkerStartContext {
-                pool: self.pg_pool.clone(),
+                database: self.database.clone(),
                 worker_id: self.worker_id.clone(),
                 extensions: self.extensions.clone(),
             })
@@ -218,7 +232,7 @@ impl Worker {
 
         self.hooks
             .emit(WorkerShutdownContext {
-                pool: self.pg_pool.clone(),
+                database: self.database.clone(),
                 worker_id: self.worker_id.clone(),
                 reason,
             })
@@ -248,7 +262,7 @@ impl Worker {
     /// - `Err(WorkerRuntimeError)` if a system-level error occurs
     pub async fn run_once(&self) -> Result<(), WorkerRuntimeError> {
         let job_stream = job_stream(
-            self.pg_pool.clone(),
+            self.database.clone(),
             self.shutdown_signal.clone(),
             self.task_details.clone(),
             self.escaped_schema.clone(),
@@ -288,7 +302,7 @@ impl Worker {
                             let now = runner.use_local_time.then(Utc::now);
                             let task_details_guard = runner.task_details.read().await;
                             let new_job = get_job(
-                                &runner.pg_pool,
+                                &runner.database,
                                 &task_details_guard,
                                 &runner.escaped_schema,
                                 &runner.worker_id,
@@ -333,7 +347,7 @@ impl Worker {
                 .map(|_| {
                     LocalQueue::new(crate::local_queue::LocalQueueParams {
                         config: config.clone(),
-                        pg_pool: self.pg_pool.clone(),
+                        database: self.database.clone(),
                         escaped_schema: self.escaped_schema.clone(),
                         worker_id: self.worker_id.clone(),
                         task_details: self.task_details.clone(),
@@ -356,7 +370,7 @@ impl Worker {
         WorkerRunner {
             worker_id: self.worker_id.clone(),
             jobs: self.jobs.clone(),
-            pg_pool: self.pg_pool.clone(),
+            database: self.database.clone(),
             escaped_schema: self.escaped_schema.clone(),
             task_details: self.task_details.clone(),
             forbidden_flags: self.forbidden_flags.clone(),
@@ -386,7 +400,7 @@ impl Worker {
         job_signal_rx: crate::streams::JobSignalReceiver,
     ) -> Result<(), WorkerRuntimeError> {
         let job_signal = job_signal_stream_with_receiver(
-            self.pg_pool.clone(),
+            self.database.clone(),
             self.poll_interval,
             self.shutdown_signal.clone(),
             1,
@@ -429,7 +443,7 @@ impl Worker {
     /// Job runner implementation without LocalQueue (direct database queries).
     async fn job_runner_direct(&self) -> Result<(), WorkerRuntimeError> {
         let job_signal = job_signal_stream(
-            self.pg_pool.clone(),
+            self.database.clone(),
             self.poll_interval,
             self.shutdown_signal.clone(),
             1,
@@ -479,7 +493,7 @@ impl Worker {
         }
 
         cron_main(
-            self.pg_pool(),
+            self.database(),
             self.escaped_schema(),
             self.crontabs(),
             *self.use_local_time(),
@@ -501,7 +515,7 @@ impl Worker {
     /// A new `WorkerUtils` instance configured with this worker's database connection
     /// pool and schema.
     pub fn create_utils(&self) -> WorkerUtils {
-        let utils = WorkerUtils::new(self.pg_pool.clone(), self.escaped_schema.clone())
+        let utils = WorkerUtils::new(self.database.clone(), self.escaped_schema.clone())
             .with_task_details(self.task_details.clone());
 
         if self.hooks.is_empty() {
@@ -662,7 +676,7 @@ async fn process_one_job(
     let now = worker.use_local_time.then(Utc::now);
     let task_details_guard = worker.task_details.read().await;
     let job = get_job(
-        &worker.pg_pool,
+        &worker.database,
         &task_details_guard,
         &worker.escaped_schema,
         &worker.worker_id,
@@ -917,7 +931,7 @@ async fn run_job(
     // Create a context for the task handler
     let worker_ctx = WorkerContext::from_shared_job(
         job.clone(),
-        worker.pg_pool.clone(),
+        worker.database.clone(),
         worker.escaped_schema.clone(),
         worker.worker_id.clone(),
         worker.extensions.clone(),
@@ -1032,7 +1046,7 @@ async fn release_job(
                     .await;
             } else {
                 complete_job(
-                    &worker.pg_pool,
+                    &worker.database,
                     &job,
                     &worker.worker_id,
                     &worker.escaped_schema,
@@ -1105,7 +1119,7 @@ async fn release_job(
                 }
 
                 if let Err(e) = fail_job(
-                    &worker.pg_pool,
+                    &worker.database,
                     &job,
                     &worker.escaped_schema,
                     &worker.worker_id,

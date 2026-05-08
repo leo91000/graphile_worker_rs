@@ -722,7 +722,7 @@ mod tests {
             .await;
 
             match result {
-                Err(super::JoinError::Failed(message)) => assert!(message.contains("boom")),
+                Err(JoinError::Failed(message)) => assert!(message.contains("boom")),
                 other => panic!("expected failed join error, got {other:?}"),
             }
         });

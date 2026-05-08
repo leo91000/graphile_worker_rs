@@ -48,7 +48,7 @@ async fn return_jobs_unlocks_mixed_queue_jobs() {
         .expect("Failed to lock queue");
 
         return_jobs(
-            &test_db.test_pool,
+            &test_db.database,
             &[queued, regular],
             "graphile_worker",
             "return-worker",

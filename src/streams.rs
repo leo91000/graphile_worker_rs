@@ -1,10 +1,10 @@
 use std::{num::NonZeroUsize, time::Duration};
 
 use chrono::Utc;
-use futures::{stream, FutureExt, Stream};
+use futures::{stream, FutureExt, Stream, StreamExt};
+use graphile_worker_database::{Database, NotificationStream};
 use graphile_worker_runtime as runtime;
 use graphile_worker_shutdown_signal::ShutdownSignal;
-use sqlx::{postgres::PgListener, PgPool};
 use tracing::{error, warn};
 
 use crate::{
@@ -43,8 +43,8 @@ pub type JobSignalReceiver = runtime::Receiver<()>;
 struct JobSignalStreamData {
     /// Timer for regular polling intervals
     interval: runtime::Interval,
-    /// Listener for PostgreSQL notifications
-    pg_listener: PgListener,
+    /// Listener for PostgreSQL notifications, if the active driver supports it
+    pg_listener: Option<NotificationStream>,
     /// Signal that completes when the worker should shut down
     shutdown_signal: ShutdownSignal,
     /// Number of jobs to process concurrently
@@ -58,7 +58,7 @@ struct JobSignalStreamData {
 impl JobSignalStreamData {
     fn new(
         interval: runtime::Interval,
-        pg_listener: PgListener,
+        pg_listener: Option<NotificationStream>,
         shutdown_signal: ShutdownSignal,
         concurrency: usize,
         internal_rx: Option<runtime::Receiver<()>>,
@@ -97,12 +97,12 @@ impl JobSignalStreamData {
 ///
 /// A stream that emits `StreamSource` items when jobs should be checked for
 pub async fn job_signal_stream(
-    pg_pool: PgPool,
+    database: Database,
     poll_interval: Duration,
     shutdown_signal: ShutdownSignal,
     concurrency: usize,
 ) -> Result<impl Stream<Item = StreamSource>> {
-    job_signal_stream_internal(pg_pool, poll_interval, shutdown_signal, concurrency, None).await
+    job_signal_stream_internal(database, poll_interval, shutdown_signal, concurrency, None).await
 }
 
 /// Creates a stream that yields job processing signals, with a provided receiver for internal signaling.
@@ -110,14 +110,14 @@ pub async fn job_signal_stream(
 /// This variant is used with LocalQueue when the sender/receiver pair is created externally
 /// (e.g., in builder.rs) to avoid race conditions.
 pub async fn job_signal_stream_with_receiver(
-    pg_pool: PgPool,
+    database: Database,
     poll_interval: Duration,
     shutdown_signal: ShutdownSignal,
     concurrency: usize,
     internal_rx: JobSignalReceiver,
 ) -> Result<impl Stream<Item = StreamSource>> {
     job_signal_stream_internal(
-        pg_pool,
+        database,
         poll_interval,
         shutdown_signal,
         concurrency,
@@ -127,7 +127,7 @@ pub async fn job_signal_stream_with_receiver(
 }
 
 async fn job_signal_stream_internal(
-    pg_pool: PgPool,
+    database: Database,
     poll_interval: Duration,
     shutdown_signal: ShutdownSignal,
     concurrency: usize,
@@ -135,8 +135,7 @@ async fn job_signal_stream_internal(
 ) -> Result<impl Stream<Item = StreamSource>> {
     let interval = runtime::interval(poll_interval);
 
-    let mut pg_listener = PgListener::connect_with(&pg_pool).await?;
-    pg_listener.listen("jobs:insert").await?;
+    let pg_listener = database.listen("jobs:insert").await?;
     let stream_data = JobSignalStreamData::new(
         interval,
         pg_listener,
@@ -160,34 +159,64 @@ async fn job_signal_stream_internal(
         }
 
         let next = if let Some(ref mut rx) = f.internal_rx {
-            let interval = f.interval.tick().fuse();
-            let pg_listener = f.pg_listener.recv().fuse();
-            let internal = rx.recv().fuse();
-            let shutdown = (&mut f.shutdown_signal).fuse();
-            futures::pin_mut!(interval, pg_listener, internal, shutdown);
+            if let Some(pg_listener) = f.pg_listener.as_mut() {
+                let interval = f.interval.tick().fuse();
+                let pg_listener = pg_listener.next().fuse();
+                let internal = rx.recv().fuse();
+                let shutdown = (&mut f.shutdown_signal).fuse();
+                futures::pin_mut!(interval, pg_listener, internal, shutdown);
 
-            futures::select_biased! {
-                _ = shutdown => NextSignal::Shutdown,
-                _ = interval => NextSignal::Source(StreamSource::Polling),
-                _ = pg_listener => NextSignal::Source(StreamSource::PgListener),
-                res = internal => {
-                    if res.is_ok() {
-                        NextSignal::Source(StreamSource::Internal)
-                    } else {
-                        NextSignal::InternalClosed
-                    }
-                },
+                futures::select_biased! {
+                    _ = shutdown => NextSignal::Shutdown,
+                    _ = interval => NextSignal::Source(StreamSource::Polling),
+                    _ = pg_listener => NextSignal::Source(StreamSource::PgListener),
+                    res = internal => {
+                        if res.is_ok() {
+                            NextSignal::Source(StreamSource::Internal)
+                        } else {
+                            NextSignal::InternalClosed
+                        }
+                    },
+                }
+            } else {
+                let interval = f.interval.tick().fuse();
+                let internal = rx.recv().fuse();
+                let shutdown = (&mut f.shutdown_signal).fuse();
+                futures::pin_mut!(interval, internal, shutdown);
+
+                futures::select_biased! {
+                    _ = shutdown => NextSignal::Shutdown,
+                    _ = interval => NextSignal::Source(StreamSource::Polling),
+                    res = internal => {
+                        if res.is_ok() {
+                            NextSignal::Source(StreamSource::Internal)
+                        } else {
+                            NextSignal::InternalClosed
+                        }
+                    },
+                }
             }
         } else {
-            let interval = f.interval.tick().fuse();
-            let pg_listener = f.pg_listener.recv().fuse();
-            let shutdown = (&mut f.shutdown_signal).fuse();
-            futures::pin_mut!(interval, pg_listener, shutdown);
+            if let Some(pg_listener) = f.pg_listener.as_mut() {
+                let interval = f.interval.tick().fuse();
+                let pg_listener = pg_listener.next().fuse();
+                let shutdown = (&mut f.shutdown_signal).fuse();
+                futures::pin_mut!(interval, pg_listener, shutdown);
 
-            futures::select_biased! {
-                _ = shutdown => NextSignal::Shutdown,
-                _ = interval => NextSignal::Source(StreamSource::Polling),
-                _ = pg_listener => NextSignal::Source(StreamSource::PgListener),
+                futures::select_biased! {
+                    _ = shutdown => NextSignal::Shutdown,
+                    _ = interval => NextSignal::Source(StreamSource::Polling),
+                    _ = pg_listener => NextSignal::Source(StreamSource::PgListener),
+                }
+            } else {
+                let interval = f.interval.tick().fuse();
+                let shutdown = (&mut f.shutdown_signal).fuse();
+                futures::pin_mut!(interval, shutdown);
+
+                futures::select_biased! {
+                    _ = shutdown => NextSignal::Shutdown,
+                    _ = interval => NextSignal::Source(StreamSource::Polling),
+                }
             }
         };
 
@@ -231,7 +260,7 @@ async fn job_signal_stream_internal(
 ///
 /// A stream that emits `Job` items that are ready to be processed
 pub fn job_stream(
-    pg_pool: PgPool,
+    database: Database,
     shutdown_signal: ShutdownSignal,
     task_details: SharedTaskDetails,
     escaped_schema: String,
@@ -240,7 +269,7 @@ pub fn job_stream(
     use_local_time: bool,
 ) -> impl Stream<Item = Job> {
     futures::stream::unfold((), move |()| {
-        let pg_pool = pg_pool.clone();
+        let database = database.clone();
         let task_details = task_details.clone();
         let escaped_schema = escaped_schema.clone();
         let worker_id = worker_id.clone();
@@ -250,7 +279,7 @@ pub fn job_stream(
             let now = use_local_time.then(Utc::now);
             let task_details_guard = task_details.read().await;
             let job = get_job(
-                &pg_pool,
+                &database,
                 &task_details_guard,
                 &escaped_schema,
                 &worker_id,

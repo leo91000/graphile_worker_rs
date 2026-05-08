@@ -8,7 +8,7 @@ use thiserror::Error;
 pub enum GraphileWorkerError {
     /// An error occurred while executing an SQL query
     #[error("Error occured while query: {0}")]
-    SqlError(#[from] sqlx::Error),
+    SqlError(#[from] graphile_worker_database::DbError),
 
     /// An error occurred while serializing or deserializing JSON data
     #[error("Error while serializing params: {0}")]

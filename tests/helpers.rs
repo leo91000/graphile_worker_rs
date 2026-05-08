@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local, Utc};
 use graphile_worker::sql::add_job::add_job;
+use graphile_worker::Database;
 use graphile_worker::DbJob;
 use graphile_worker::Job;
 use graphile_worker::JobSpec;
@@ -9,8 +10,7 @@ use graphile_worker::WorkerOptions;
 use graphile_worker::WorkerUtils;
 use graphile_worker_crontab_runner::KnownCrontab;
 use serde_json::Value;
-use sqlx::postgres::PgConnectOptions;
-use sqlx::query_as;
+use sqlx::postgres::{PgConnectOptions, PgRow};
 use sqlx::FromRow;
 use sqlx::PgPool;
 use sqlx::Row;
@@ -64,6 +64,7 @@ pub struct Migration {
 pub struct TestDatabase {
     pub source_pool: PgPool,
     pub test_pool: PgPool,
+    pub database: Database,
     pub name: String,
 }
 
@@ -87,7 +88,7 @@ impl TestDatabase {
 
     pub fn create_worker_options(&self) -> WorkerOptions {
         WorkerOptions::default()
-            .pg_pool(self.test_pool.clone())
+            .database(self.database.clone())
             .schema("graphile_worker")
             .concurrency(4)
     }
@@ -176,7 +177,7 @@ impl TestDatabase {
         spec: JobSpec,
     ) -> Job {
         add_job(
-            &self.test_pool,
+            &self.database,
             "graphile_worker",
             identifier,
             serde_json::to_value(payload).unwrap(),
@@ -188,7 +189,7 @@ impl TestDatabase {
     }
 
     pub fn worker_utils(&self) -> WorkerUtils {
-        WorkerUtils::new(self.test_pool.clone(), "graphile_worker".into())
+        WorkerUtils::new(self.database.clone(), "graphile_worker".into())
     }
 
     pub async fn make_selection_of_jobs(&self) -> SelectionOfJobs {
@@ -252,23 +253,23 @@ impl TestDatabase {
             .expect("Failed to add job");
 
         let locked_job = {
-            let locked_job_update: DbJob = query_as("update graphile_worker._private_jobs as jobs set locked_by = 'test', locked_at = now() where id = $1 returning *")
+            let locked_job_update = sqlx::query("update graphile_worker._private_jobs as jobs set locked_by = 'test', locked_at = now() where id = $1 returning *")
             .bind(locked_job.id())
             .fetch_one(&self.test_pool)
             .await
             .expect("Failed to lock job");
 
-            Job::from_db_job(locked_job_update, "job3".to_string())
+            Job::from_db_job(db_job_from_sqlx_row(locked_job_update), "job3".to_string())
         };
 
         let failed_job = {
-            let failed_job_update: DbJob = query_as("update graphile_worker._private_jobs as jobs set last_error = 'Failed forever', attempts = max_attempts where id = $1 returning *")
+            let failed_job_update = sqlx::query("update graphile_worker._private_jobs as jobs set last_error = 'Failed forever', attempts = max_attempts where id = $1 returning *")
                 .bind(failed_job.id())
                 .fetch_one(&self.test_pool)
                 .await
                 .expect("Failed to fail job");
 
-            Job::from_db_job(failed_job_update, "job3".to_string())
+            Job::from_db_job(db_job_from_sqlx_row(failed_job_update), "job3".to_string())
         };
 
         SelectionOfJobs {
@@ -281,10 +282,79 @@ impl TestDatabase {
     }
 
     pub async fn get_known_crontabs(&self) -> Vec<KnownCrontab> {
-        sqlx::query_as("select * from graphile_worker._private_known_crontabs")
+        sqlx::query("select * from graphile_worker._private_known_crontabs")
             .fetch_all(&self.test_pool)
             .await
             .expect("Failed to get known crontabs")
+            .into_iter()
+            .map(known_crontab_from_sqlx_row)
+            .collect()
+    }
+}
+
+fn db_job_from_sqlx_row(row: PgRow) -> DbJob {
+    DbJob::new(
+        row.get("id"),
+        row.get("job_queue_id"),
+        row.get("payload"),
+        row.get("priority"),
+        row.get("run_at"),
+        row.get("attempts"),
+        row.get("max_attempts"),
+        row.get("last_error"),
+        row.get("created_at"),
+        row.get("updated_at"),
+        row.get("key"),
+        row.get("revision"),
+        row.get("locked_at"),
+        row.get("locked_by"),
+        row.get("flags"),
+        row.get("task_id"),
+    )
+}
+
+fn known_crontab_from_sqlx_row(row: PgRow) -> KnownCrontab {
+    let known_since: DateTime<Utc> = row.get("known_since");
+    let last_execution: Option<DateTime<Utc>> = row.get("last_execution");
+
+    KnownCrontab::new(
+        row.get("identifier"),
+        known_since.with_timezone(&Local),
+        last_execution.map(|value| value.with_timezone(&Local)),
+    )
+}
+
+fn test_database_url(db_url: &str, db_name: &str) -> String {
+    let (base_url, query_string) = db_url
+        .split_once('?')
+        .map(|(base_url, query_string)| (base_url, Some(query_string)))
+        .unwrap_or((db_url, None));
+    let Some((server_url, _database_name)) = base_url.rsplit_once('/') else {
+        return db_url.to_string();
+    };
+
+    match query_string {
+        Some(query_string) => format!("{server_url}/{db_name}?{query_string}"),
+        None => format!("{server_url}/{db_name}"),
+    }
+}
+
+fn create_graphile_database(test_pool: PgPool, test_database_url: &str) -> Database {
+    #[cfg(feature = "driver-tokio-postgres")]
+    {
+        let _ = test_pool;
+        return graphile_worker::tokio_postgres::TokioPostgresDatabase::from_url(
+            test_database_url,
+            2,
+        )
+        .expect("Failed to create tokio-postgres database")
+        .into();
+    }
+
+    #[cfg(all(not(feature = "driver-tokio-postgres"), feature = "driver-sqlx"))]
+    {
+        let _ = test_database_url;
+        test_pool.into()
     }
 }
 
@@ -314,16 +384,19 @@ pub async fn create_test_database() -> TestDatabase {
         .expect("Failed to create test schema");
 
     let test_options = pg_conn_options.database(&db_name);
+    let test_database_url = test_database_url(&db_url, &db_name);
 
     let test_pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(4)
         .connect_with(test_options)
         .await
         .expect("Failed to connect to test database");
+    let database = create_graphile_database(test_pool.clone(), &test_database_url);
 
     TestDatabase {
         source_pool: pg_pool,
         test_pool,
+        database,
         name: db_name,
     }
 }

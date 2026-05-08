@@ -1,11 +1,11 @@
+use graphile_worker_database::{DbExecutor, DbValue};
 use indoc::formatdoc;
-use sqlx::{query, PgExecutor};
 
 use crate::errors::Result;
 use graphile_worker_job::Job;
 
-pub async fn return_jobs<'e>(
-    executor: impl PgExecutor<'e>,
+pub async fn return_jobs(
+    executor: &impl DbExecutor,
     jobs: &[Job],
     escaped_schema: &str,
     worker_id: &str,
@@ -37,10 +37,15 @@ pub async fn return_jobs<'e>(
             "#
         );
 
-        query(&sql)
-            .bind(worker_id)
-            .bind(&job_ids)
-            .execute(executor)
+        executor
+            .execute(
+                &sql,
+                vec![
+                    DbValue::Text(worker_id.to_string()),
+                    DbValue::I64Array(job_ids),
+                ]
+                .into(),
+            )
             .await?;
     } else {
         let sql = formatdoc!(
@@ -64,11 +69,16 @@ pub async fn return_jobs<'e>(
             "#
         );
 
-        query(&sql)
-            .bind(worker_id)
-            .bind(&job_ids)
-            .bind(&queue_job_ids)
-            .execute(executor)
+        executor
+            .execute(
+                &sql,
+                vec![
+                    DbValue::Text(worker_id.to_string()),
+                    DbValue::I64Array(job_ids),
+                    DbValue::I64Array(queue_job_ids),
+                ]
+                .into(),
+            )
             .await?;
     }
 

@@ -4,12 +4,12 @@ use crate::sql::add_job::{add_job, add_jobs, JobToAdd, RawJobSpec};
 use crate::sql::task_identifiers::{get_tasks_details, SharedTaskDetails};
 use crate::tracing::add_tracing_info;
 use crate::{errors::GraphileWorkerError, DbJob, Job, JobSpec};
+use graphile_worker_database::{Database, DbExecutor, DbValue};
 use graphile_worker_lifecycle_hooks::{BeforeJobScheduleContext, HookRegistry, JobScheduleResult};
 use graphile_worker_migrations::{migrate, MigrateError};
 use graphile_worker_task_handler::TaskHandler;
 use indoc::formatdoc;
 use serde::Serialize;
-use sqlx::{PgExecutor, PgPool};
 use std::collections::HashSet;
 use tracing::{debug, Span};
 
@@ -38,9 +38,9 @@ pub enum CleanupTask {
 }
 
 impl CleanupTask {
-    pub(crate) async fn execute<'e>(
+    pub(crate) async fn execute(
         &self,
-        executor: impl PgExecutor<'e>,
+        executor: &impl DbExecutor,
         escaped_schema: &str,
         task_identifiers_to_keep: &[String],
     ) -> Result<(), GraphileWorkerError> {
@@ -53,7 +53,9 @@ impl CleanupTask {
                             and locked_at is null;
                     "#
                 );
-                sqlx::query(&sql).execute(executor).await?;
+                executor
+                    .execute(&sql, graphile_worker_database::DbParams::new())
+                    .await?;
             }
             CleanupTask::GcTaskIdentifiers => {
                 let sql = formatdoc!(
@@ -65,9 +67,11 @@ impl CleanupTask {
                         and tasks.identifier <> all ($1::text[]);
                     "#
                 );
-                sqlx::query(&sql)
-                    .bind(task_identifiers_to_keep)
-                    .execute(executor)
+                executor
+                    .execute(
+                        &sql,
+                        vec![DbValue::TextArray(task_identifiers_to_keep.to_vec())].into(),
+                    )
                     .await?;
             }
             CleanupTask::GcJobQueues => {
@@ -79,7 +83,9 @@ impl CleanupTask {
                         );
                     "#
                 );
-                sqlx::query(&sql).execute(executor).await?;
+                executor
+                    .execute(&sql, graphile_worker_database::DbParams::new())
+                    .await?;
             }
         }
 
@@ -117,7 +123,7 @@ pub struct RescheduleJobOptions {
 #[derive(Clone)]
 pub struct WorkerUtils {
     /// Database connection pool
-    pg_pool: PgPool,
+    database: Database,
 
     /// SQL-escaped schema name where Graphile Worker tables are located
     escaped_schema: String,
@@ -136,14 +142,14 @@ impl WorkerUtils {
     /// Creates a new instance of WorkerUtils.
     ///
     /// # Arguments
-    /// * `pg_pool` - PostgreSQL connection pool
+    /// * `database` - Database connection handle
     /// * `escaped_schema` - The escaped name of the schema where Graphile Worker tables are stored
     ///
     /// # Returns
     /// A new WorkerUtils instance
-    pub fn new(pg_pool: PgPool, escaped_schema: String) -> Self {
+    pub fn new(database: impl Into<Database>, escaped_schema: String) -> Self {
         Self {
-            pg_pool,
+            database: database.into(),
             escaped_schema,
             hooks: None,
             task_details: SharedTaskDetails::default(),
@@ -241,7 +247,11 @@ impl WorkerUtils {
             escaped_schema = self.escaped_schema
         );
 
-        if let Err(error) = sqlx::query(&sql).execute(&self.pg_pool).await {
+        if let Err(error) = self
+            .database
+            .execute(&sql, graphile_worker_database::DbParams::new())
+            .await
+        {
             debug!(?error, "Failed to analyze jobs after large batch insert");
         }
     }
@@ -304,7 +314,7 @@ impl WorkerUtils {
             .invoke_before_job_schedule(identifier, payload, &spec)
             .await?;
         add_job(
-            &self.pg_pool,
+            &self.database,
             &self.escaped_schema,
             identifier,
             payload,
@@ -368,7 +378,7 @@ impl WorkerUtils {
             .invoke_before_job_schedule(identifier, payload, &spec)
             .await?;
         add_job(
-            &self.pg_pool,
+            &self.database,
             &self.escaped_schema,
             identifier,
             payload,
@@ -448,7 +458,7 @@ impl WorkerUtils {
         let task_details = self.task_details.read().await;
 
         let added_jobs = add_jobs(
-            &self.pg_pool,
+            &self.database,
             &self.escaped_schema,
             &jobs_to_add,
             &task_details,
@@ -535,10 +545,10 @@ impl WorkerUtils {
         }
 
         let task_details =
-            get_tasks_details(&self.pg_pool, &self.escaped_schema, unique_identifiers).await?;
+            get_tasks_details(&self.database, &self.escaped_schema, unique_identifiers).await?;
 
         let added_jobs = add_jobs(
-            &self.pg_pool,
+            &self.database,
             &self.escaped_schema,
             &jobs_to_add,
             &task_details,
@@ -570,9 +580,8 @@ impl WorkerUtils {
             escaped_schema = self.escaped_schema
         );
 
-        sqlx::query(&sql)
-            .bind(job_key)
-            .execute(&self.pg_pool)
+        self.database
+            .execute(&sql, vec![DbValue::Text(job_key.to_string())].into())
             .await?;
 
         Ok(())
@@ -593,10 +602,13 @@ impl WorkerUtils {
             escaped_schema = self.escaped_schema
         );
 
-        let jobs = sqlx::query_as(&sql)
-            .bind(ids)
-            .fetch_all(&self.pg_pool)
-            .await?;
+        let jobs = self
+            .database
+            .fetch_all(&sql, vec![DbValue::I64Array(ids.to_vec())].into())
+            .await?
+            .iter()
+            .map(crate::sql::rows::db_job_from_row)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(jobs)
     }
@@ -621,11 +633,20 @@ impl WorkerUtils {
             escaped_schema = self.escaped_schema
         );
 
-        let jobs = sqlx::query_as(&sql)
-            .bind(ids)
-            .bind(reason)
-            .fetch_all(&self.pg_pool)
-            .await?;
+        let jobs = self
+            .database
+            .fetch_all(
+                &sql,
+                vec![
+                    DbValue::I64Array(ids.to_vec()),
+                    DbValue::Text(reason.to_string()),
+                ]
+                .into(),
+            )
+            .await?
+            .iter()
+            .map(crate::sql::rows::db_job_from_row)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(jobs)
     }
@@ -659,14 +680,23 @@ impl WorkerUtils {
             escaped_schema = self.escaped_schema
         );
 
-        let jobs = sqlx::query_as(&sql)
-            .bind(ids)
-            .bind(options.run_at)
-            .bind(options.priority)
-            .bind(options.attempts)
-            .bind(options.max_attempts)
-            .fetch_all(&self.pg_pool)
-            .await?;
+        let jobs = self
+            .database
+            .fetch_all(
+                &sql,
+                vec![
+                    DbValue::I64Array(ids.to_vec()),
+                    DbValue::TimestampTzOpt(options.run_at),
+                    DbValue::I32Opt(options.priority.map(i32::from)),
+                    DbValue::I32Opt(options.attempts.map(i32::from)),
+                    DbValue::I32Opt(options.max_attempts.map(i32::from)),
+                ]
+                .into(),
+            )
+            .await?
+            .iter()
+            .map(crate::sql::rows::db_job_from_row)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(jobs)
     }
@@ -692,9 +722,17 @@ impl WorkerUtils {
             escaped_schema = self.escaped_schema
         );
 
-        sqlx::query(&sql)
-            .bind(worker_ids)
-            .execute(&self.pg_pool)
+        self.database
+            .execute(
+                &sql,
+                vec![DbValue::TextArray(
+                    worker_ids
+                        .iter()
+                        .map(|worker_id| worker_id.to_string())
+                        .collect(),
+                )]
+                .into(),
+            )
             .await?;
 
         Ok(())
@@ -740,18 +778,18 @@ impl WorkerUtils {
             let task_names = guard.task_names();
 
             for task in tasks {
-                task.execute(&self.pg_pool, &self.escaped_schema, &task_names)
+                task.execute(&self.database, &self.escaped_schema, &task_names)
                     .await?;
             }
 
             let refreshed =
-                get_tasks_details(&self.pg_pool, &self.escaped_schema, task_names).await?;
+                get_tasks_details(&self.database, &self.escaped_schema, task_names).await?;
             *guard = refreshed;
             return Ok(());
         }
 
         for task in tasks {
-            task.execute(&self.pg_pool, &self.escaped_schema, &[])
+            task.execute(&self.database, &self.escaped_schema, &[])
                 .await?;
         }
 
@@ -766,7 +804,7 @@ impl WorkerUtils {
     /// # Returns
     /// * `Result<(), MigrateError>` - Ok if migrations completed successfully
     pub async fn migrate(&self) -> Result<(), MigrateError> {
-        migrate(&self.pg_pool, &self.escaped_schema).await?;
+        migrate(&self.database, &self.escaped_schema).await?;
         Ok(())
     }
 }

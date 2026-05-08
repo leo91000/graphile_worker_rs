@@ -1,11 +1,11 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use graphile_worker_database::Database;
 use graphile_worker_extensions::ReadOnlyExtensions;
 use graphile_worker_job::Job;
 pub use graphile_worker_task_details::{SharedTaskDetails, TaskDetails};
 use serde_json::Value;
-use sqlx::PgPool;
 
 /// Context provided to task handlers when processing a job.
 ///
@@ -25,8 +25,8 @@ use sqlx::PgPool;
 pub struct WorkerContext {
     /// The JSON payload of the job, containing task-specific data
     payload: Option<Value>,
-    /// PostgreSQL connection pool for database access during job processing
-    pg_pool: PgPool,
+    /// Database handle for database access during job processing
+    database: Database,
     /// SQL-escaped schema name where Graphile Worker tables are located
     escaped_schema: String,
     /// The complete job record with all metadata
@@ -49,7 +49,7 @@ impl WorkerContext {
 
     pub fn from_shared_job(
         job: Arc<Job>,
-        pg_pool: PgPool,
+        database: impl Into<Database>,
         escaped_schema: String,
         worker_id: String,
         extensions: ReadOnlyExtensions,
@@ -58,7 +58,7 @@ impl WorkerContext {
     ) -> Self {
         Self {
             payload: None,
-            pg_pool,
+            database: database.into(),
             escaped_schema,
             job,
             worker_id,
@@ -72,8 +72,21 @@ impl WorkerContext {
         self.payload.as_ref().unwrap_or_else(|| self.job.payload())
     }
 
-    pub fn pg_pool(&self) -> &PgPool {
-        &self.pg_pool
+    pub fn database(&self) -> &Database {
+        &self.database
+    }
+
+    #[cfg(feature = "driver-sqlx")]
+    pub fn try_pg_pool(&self) -> Option<&sqlx::PgPool> {
+        self.database
+            .downcast_ref::<graphile_worker_database::sqlx::SqlxDatabase>()
+            .map(|database| database.pool())
+    }
+
+    #[cfg(feature = "driver-sqlx")]
+    pub fn pg_pool(&self) -> &sqlx::PgPool {
+        self.try_pg_pool()
+            .expect("WorkerContext does not use the SQLx database driver")
     }
 
     pub fn escaped_schema(&self) -> &str {
@@ -136,7 +149,7 @@ impl WorkerContext {
 #[derive(Clone, Default, Debug)]
 pub struct WorkerContextBuilder {
     payload: Option<Value>,
-    pg_pool: Option<PgPool>,
+    database: Option<Database>,
     escaped_schema: Option<String>,
     job: Option<Job>,
     worker_id: Option<String>,
@@ -151,8 +164,14 @@ impl WorkerContextBuilder {
         self
     }
 
-    pub fn pg_pool(mut self, pg_pool: PgPool) -> Self {
-        self.pg_pool = Some(pg_pool);
+    pub fn database(mut self, database: impl Into<Database>) -> Self {
+        self.database = Some(database.into());
+        self
+    }
+
+    #[cfg(feature = "driver-sqlx")]
+    pub fn pg_pool(mut self, pg_pool: sqlx::PgPool) -> Self {
+        self.database = Some(pg_pool.into());
         self
     }
 
@@ -189,7 +208,7 @@ impl WorkerContextBuilder {
     pub fn build(self) -> WorkerContext {
         WorkerContext {
             payload: self.payload,
-            pg_pool: self.pg_pool.unwrap_or_else(|| missing_field("pg_pool")),
+            database: self.database.unwrap_or_else(|| missing_field("database")),
             escaped_schema: self
                 .escaped_schema
                 .unwrap_or_else(|| missing_field("escaped_schema")),
@@ -215,7 +234,7 @@ mod tests {
     use super::*;
     use graphile_worker_extensions::Extensions;
     use graphile_worker_job::Job;
-    use sqlx::postgres::PgPoolOptions;
+    use sqlx::{postgres::PgPoolOptions, PgPool};
 
     fn create_test_job() -> Job {
         Job::builder()

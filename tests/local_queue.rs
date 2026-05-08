@@ -39,10 +39,10 @@ async fn local_queue_processes_jobs_correctly() {
         utils.migrate().await.expect("Failed to migrate");
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(3)
                     .local_queue(LocalQueueConfig::builder().size(10).build())
                     .define_job::<LocalQueueJob>()
@@ -150,10 +150,10 @@ async fn local_queue_batch_fetches_jobs() {
         }
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(5)
                     .local_queue(LocalQueueConfig::builder().size(50).build())
                     .define_job::<BatchJob>()
@@ -208,10 +208,10 @@ async fn local_queue_can_run_multiple_local_queues() {
         };
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(5)
                     .local_queue(LocalQueueConfig::default().with_size(3).with_queue_count(4))
                     .define_job::<MultiLocalQueueJob>()
@@ -260,10 +260,10 @@ async fn local_queue_count_is_limited_by_concurrency() {
         };
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(2)
                     .local_queue(LocalQueueConfig::default().with_size(3).with_queue_count(4))
                     .define_job::<MultiLocalQueueJob>()
@@ -335,7 +335,7 @@ async fn local_queue_returns_jobs_on_shutdown() {
 
         let worker = Arc::new(
             Worker::options()
-                .pg_pool(test_db.test_pool.clone())
+                .database(test_db.database.clone())
                 .concurrency(2)
                 .local_queue(LocalQueueConfig::builder().size(20).build())
                 .listen_os_shutdown_signals(false)
@@ -430,10 +430,10 @@ async fn local_queue_with_forbidden_flags_uses_direct_fetch() {
         }
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(3)
                     .local_queue(LocalQueueConfig::builder().size(10).build())
                     .add_forbidden_flag("special")
@@ -505,7 +505,7 @@ async fn local_queue_works_with_run_once() {
         }
 
         let worker = Worker::options()
-            .pg_pool(test_db.test_pool.clone())
+            .database(test_db.database.clone())
             .concurrency(3)
             .define_job::<RunOnceJob>()
             .init()
@@ -565,7 +565,7 @@ async fn local_queue_returns_jobs_on_ttl_expiry() {
 
         let worker = Arc::new(
             Worker::options()
-                .pg_pool(test_db.test_pool.clone())
+                .database(test_db.database.clone())
                 .concurrency(1)
                 .local_queue(
                     LocalQueueConfig::builder()
@@ -648,10 +648,10 @@ async fn local_queue_refetch_delay_triggers_when_below_threshold() {
         }
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(2)
                     .poll_interval(Duration::from_secs(10))
                     .local_queue(
@@ -727,10 +727,10 @@ async fn local_queue_with_size_one() {
         }
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(1)
                     .local_queue(LocalQueueConfig::builder().size(1).build())
                     .define_job::<SmallQueueJob>()
@@ -798,10 +798,10 @@ async fn local_queue_distributes_jobs_to_concurrent_workers() {
         let start = Instant::now();
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(5)
                     .local_queue(LocalQueueConfig::builder().size(20).build())
                     .define_job::<ConcurrentDistributionJob>()
@@ -862,7 +862,7 @@ async fn local_queue_transitions_modes_correctly() {
 
         let worker = Arc::new(
             Worker::options()
-                .pg_pool(test_db.test_pool.clone())
+                .database(test_db.database.clone())
                 .concurrency(1)
                 .poll_interval(Duration::from_millis(100))
                 .local_queue(LocalQueueConfig::builder().size(5).build())
@@ -948,7 +948,7 @@ async fn local_queue_handles_empty_queue_gracefully() {
 
         let worker = Arc::new(
             Worker::options()
-                .pg_pool(test_db.test_pool.clone())
+                .database(test_db.database.clone())
                 .concurrency(2)
                 .poll_interval(Duration::from_millis(100))
                 .local_queue(LocalQueueConfig::builder().size(10).build())
@@ -1027,10 +1027,10 @@ async fn local_queue_handles_large_batch() {
         }
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(10)
                     .local_queue(LocalQueueConfig::builder().size(50).build())
                     .define_job::<LargeBatchJob>()
@@ -1095,10 +1095,10 @@ async fn local_queue_processes_jobs_with_refetch_delay() {
         }
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(2)
                     .poll_interval(Duration::from_millis(200))
                     .local_queue(
@@ -1167,7 +1167,7 @@ async fn local_queue_pulse_triggers_immediate_fetch() {
 
         let worker = Arc::new(
             Worker::options()
-                .pg_pool(test_db.test_pool.clone())
+                .database(test_db.database.clone())
                 .concurrency(1)
                 .poll_interval(Duration::from_secs(30))
                 .local_queue(LocalQueueConfig::builder().size(10).build())
@@ -1246,7 +1246,7 @@ async fn local_queue_release_waits_for_run_loop() {
 
         let worker = Arc::new(
             Worker::options()
-                .pg_pool(test_db.test_pool.clone())
+                .database(test_db.database.clone())
                 .concurrency(2)
                 .local_queue(LocalQueueConfig::builder().size(10).build())
                 .listen_os_shutdown_signals(false)
@@ -1311,7 +1311,7 @@ async fn local_queue_refetch_delay_abort_with_low_concurrency() {
 
         let worker = Arc::new(
             Worker::options()
-                .pg_pool(test_db.test_pool.clone())
+                .database(test_db.database.clone())
                 .concurrency(2)
                 .poll_interval(Duration::from_secs(30))
                 .local_queue(

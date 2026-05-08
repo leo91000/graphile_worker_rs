@@ -188,10 +188,10 @@ async fn test_observer_hooks_are_called() {
         let counters = plugin.counters();
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(2)
                     .define_job::<TestJob>()
                     .add_plugin(plugin)
@@ -255,10 +255,10 @@ async fn test_before_job_run_skip() {
         let counters = plugin.counters();
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(2)
                     .define_job::<TestJob>()
                     .add_plugin(plugin)
@@ -314,10 +314,10 @@ async fn test_before_job_run_fail() {
         let counters = plugin.counters();
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(2)
                     .define_job::<TestJob>()
                     .add_plugin(plugin)
@@ -373,10 +373,10 @@ async fn test_job_fail_hook_on_task_error() {
         let counters = plugin.counters();
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(2)
                     .define_job::<TestJob>()
                     .add_plugin(plugin)
@@ -432,10 +432,10 @@ async fn test_multiple_plugins() {
         let counters2 = plugin2.counters();
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(2)
                     .define_job::<TestJob>()
                     .add_plugin(plugin1)
@@ -572,7 +572,7 @@ async fn test_before_job_schedule_transform() {
         let run_counters = run_plugin.counters();
 
         let worker = Worker::options()
-            .pg_pool(test_db.test_pool.clone())
+            .database(test_db.database.clone())
             .concurrency(2)
             .define_job::<TestJob>()
             .add_plugin(schedule_plugin)
@@ -628,7 +628,7 @@ async fn test_before_job_schedule_skip() {
         let schedule_counters = schedule_plugin.counters();
 
         let worker = Worker::options()
-            .pg_pool(test_db.test_pool.clone())
+            .database(test_db.database.clone())
             .concurrency(2)
             .define_job::<TestJob>()
             .add_plugin(schedule_plugin)
@@ -674,7 +674,7 @@ async fn test_before_job_schedule_fail() {
         let schedule_counters = schedule_plugin.counters();
 
         let worker = Worker::options()
-            .pg_pool(test_db.test_pool.clone())
+            .database(test_db.database.clone())
             .concurrency(2)
             .define_job::<TestJob>()
             .add_plugin(schedule_plugin)
@@ -720,7 +720,7 @@ async fn test_before_job_schedule_transform_payload_stored_in_db() {
         let schedule_counters = schedule_plugin.counters();
 
         let worker = Worker::options()
-            .pg_pool(test_db.test_pool.clone())
+            .database(test_db.database.clone())
             .concurrency(2)
             .define_job::<TestJob>()
             .add_plugin(schedule_plugin)
@@ -768,7 +768,7 @@ async fn test_before_job_schedule_skip_no_job_in_db() {
         let schedule_counters = schedule_plugin.counters();
 
         let worker = Worker::options()
-            .pg_pool(test_db.test_pool.clone())
+            .database(test_db.database.clone())
             .concurrency(2)
             .define_job::<TestJob>()
             .add_plugin(schedule_plugin)
@@ -847,7 +847,7 @@ async fn test_before_job_schedule_receives_correct_context() {
         let counters = plugin.counters();
 
         let worker = Worker::options()
-            .pg_pool(test_db.test_pool.clone())
+            .database(test_db.database.clone())
             .concurrency(2)
             .define_job::<TestJob>()
             .add_plugin(plugin)
@@ -906,7 +906,7 @@ async fn test_before_job_schedule_with_typed_add_job() {
         let schedule_counters = schedule_plugin.counters();
 
         let worker = Worker::options()
-            .pg_pool(test_db.test_pool.clone())
+            .database(test_db.database.clone())
             .concurrency(2)
             .define_job::<TypedScheduleJob>()
             .add_plugin(schedule_plugin)
@@ -1009,7 +1009,7 @@ async fn test_before_job_schedule_multiple_plugins_chain_transforms() {
         };
 
         let worker = Worker::options()
-            .pg_pool(test_db.test_pool.clone())
+            .database(test_db.database.clone())
             .concurrency(2)
             .define_job::<TestJob>()
             .add_plugin(plugin1)
@@ -1098,7 +1098,7 @@ async fn test_before_job_schedule_skip_stops_chain() {
         };
 
         let worker = Worker::options()
-            .pg_pool(test_db.test_pool.clone())
+            .database(test_db.database.clone())
             .concurrency(2)
             .define_job::<TestJob>()
             .add_plugin(SkippingFirstPlugin)
@@ -1145,7 +1145,7 @@ async fn test_before_job_schedule_and_before_job_run_both_called() {
         let run_counters = run_plugin.counters();
 
         let worker = Worker::options()
-            .pg_pool(test_db.test_pool.clone())
+            .database(test_db.database.clone())
             .concurrency(2)
             .define_job::<TestJob>()
             .add_plugin(schedule_plugin)
@@ -1284,10 +1284,10 @@ async fn test_after_job_run_hook() {
         let counters = plugin.counters();
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(2)
                     .define_job::<TestJob>()
                     .add_plugin(plugin)
@@ -1414,10 +1414,10 @@ async fn test_on_job_permanently_fail_hook() {
         let counters = plugin.counters();
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(2)
                     .define_job::<TestJob>()
                     .add_plugin(plugin)
@@ -1567,10 +1567,10 @@ async fn test_local_queue_init_hook() {
         let counters = plugin.counters();
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(2)
                     .local_queue(LocalQueueConfig::builder().size(10).build())
                     .define_job::<LocalQueueTestJob>()
@@ -1607,10 +1607,10 @@ async fn test_local_queue_set_mode_hook() {
         let counters = plugin.counters();
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(2)
                     .local_queue(LocalQueueConfig::builder().size(10).build())
                     .define_job::<LocalQueueTestJob>()
@@ -1656,10 +1656,10 @@ async fn test_local_queue_get_jobs_complete_hook() {
         }
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(2)
                     .local_queue(LocalQueueConfig::builder().size(10).build())
                     .define_job::<LocalQueueTestJob>()
@@ -1723,7 +1723,7 @@ async fn test_local_queue_return_jobs_hook() {
 
         let worker = Arc::new(
             Worker::options()
-                .pg_pool(test_db.test_pool.clone())
+                .database(test_db.database.clone())
                 .concurrency(2)
                 .local_queue(LocalQueueConfig::builder().size(20).build())
                 .listen_os_shutdown_signals(false)
@@ -1772,10 +1772,10 @@ async fn test_local_queue_refetch_delay_hooks() {
         let counters = plugin.counters();
 
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(2)
                     .local_queue(
                         LocalQueueConfig::builder()

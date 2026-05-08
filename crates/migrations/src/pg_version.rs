@@ -1,20 +1,19 @@
+use graphile_worker_database::{DbExecutor, DbParams};
 use indoc::formatdoc;
-use sqlx::{query, PgExecutor, Row};
 
 use crate::MigrateError;
 
 /// Fetches the postgres version and checks if it is compatible with Garphile Worker
-pub async fn fetch_and_check_postgres_version<'e, E>(executor: E) -> Result<u32, MigrateError>
-where
-    E: PgExecutor<'e>,
-{
+pub async fn fetch_and_check_postgres_version(
+    executor: &impl DbExecutor,
+) -> Result<u32, MigrateError> {
     let sql = formatdoc!(
         r#"
             select current_setting('server_version_num') as server_version_num
         "#
     );
 
-    let row = query(&sql).fetch_one(executor).await?;
+    let row = executor.fetch_one(&sql, DbParams::new()).await?;
     let version_string: String = row.try_get("server_version_num")?;
 
     check_postgres_version(&version_string)
