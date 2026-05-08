@@ -122,6 +122,11 @@ pub struct LocalQueueConfig {
     /// If this is greater than the worker concurrency, only `concurrency` queues
     /// are started because every local queue needs at least one worker draining it.
     ///
+    /// Throughput depends on the job payload, handler cost, PostgreSQL latency,
+    /// connection pool size, worker concurrency, and local queue settings. There
+    /// is no universal best value; benchmark realistic workloads before changing
+    /// this in production.
+    ///
     /// Defaults to 1, which preserves the original single-local-queue behavior.
     #[builder(default = "1")]
     pub queue_count: usize,
@@ -160,6 +165,8 @@ impl LocalQueueConfig {
     /// can also lock more jobs locally and increase database load.
     ///
     /// If this is greater than worker concurrency, it is capped at concurrency.
+    /// There is no single best value for all workloads, so benchmark realistic
+    /// jobs before relying on a throughput tuning.
     pub fn with_queue_count(self, queue_count: usize) -> Self {
         Self {
             queue_count,
