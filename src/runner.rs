@@ -1065,17 +1065,6 @@ async fn release_job(
                         job_id = job.id(),
                         "Job max attempts reached"
                     );
-
-                    if !worker.hooks.is_empty() {
-                        worker
-                            .hooks
-                            .emit(JobPermanentlyFailContext {
-                                job: job.clone(),
-                                worker_id: worker.worker_id.clone(),
-                                error: error_str.clone(),
-                            })
-                            .await;
-                    }
                 } else {
                     warn!(
                         error = ?e,
@@ -1084,21 +1073,9 @@ async fn release_job(
                         job_id = job.id(),
                         "Failed task"
                     );
-
-                    if !worker.hooks.is_empty() {
-                        worker
-                            .hooks
-                            .emit(JobFailContext {
-                                job: job.clone(),
-                                worker_id: worker.worker_id.clone(),
-                                error: error_str.clone(),
-                                will_retry,
-                            })
-                            .await;
-                    }
                 }
 
-                fail_job(
+                if let Err(e) = fail_job(
                     &worker.pg_pool,
                     &job,
                     &worker.escaped_schema,
@@ -1107,10 +1084,36 @@ async fn release_job(
                     None,
                 )
                 .await
-                .map_err(|e| ReleaseJobError {
-                    job_id: *job.id(),
-                    source: e,
-                })?;
+                {
+                    error!(error = ?e, job_id = job.id(), "Failed to persist failed job");
+                    return Err(ReleaseJobError {
+                        job_id: *job.id(),
+                        source: e,
+                    });
+                }
+
+                if !worker.hooks.is_empty() {
+                    if will_retry {
+                        worker
+                            .hooks
+                            .emit(JobFailContext {
+                                job,
+                                worker_id: worker.worker_id.clone(),
+                                error: error_str,
+                                will_retry,
+                            })
+                            .await;
+                    } else {
+                        worker
+                            .hooks
+                            .emit(JobPermanentlyFailContext {
+                                job,
+                                worker_id: worker.worker_id.clone(),
+                                error: error_str,
+                            })
+                            .await;
+                    }
+                }
             }
         }
     }

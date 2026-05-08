@@ -136,15 +136,6 @@ async fn run_failure_benchmark(kind: FailureKind) -> Duration {
     worker.request_shutdown();
     let _ = handle.await;
 
-    let jobs_per_sec = JOB_COUNT as f64 / elapsed.as_secs_f64();
-    println!(
-        "Failed {} {} jobs in {:?} ({:.0} jobs/sec)",
-        JOB_COUNT,
-        kind.identifier(),
-        elapsed,
-        jobs_per_sec
-    );
-
     db.drop().await;
     elapsed
 }

@@ -29,6 +29,7 @@ pub struct CompletionBatcher {
     pg_pool: PgPool,
     escaped_schema: String,
     worker_id: String,
+    hooks: Arc<HookRegistry>,
 }
 
 impl CompletionBatcher {
@@ -48,7 +49,7 @@ impl CompletionBatcher {
             pg_pool.clone(),
             escaped_schema.clone(),
             worker_id.clone(),
-            hooks,
+            hooks.clone(),
             shutdown_signal,
         ));
 
@@ -58,6 +59,7 @@ impl CompletionBatcher {
             pg_pool,
             escaped_schema,
             worker_id,
+            hooks,
         }
     }
 
@@ -65,7 +67,10 @@ impl CompletionBatcher {
         if let Err(e) = self.tx.send(req).await {
             warn!("Batcher closed, completing job directly");
             let req = e.0;
-            complete_job_direct(&req, &self.pg_pool, &self.escaped_schema, &self.worker_id).await;
+            if complete_job_direct(&req, &self.pg_pool, &self.escaped_schema, &self.worker_id).await
+            {
+                emit_completion_hook(&req, &self.worker_id, &self.hooks).await;
+            }
         }
     }
 
@@ -207,7 +212,7 @@ async fn flush_batch(
         }
     }
 
-    if !with_queue_ids.is_empty() {
+    let with_queue_succeeded = if !with_queue_ids.is_empty() {
         let sql = formatdoc!(
             r#"
                 WITH j AS (
@@ -222,17 +227,23 @@ async fn flush_batch(
             "#
         );
 
-        if let Err(e) = sqlx::query(&sql)
+        match sqlx::query(&sql)
             .bind(&with_queue_ids)
             .bind(worker_id)
             .execute(pg_pool)
             .await
         {
-            error!(error = ?e, "Failed to complete jobs with queue");
+            Ok(_) => true,
+            Err(e) => {
+                error!(error = ?e, "Failed to complete jobs with queue");
+                false
+            }
         }
-    }
+    } else {
+        false
+    };
 
-    if !without_queue_ids.is_empty() {
+    let without_queue_succeeded = if !without_queue_ids.is_empty() {
         let sql = formatdoc!(
             r#"
                 DELETE FROM {escaped_schema}._private_jobs
@@ -240,25 +251,28 @@ async fn flush_batch(
             "#
         );
 
-        if let Err(e) = sqlx::query(&sql)
+        match sqlx::query(&sql)
             .bind(&without_queue_ids)
             .execute(pg_pool)
             .await
         {
-            error!(error = ?e, "Failed to complete jobs without queue");
+            Ok(_) => true,
+            Err(e) => {
+                error!(error = ?e, "Failed to complete jobs without queue");
+                false
+            }
         }
-    }
+    } else {
+        false
+    };
 
     if !hooks.is_empty() {
-        let worker_id = worker_id.to_string();
         for req in batch {
-            hooks
-                .emit(JobCompleteContext {
-                    job: req.job.clone(),
-                    worker_id: worker_id.clone(),
-                    duration: req.duration,
-                })
-                .await;
+            let persisted = (req.has_queue && with_queue_succeeded)
+                || (!req.has_queue && without_queue_succeeded);
+            if persisted {
+                emit_completion_hook(req, worker_id, hooks).await;
+            }
         }
     }
 }
@@ -268,7 +282,7 @@ async fn complete_job_direct(
     pg_pool: &PgPool,
     escaped_schema: &str,
     worker_id: &str,
-) {
+) -> bool {
     if req.has_queue {
         let sql = formatdoc!(
             r#"
@@ -291,6 +305,7 @@ async fn complete_job_direct(
             .await
         {
             error!(error = ?e, job_id = req.job_id, "Failed to complete job directly (with queue)");
+            return false;
         }
     } else {
         let sql = formatdoc!(
@@ -302,8 +317,25 @@ async fn complete_job_direct(
 
         if let Err(e) = sqlx::query(&sql).bind(req.job_id).execute(pg_pool).await {
             error!(error = ?e, job_id = req.job_id, "Failed to complete job directly");
+            return false;
         }
     }
+
+    true
+}
+
+async fn emit_completion_hook(req: &CompletionRequest, worker_id: &str, hooks: &Arc<HookRegistry>) {
+    if hooks.is_empty() {
+        return;
+    }
+
+    hooks
+        .emit(JobCompleteContext {
+            job: req.job.clone(),
+            worker_id: worker_id.to_string(),
+            duration: req.duration,
+        })
+        .await;
 }
 
 pub struct FailureRequest {
@@ -318,6 +350,7 @@ pub struct FailureBatcher {
     pg_pool: PgPool,
     escaped_schema: String,
     worker_id: String,
+    hooks: Arc<HookRegistry>,
 }
 
 impl FailureBatcher {
@@ -337,7 +370,7 @@ impl FailureBatcher {
             pg_pool.clone(),
             escaped_schema.clone(),
             worker_id.clone(),
-            hooks,
+            hooks.clone(),
             shutdown_signal,
         ));
 
@@ -347,6 +380,7 @@ impl FailureBatcher {
             pg_pool,
             escaped_schema,
             worker_id,
+            hooks,
         }
     }
 
@@ -354,7 +388,9 @@ impl FailureBatcher {
         if let Err(e) = self.tx.send(req).await {
             warn!("Batcher closed, failing job directly");
             let req = e.0;
-            fail_job_direct(&req, &self.pg_pool, &self.escaped_schema, &self.worker_id).await;
+            if fail_job_direct(&req, &self.pg_pool, &self.escaped_schema, &self.worker_id).await {
+                emit_failure_hook(&req, &self.worker_id, &self.hooks).await;
+            }
         }
     }
 
@@ -475,47 +511,48 @@ async fn flush_failure_batch(
         })
         .collect();
 
-    if let Err(e) = fail_jobs(pg_pool, &failed_jobs, escaped_schema, worker_id).await {
-        error!(error = ?e, batch_size = batch.len(), "Failed to fail jobs");
+    match fail_jobs(pg_pool, &failed_jobs, escaped_schema, worker_id).await {
+        Ok(()) => {
+            if !hooks.is_empty() {
+                for req in batch {
+                    emit_failure_hook(req, worker_id, hooks).await;
+                }
+            }
+        }
+        Err(e) => {
+            error!(error = ?e, batch_size = batch.len(), "Failed to fail jobs");
 
-        for req in batch {
-            if let Err(e) = fail_job(
-                pg_pool,
-                &req.job,
-                escaped_schema,
-                worker_id,
-                &req.error,
-                None,
-            )
-            .await
-            {
-                error!(error = ?e, job_id = ?req.job.id(), "Failed to fail job");
+            for req in batch {
+                if fail_job_direct(req, pg_pool, escaped_schema, worker_id).await {
+                    emit_failure_hook(req, worker_id, hooks).await;
+                }
             }
         }
     }
+}
 
-    if !hooks.is_empty() {
-        let worker_id = worker_id.to_string();
-        for req in batch {
-            if req.will_retry {
-                hooks
-                    .emit(JobFailContext {
-                        job: req.job.clone(),
-                        worker_id: worker_id.clone(),
-                        error: req.error.clone(),
-                        will_retry: true,
-                    })
-                    .await;
-            } else {
-                hooks
-                    .emit(JobPermanentlyFailContext {
-                        job: req.job.clone(),
-                        worker_id: worker_id.clone(),
-                        error: req.error.clone(),
-                    })
-                    .await;
-            }
-        }
+async fn emit_failure_hook(req: &FailureRequest, worker_id: &str, hooks: &Arc<HookRegistry>) {
+    if hooks.is_empty() {
+        return;
+    }
+
+    if req.will_retry {
+        hooks
+            .emit(JobFailContext {
+                job: req.job.clone(),
+                worker_id: worker_id.to_string(),
+                error: req.error.clone(),
+                will_retry: true,
+            })
+            .await;
+    } else {
+        hooks
+            .emit(JobPermanentlyFailContext {
+                job: req.job.clone(),
+                worker_id: worker_id.to_string(),
+                error: req.error.clone(),
+            })
+            .await;
     }
 }
 
@@ -524,7 +561,7 @@ async fn fail_job_direct(
     pg_pool: &PgPool,
     escaped_schema: &str,
     worker_id: &str,
-) {
+) -> bool {
     if let Err(e) = fail_job(
         pg_pool,
         &req.job,
@@ -536,9 +573,11 @@ async fn fail_job_direct(
     .await
     {
         error!(error = ?e, job_id = ?req.job.id(), "Failed to fail job directly");
+        return false;
     }
-}
 
+    true
+}
 #[cfg(test)]
 mod tests {
     use super::*;

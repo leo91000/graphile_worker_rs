@@ -228,6 +228,52 @@ fn check_migration_error(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::borrow::Cow;
+    use std::error::Error as StdError;
+    use std::fmt;
+
+    #[derive(Debug)]
+    struct TestDatabaseError {
+        code: Option<&'static str>,
+    }
+
+    impl fmt::Display for TestDatabaseError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "test database error")
+        }
+    }
+
+    impl StdError for TestDatabaseError {}
+
+    impl sqlx::error::DatabaseError for TestDatabaseError {
+        fn message(&self) -> &str {
+            "test database error"
+        }
+
+        fn code(&self) -> Option<Cow<'_, str>> {
+            self.code.map(Cow::Borrowed)
+        }
+
+        fn as_error(&self) -> &(dyn StdError + Send + Sync + 'static) {
+            self
+        }
+
+        fn as_error_mut(&mut self) -> &mut (dyn StdError + Send + Sync + 'static) {
+            self
+        }
+
+        fn into_error(self: Box<Self>) -> Box<dyn StdError + Send + Sync + 'static> {
+            self
+        }
+
+        fn kind(&self) -> sqlx::error::ErrorKind {
+            sqlx::error::ErrorKind::Other
+        }
+    }
+
+    fn database_error(code: Option<&'static str>) -> SqlxError {
+        SqlxError::Database(Box::new(TestDatabaseError { code }))
+    }
 
     #[test]
     fn last_migration_detects_pending_migrations() {
@@ -255,6 +301,30 @@ mod tests {
         assert!(matches!(
             error,
             MigrateError::SqlError(SqlxError::RowNotFound)
+        ));
+    }
+
+    #[test]
+    fn check_migration_error_detects_locked_jobs_in_migration_11() {
+        let error = check_migration_error(11, Err(database_error(Some("22012")))).unwrap_err();
+        assert!(matches!(error, MigrateError::LockedJobInMigration11));
+    }
+
+    #[test]
+    fn check_migration_error_keeps_migration_11_database_errors_without_code() {
+        let error = check_migration_error(11, Err(database_error(None))).unwrap_err();
+        assert!(matches!(
+            error,
+            MigrateError::SqlError(SqlxError::Database(_))
+        ));
+    }
+
+    #[test]
+    fn check_migration_error_keeps_other_migration_11_database_errors() {
+        let error = check_migration_error(11, Err(database_error(Some("12345")))).unwrap_err();
+        assert!(matches!(
+            error,
+            MigrateError::SqlError(SqlxError::Database(_))
         ));
     }
 }
