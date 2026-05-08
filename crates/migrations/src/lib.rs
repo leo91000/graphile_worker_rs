@@ -1,10 +1,10 @@
 pub mod pg_version;
 pub mod sql;
 
+use graphile_worker_database::{Database, DbError, DbExecutor, DbParams, DbValue};
 use indoc::formatdoc;
 use pg_version::{check_postgres_version, fetch_and_check_postgres_version};
 use sql::GRAPHILE_WORKER_MIGRATIONS;
-use sqlx::{query, query_as, Acquire, Error as SqlxError, FromRow, PgExecutor, Postgres};
 use thiserror::Error;
 use tracing::{info, warn};
 
@@ -21,17 +21,14 @@ pub enum MigrateError {
         highest_migration: u32,
     },
     #[error("Error occured while migrate: {0}")]
-    SqlError(#[from] sqlx::Error),
+    SqlError(#[from] DbError),
     #[error("There are locked jobs present; migration 11 cannot complete. Please ensure all workers are shut down cleanly and all locked jobs and queues are unlocked before attempting this migration.")]
     LockedJobInMigration11,
 }
 
 /// Installs the Graphile Worker schema into the database.
-async fn install_schema<'e, E>(executor: E, escaped_schema: &str) -> Result<(), MigrateError>
-where
-    E: PgExecutor<'e> + Acquire<'e, Database = Postgres> + Clone,
-{
-    let version = fetch_and_check_postgres_version(executor.clone()).await?;
+async fn install_schema(database: &Database, escaped_schema: &str) -> Result<(), MigrateError> {
+    let version = fetch_and_check_postgres_version(database).await?;
     info!(pg_version = version, "Installing Graphile Worker schema");
 
     let create_schema_query = formatdoc!(
@@ -50,17 +47,16 @@ where
         "#
     );
 
-    let mut tx = executor.begin().await?;
-    query(&create_schema_query).execute(tx.as_mut()).await?;
-    query(&create_migration_table_query)
-        .execute(tx.as_mut())
+    let tx = database.begin().await?;
+    tx.execute(&create_schema_query, DbParams::new()).await?;
+    tx.execute(&create_migration_table_query, DbParams::new())
         .await?;
     tx.commit().await?;
 
     Ok(())
 }
 
-#[derive(FromRow, Debug)]
+#[derive(Debug)]
 pub struct LastMigration {
     server_version_num: String,
     id: Option<i32>,
@@ -79,13 +75,10 @@ impl Default for LastMigration {
 
 /// Returns the last migration that was run against the database.
 /// It also installs the Graphile Worker schema if it doesn't exist.
-async fn get_last_migration<'e, E>(
-    executor: &E,
+async fn get_last_migration(
+    executor: &Database,
     escaped_schema: &str,
-) -> Result<LastMigration, MigrateError>
-where
-    E: PgExecutor<'e> + Acquire<'e, Database = Postgres> + Send + Sync + Clone,
-{
+) -> Result<LastMigration, MigrateError> {
     let migrations_status_query = formatdoc!(
         r#"
             select current_setting('server_version_num') as server_version_num,
@@ -93,24 +86,24 @@ where
             (select id from {escaped_schema}.migrations where breaking is true order by id desc limit 1) as biggest_breaking_id;
         "#
     );
-    let last_migration_query_result = query_as::<_, LastMigration>(&migrations_status_query)
-        .fetch_one(executor.clone())
-        .await;
+    let last_migration_query_result = executor
+        .fetch_one(&migrations_status_query, DbParams::new())
+        .await
+        .and_then(|row| {
+            Ok(LastMigration {
+                server_version_num: row.try_get("server_version_num")?,
+                id: row.try_get("id")?,
+                biggest_breaking_id: row.try_get("biggest_breaking_id")?,
+            })
+        });
     let last_migration = match last_migration_query_result {
-        Err(SqlxError::Database(e)) => {
-            let Some(code) = e.code() else {
-                return Err(MigrateError::SqlError(SqlxError::Database(e)));
-            };
-
-            if code == "42P01" {
+        Err(e) => {
+            if e.code() == Some("42P01") {
                 info!(error = ?e, schema = escaped_schema, "Graphile Worker schema not found, installing...");
-                install_schema(executor.clone(), escaped_schema).await?;
+                install_schema(executor, escaped_schema).await?;
                 return Ok(Default::default());
             }
 
-            return Err(MigrateError::SqlError(SqlxError::Database(e)));
-        }
-        Err(e) => {
             return Err(MigrateError::SqlError(e));
         }
         Ok(row) => row,
@@ -126,11 +119,12 @@ impl LastMigration {
 }
 
 /// Runs the migrations against the database.
-pub async fn migrate<'e, E>(executor: E, escaped_schema: &str) -> Result<(), MigrateError>
-where
-    E: PgExecutor<'e> + Acquire<'e, Database = Postgres> + Send + Sync + Clone,
-{
-    let last_migration = get_last_migration(&executor, escaped_schema).await?;
+pub async fn migrate(
+    database: impl Into<Database>,
+    escaped_schema: &str,
+) -> Result<(), MigrateError> {
+    let database = database.into();
+    let last_migration = get_last_migration(&database, escaped_schema).await?;
 
     check_postgres_version(&last_migration.server_version_num)?;
     let latest_migration = last_migration.id;
@@ -159,16 +153,20 @@ where
                 },
                 migration.name(),
             );
-            let mut tx = executor.clone().begin().await?;
+            let mut tx = database.begin().await?;
             let result = migration.execute(&mut tx, escaped_schema).await;
             check_migration_error(migration_number, result)?;
             let sql =
                 format!("insert into {escaped_schema}.migrations (id, breaking) values ($1, $2)");
-            query(&sql)
-                .bind(migration_number as i64)
-                .bind(migration.is_breaking())
-                .execute(tx.as_mut())
-                .await?;
+            tx.execute(
+                &sql,
+                vec![
+                    DbValue::I32(migration_number as i32),
+                    DbValue::Bool(migration.is_breaking()),
+                ]
+                .into(),
+            )
+            .await?;
 
             tx.commit().await?;
         }
@@ -206,19 +204,15 @@ where
 /// If migration number is 11 and code is 22012, it means there are locked jobs present
 fn check_migration_error(
     migration_number: u32,
-    result: Result<(), SqlxError>,
+    result: Result<(), DbError>,
 ) -> Result<(), MigrateError> {
     match (migration_number, result) {
-        (11, Err(SqlxError::Database(e))) => {
-            let Some(code) = e.code() else {
-                return Err(MigrateError::SqlError(SqlxError::Database(e)));
-            };
-
-            if code == "22012" {
+        (11, Err(e)) => {
+            if e.code() == Some("22012") {
                 return Err(MigrateError::LockedJobInMigration11);
             }
 
-            Err(MigrateError::SqlError(SqlxError::Database(e)))
+            Err(MigrateError::SqlError(e))
         }
         (_, Err(e)) => Err(MigrateError::SqlError(e)),
         (_, Ok(())) => Ok(()),
@@ -228,51 +222,13 @@ fn check_migration_error(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::borrow::Cow;
-    use std::error::Error as StdError;
-    use std::fmt;
 
-    #[derive(Debug)]
-    struct TestDatabaseError {
-        code: Option<&'static str>,
-    }
-
-    impl fmt::Display for TestDatabaseError {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "test database error")
+    fn database_error(code: Option<&'static str>) -> DbError {
+        if let Some(code) = code {
+            DbError::with_code("test database error", code)
+        } else {
+            DbError::new("test database error")
         }
-    }
-
-    impl StdError for TestDatabaseError {}
-
-    impl sqlx::error::DatabaseError for TestDatabaseError {
-        fn message(&self) -> &str {
-            "test database error"
-        }
-
-        fn code(&self) -> Option<Cow<'_, str>> {
-            self.code.map(Cow::Borrowed)
-        }
-
-        fn as_error(&self) -> &(dyn StdError + Send + Sync + 'static) {
-            self
-        }
-
-        fn as_error_mut(&mut self) -> &mut (dyn StdError + Send + Sync + 'static) {
-            self
-        }
-
-        fn into_error(self: Box<Self>) -> Box<dyn StdError + Send + Sync + 'static> {
-            self
-        }
-
-        fn kind(&self) -> sqlx::error::ErrorKind {
-            sqlx::error::ErrorKind::Other
-        }
-    }
-
-    fn database_error(code: Option<&'static str>) -> SqlxError {
-        SqlxError::Database(Box::new(TestDatabaseError { code }))
     }
 
     #[test]
@@ -297,11 +253,8 @@ mod tests {
     fn check_migration_error_handles_generic_results() {
         assert!(check_migration_error(1, Ok(())).is_ok());
 
-        let error = check_migration_error(1, Err(SqlxError::RowNotFound)).unwrap_err();
-        assert!(matches!(
-            error,
-            MigrateError::SqlError(SqlxError::RowNotFound)
-        ));
+        let error = check_migration_error(1, Err(DbError::new("row not found"))).unwrap_err();
+        assert!(matches!(error, MigrateError::SqlError(_)));
     }
 
     #[test]
@@ -313,18 +266,12 @@ mod tests {
     #[test]
     fn check_migration_error_keeps_migration_11_database_errors_without_code() {
         let error = check_migration_error(11, Err(database_error(None))).unwrap_err();
-        assert!(matches!(
-            error,
-            MigrateError::SqlError(SqlxError::Database(_))
-        ));
+        assert!(matches!(error, MigrateError::SqlError(_)));
     }
 
     #[test]
     fn check_migration_error_keeps_other_migration_11_database_errors() {
         let error = check_migration_error(11, Err(database_error(Some("12345")))).unwrap_err();
-        assert!(matches!(
-            error,
-            MigrateError::SqlError(SqlxError::Database(_))
-        ));
+        assert!(matches!(error, MigrateError::SqlError(_)));
     }
 }

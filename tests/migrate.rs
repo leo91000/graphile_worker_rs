@@ -1,3 +1,4 @@
+use graphile_worker::{DbExecutor, DbParams, DbValue};
 use graphile_worker_migrations::{
     migrate,
     sql::{
@@ -22,7 +23,7 @@ async fn migration_install_schema_and_second_migration_does_not_harm() {
             .await
             .unwrap();
 
-        migrate(&test_db.test_pool, "graphile_worker")
+        migrate(&test_db.database, "graphile_worker")
             .await
             .expect("Failed to migrate");
 
@@ -42,7 +43,7 @@ async fn migration_install_schema_and_second_migration_does_not_harm() {
         assert_eq!(job.task_identifier, "assert_job_works");
 
         for _ in 0..3 {
-            migrate(&test_db.test_pool, "graphile_worker")
+            migrate(&test_db.database, "graphile_worker")
                 .await
                 .expect("Failed to migrate");
         }
@@ -65,9 +66,9 @@ async fn migration_can_take_over_from_pre_existing_migrations_table() {
             "INSERT INTO graphile_worker.migrations (id) VALUES (1)",
         ];
 
-        let mut tx = test_db.test_pool.begin().await.unwrap();
+        let mut tx = test_db.database.begin().await.unwrap();
         for stmt in initial_stmts {
-            query(stmt).execute(tx.as_mut()).await.unwrap();
+            tx.execute(stmt, DbParams::new()).await.unwrap();
         }
         M000001_MIGRATION
             .execute(&mut tx, "graphile_worker")
@@ -76,7 +77,7 @@ async fn migration_can_take_over_from_pre_existing_migrations_table() {
         tx.commit().await.unwrap();
 
         // Perform migration
-        migrate(&test_db.test_pool, "graphile_worker")
+        migrate(&test_db.database, "graphile_worker")
             .await
             .expect("Failed to migrate");
 
@@ -105,7 +106,7 @@ async fn migration_can_take_over_from_pre_existing_migrations_table() {
 
         // Assert that re-migrating causes no issues
         for _ in 0..3 {
-            migrate(&test_db.test_pool, "graphile_worker")
+            migrate(&test_db.database, "graphile_worker")
                 .await
                 .expect("Failed to re-migrate");
         }
@@ -134,7 +135,7 @@ async fn aborts_if_database_is_more_up_to_date_than_current_worker() {
             .unwrap();
 
         // Perform initial migration
-        migrate(&test_db.test_pool, "graphile_worker")
+        migrate(&test_db.database, "graphile_worker")
             .await
             .expect("Failed to perform initial migration");
 
@@ -145,7 +146,7 @@ async fn aborts_if_database_is_more_up_to_date_than_current_worker() {
             .unwrap();
 
         // Attempt to migrate again and expect it to fail due to version incompatibility
-        let migration_result = migrate(&test_db.test_pool, "graphile_worker").await;
+        let migration_result = migrate(&test_db.database, "graphile_worker").await;
 
         assert!(
             matches!(
@@ -185,14 +186,18 @@ async fn throws_helpful_error_message_in_migration_11() {
             M000009_MIGRATION,
             M000010_MIGRATION,
         ];
-        let mut tx = test_db.test_pool.begin().await.unwrap();
+        let mut tx = test_db.database.begin().await.unwrap();
         for migration in migrations {
             migration.execute(&mut tx, "graphile_worker").await.unwrap();
             let sql = "insert into graphile_worker.migrations (id, breaking) values ($1, $2)";
-            query(sql)
-                .bind(migration.migration_number() as i64)
-                .bind(migration.is_breaking())
-                .execute(tx.as_mut())
+            tx.execute(
+                sql,
+                vec![
+                    DbValue::I32(migration.migration_number() as i32),
+                    DbValue::Bool(migration.is_breaking()),
+                ]
+                .into(),
+            )
                 .await
                 .unwrap();
         }
@@ -210,7 +215,7 @@ async fn throws_helpful_error_message_in_migration_11() {
 
         // Attempt to perform migration
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        let migration_result = migrate(&test_db.test_pool, "graphile_worker").await;
+        let migration_result = migrate(&test_db.database, "graphile_worker").await;
 
         assert!(
             matches!(migration_result, Err(MigrateError::LockedJobInMigration11)),

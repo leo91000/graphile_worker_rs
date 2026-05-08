@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use graphile_worker::{LocalQueueConfig, WorkerOptions, WorkerUtils};
+use graphile_worker::{Database, LocalQueueConfig, WorkerOptions, WorkerUtils};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgConnectOptions;
 use sqlx::PgPool;
@@ -11,6 +11,7 @@ use uuid::Uuid;
 pub struct BenchDatabase {
     pub source_pool: PgPool,
     pub bench_pool: PgPool,
+    pub database: Database,
     pub name: String,
 }
 
@@ -25,7 +26,7 @@ impl BenchDatabase {
 
     pub fn create_worker_options(&self) -> WorkerOptions {
         WorkerOptions::default()
-            .pg_pool(self.bench_pool.clone())
+            .database(self.database.clone())
             .schema("graphile_worker")
             .concurrency(4)
             .poll_interval(Duration::from_millis(10))
@@ -33,7 +34,7 @@ impl BenchDatabase {
     }
 
     pub fn worker_utils(&self) -> WorkerUtils {
-        WorkerUtils::new(self.bench_pool.clone(), "graphile_worker".into())
+        WorkerUtils::new(self.database.clone(), "graphile_worker".into())
     }
 
     pub async fn clear_jobs(&self) {
@@ -49,6 +50,40 @@ impl BenchDatabase {
             .await
             .expect("Failed to count jobs");
         row.0
+    }
+}
+
+fn bench_database_url(db_url: &str, db_name: &str) -> String {
+    let (base_url, query_string) = db_url
+        .split_once('?')
+        .map(|(base_url, query_string)| (base_url, Some(query_string)))
+        .unwrap_or((db_url, None));
+    let Some((server_url, _database_name)) = base_url.rsplit_once('/') else {
+        return db_url.to_string();
+    };
+
+    match query_string {
+        Some(query_string) => format!("{server_url}/{db_name}?{query_string}"),
+        None => format!("{server_url}/{db_name}"),
+    }
+}
+
+fn create_graphile_database(bench_pool: PgPool, bench_database_url: &str) -> Database {
+    #[cfg(feature = "driver-tokio-postgres")]
+    {
+        let _ = bench_pool;
+        return graphile_worker::tokio_postgres::TokioPostgresDatabase::from_url(
+            bench_database_url,
+            100,
+        )
+        .expect("Failed to create tokio-postgres database")
+        .into();
+    }
+
+    #[cfg(all(not(feature = "driver-tokio-postgres"), feature = "driver-sqlx"))]
+    {
+        let _ = bench_database_url;
+        bench_pool.into()
     }
 }
 
@@ -73,16 +108,19 @@ pub async fn create_bench_database() -> BenchDatabase {
         .expect("Failed to create bench database");
 
     let bench_options = pg_conn_options.database(&db_name);
+    let bench_database_url = bench_database_url(&db_url, &db_name);
 
     let bench_pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(100) // Support high concurrency benchmarks
         .connect_with(bench_options)
         .await
         .expect("Failed to connect to bench database");
+    let database = create_graphile_database(bench_pool.clone(), &bench_database_url);
 
     BenchDatabase {
         source_pool: pg_pool,
         bench_pool,
+        database,
         name: db_name,
     }
 }

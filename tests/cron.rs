@@ -53,10 +53,10 @@ async fn register_identifiers() {
             .await
             .expect("Failed to migrate");
 
-        let test_pool = test_db.test_pool.clone();
+        let database = test_db.database.clone();
         let worker_handle = spawn_local(async move {
             Worker::options()
-                .pg_pool(test_pool)
+                .database(database)
                 .concurrency(3)
                 .define_job::<Job3>()
                 .with_crontab(
@@ -130,10 +130,10 @@ async fn backfills_if_identifier_already_registered_5h_ago() {
         .await
         .expect("Failed to insert known crontab");
 
-        let test_pool = test_db.test_pool.clone();
+        let database = test_db.database.clone();
         let worker_handle = spawn_local(async move {
             Worker::options()
-                .pg_pool(test_pool)
+                .database(database)
                 .concurrency(3)
                 .with_crontab(
                     r#"
@@ -230,10 +230,10 @@ async fn backfills_if_identifier_already_registered_25h_ago() {
         .await
         .expect("Failed to insert known crontab");
 
-        let test_pool = test_db.test_pool.clone();
+        let database = test_db.database.clone();
         let worker_handle = spawn_local(async move {
             Worker::options()
-                .pg_pool(test_pool)
+                .database(database)
                 .concurrency(3)
                 .with_crontab(
                     r#"
@@ -313,10 +313,10 @@ async fn cron_runner_schedules_job_on_tick() {
         let crontabs = parse_crontab("* * * * * test_task").expect("Failed to parse crontab");
 
         let hooks = HookRegistry::default();
-        let test_pool = test_db.test_pool.clone();
+        let database = test_db.database.clone();
         let clock_for_runner = clock.clone();
         let runner_handle = spawn_local(async move {
-            CronRunner::new(&test_pool, "graphile_worker", &crontabs, &hooks)
+            CronRunner::new(&database, "graphile_worker", &crontabs, &hooks)
                 .with_clock(clock_for_runner)
                 .run(shutdown_signal)
                 .await
@@ -361,10 +361,10 @@ async fn cron_runner_catches_up_after_clock_jump() {
         let crontabs = parse_crontab("* * * * * catchup_task").expect("Failed to parse crontab");
 
         let hooks = HookRegistry::default();
-        let test_pool = test_db.test_pool.clone();
+        let database = test_db.database.clone();
         let clock_for_runner = clock.clone();
         let runner_handle = spawn_local(async move {
-            CronRunner::new(&test_pool, "graphile_worker", &crontabs, &hooks)
+            CronRunner::new(&database, "graphile_worker", &crontabs, &hooks)
                 .with_clock(clock_for_runner)
                 .run(shutdown_signal)
                 .await
@@ -434,10 +434,10 @@ async fn cron_runner_calls_hooks() {
 
         let hooks = HookRegistry::default().with_plugin(CronHooksPlugin);
 
-        let test_pool = test_db.test_pool.clone();
+        let database = test_db.database.clone();
         let clock_for_runner = clock.clone();
         let runner_handle = spawn_local(async move {
-            CronRunner::new(&test_pool, "graphile_worker", &crontabs, &hooks)
+            CronRunner::new(&database, "graphile_worker", &crontabs, &hooks)
                 .with_clock(clock_for_runner)
                 .run(shutdown_signal)
                 .await
@@ -485,10 +485,10 @@ async fn cron_runner_shutdown_cleanly() {
         let crontabs = parse_crontab("* * * * * shutdown_task").expect("Failed to parse crontab");
 
         let hooks = HookRegistry::default();
-        let test_pool = test_db.test_pool.clone();
+        let database = test_db.database.clone();
         let clock_for_runner = clock.clone();
         let runner_handle = spawn_local(async move {
-            CronRunner::new(&test_pool, "graphile_worker", &crontabs, &hooks)
+            CronRunner::new(&database, "graphile_worker", &crontabs, &hooks)
                 .with_clock(clock_for_runner)
                 .run(shutdown_signal)
                 .await

@@ -15,23 +15,27 @@ readme = "README.md"
 graphile_worker_job = { path = "../job", version = "0.1.12", default-features = false }
 graphile_worker_extensions = { path = "../extensions", version = "0.1.6" }
 graphile_worker_task_details = { path = "../task_details", version = "0.1.2", default-features = false }
+graphile_worker_database = { path = "../database", version = "0.1.0", default-features = false }
 derive_builder.workspace = true
 getset.workspace = true
 serde_json.workspace = true
-sqlx.workspace = true
+sqlx = { workspace = true, optional = true }
 
 [features]
-default = ["runtime-tokio"]
+default = ["runtime-tokio", "driver-sqlx"]
 runtime-tokio = [
-  "sqlx/runtime-tokio",
+  "graphile_worker_database/runtime-tokio",
+  "sqlx?/runtime-tokio",
   "graphile_worker_job/runtime-tokio",
   "graphile_worker_task_details/runtime-tokio",
 ]
 runtime-async-std = [
-  "sqlx/runtime-async-std",
+  "graphile_worker_database/runtime-async-std",
+  "sqlx?/runtime-async-std",
   "graphile_worker_job/runtime-async-std",
   "graphile_worker_task_details/runtime-async-std",
 ]
+driver-sqlx = ["graphile_worker_database/driver-sqlx", "sqlx"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }

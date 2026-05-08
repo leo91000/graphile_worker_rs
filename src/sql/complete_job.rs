@@ -1,5 +1,5 @@
+use graphile_worker_database::{DbExecutor, DbValue};
 use indoc::formatdoc;
-use sqlx::{query, PgExecutor};
 
 use crate::errors::GraphileWorkerError;
 
@@ -7,7 +7,7 @@ use crate::Job;
 
 #[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn complete_job(
-    executor: impl for<'e> PgExecutor<'e>,
+    executor: &impl DbExecutor,
     job: &Job,
     worker_id: &str,
     escaped_schema: &str,
@@ -27,10 +27,15 @@ pub async fn complete_job(
             "#
         );
 
-        query(&sql)
-            .bind(job.id())
-            .bind(worker_id)
-            .execute(executor)
+        executor
+            .execute(
+                &sql,
+                vec![
+                    DbValue::I64(*job.id()),
+                    DbValue::Text(worker_id.to_string()),
+                ]
+                .into(),
+            )
             .await?;
     } else {
         let sql = format!(
@@ -40,7 +45,9 @@ pub async fn complete_job(
             "#
         );
 
-        query(&sql).bind(job.id()).execute(executor).await?;
+        executor
+            .execute(&sql, vec![DbValue::I64(*job.id())].into())
+            .await?;
     }
 
     Ok(())

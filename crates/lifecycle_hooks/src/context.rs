@@ -3,10 +3,10 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use graphile_worker_crontab_types::Crontab;
+use graphile_worker_database::Database;
 use graphile_worker_extensions::ReadOnlyExtensions;
 use graphile_worker_job::Job;
 use graphile_worker_job_spec::JobSpec;
-use sqlx::PgPool;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShutdownReason {
@@ -26,21 +26,21 @@ pub enum LocalQueueMode {
 
 #[derive(Clone)]
 pub struct WorkerInitContext {
-    pub pool: PgPool,
+    pub database: Database,
     pub schema: String,
     pub concurrency: usize,
 }
 
 #[derive(Clone)]
 pub struct WorkerStartContext {
-    pub pool: PgPool,
+    pub database: Database,
     pub worker_id: String,
     pub extensions: ReadOnlyExtensions,
 }
 
 #[derive(Clone)]
 pub struct WorkerShutdownContext {
-    pub pool: PgPool,
+    pub database: Database,
     pub worker_id: String,
     pub reason: ShutdownReason,
 }

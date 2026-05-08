@@ -1,4 +1,27 @@
-use sqlx::{Postgres, Transaction};
+use graphile_worker_database::{BoxFuture, DbError, DbExecutor, DbParams, DbTransaction};
+
+pub trait MigrationExecutor {
+    fn execute_statement<'a>(&'a mut self, stmt: &'a str) -> BoxFuture<'a, Result<(), DbError>>;
+}
+
+impl MigrationExecutor for DbTransaction {
+    fn execute_statement<'a>(&'a mut self, stmt: &'a str) -> BoxFuture<'a, Result<(), DbError>> {
+        Box::pin(async move {
+            self.execute(stmt, DbParams::new()).await?;
+            Ok(())
+        })
+    }
+}
+
+#[cfg(feature = "driver-sqlx")]
+impl MigrationExecutor for sqlx::Transaction<'_, sqlx::Postgres> {
+    fn execute_statement<'a>(&'a mut self, stmt: &'a str) -> BoxFuture<'a, Result<(), DbError>> {
+        Box::pin(async move {
+            sqlx::query(stmt).execute(self.as_mut()).await?;
+            Ok(())
+        })
+    }
+}
 
 pub mod m000001;
 pub mod m000002;
@@ -56,12 +79,12 @@ impl GraphileWorkerMigration {
 
     pub async fn execute(
         &self,
-        tx: &mut Transaction<'_, Postgres>,
+        tx: &mut impl MigrationExecutor,
         escaped_schema: &str,
-    ) -> Result<(), sqlx::Error> {
+    ) -> Result<(), DbError> {
         for stmt in self.stmts {
             let stmt = stmt.replace(":GRAPHILE_WORKER_SCHEMA", escaped_schema);
-            sqlx::query(&stmt).execute(tx.as_mut()).await?;
+            tx.execute_statement(&stmt).await?;
         }
 
         Ok(())

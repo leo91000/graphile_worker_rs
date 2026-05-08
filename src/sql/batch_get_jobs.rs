@@ -1,17 +1,17 @@
 use chrono::{DateTime, Utc};
+use graphile_worker_database::{DbExecutor, DbParams, DbValue};
 use indoc::formatdoc;
-use sqlx::{query_as, PgExecutor};
 
 use crate::errors::Result;
-use graphile_worker_job::{DbJob, Job};
+use graphile_worker_job::Job;
 
 use super::job_query_helpers::{
     get_flag_clause, get_now_clause, get_queue_clause, get_update_queue_clause,
 };
 use super::task_identifiers::TaskDetails;
 
-pub async fn batch_get_jobs<'e>(
-    executor: impl PgExecutor<'e>,
+pub async fn batch_get_jobs(
+    executor: &impl DbExecutor,
     task_details: &TaskDetails,
     escaped_schema: &str,
     worker_id: &str,
@@ -50,7 +50,7 @@ pub async fn batch_get_jobs<'e>(
                     {queue_clause}
                     {flag_clause}
                     order by priority asc, run_at asc
-                    limit $3
+                    limit $3::int
                     for update
                     skip locked
                 ) {update_queue_clause}
@@ -65,19 +65,52 @@ pub async fn batch_get_jobs<'e>(
         "#
     );
 
-    let mut q = query_as(&sql)
-        .bind(worker_id)
-        .bind(task_details.task_ids())
-        .bind(batch_size);
+    #[cfg(feature = "driver-sqlx")]
+    if let Some(pool) = executor.try_sqlx_pool() {
+        let mut q = sqlx::query_as(&sql)
+            .bind(worker_id)
+            .bind(task_details.task_ids())
+            .bind(batch_size);
+
+        if has_flags {
+            q = q.bind(flags_to_skip);
+        }
+        if let Some(ts) = now {
+            q = q.bind(ts);
+        }
+
+        let jobs: Vec<graphile_worker_job::DbJob> = q
+            .fetch_all(pool)
+            .await
+            .map_err(graphile_worker_database::DbError::from)?;
+        return Ok(jobs
+            .into_iter()
+            .map(|job| {
+                let task_identifier = task_details.get_or_empty(job.id(), job.task_id());
+                Job::from_db_job(job, task_identifier)
+            })
+            .collect());
+    }
+
+    let mut params = vec![
+        DbValue::Text(worker_id.to_string()),
+        DbValue::I32Array(task_details.task_ids().to_vec()),
+        DbValue::I32(batch_size),
+    ];
 
     if has_flags {
-        q = q.bind(flags_to_skip);
+        params.push(DbValue::TextArray(flags_to_skip.to_vec()));
     }
     if let Some(ts) = now {
-        q = q.bind(ts);
+        params.push(DbValue::TimestampTz(ts));
     }
 
-    let jobs: Vec<DbJob> = q.fetch_all(executor).await?;
+    let jobs = executor
+        .fetch_all(&sql, DbParams::from(params))
+        .await?
+        .into_iter()
+        .map(|row| super::rows::db_job_from_row(&row))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
     Ok(jobs
         .into_iter()
         .map(|job| {

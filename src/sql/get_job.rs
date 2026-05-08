@@ -1,17 +1,17 @@
 use chrono::{DateTime, Utc};
+use graphile_worker_database::{DbExecutor, DbParams, DbValue};
 use indoc::formatdoc;
-use sqlx::{query_as, PgExecutor};
 
 use crate::errors::Result;
-use graphile_worker_job::{DbJob, Job};
+use graphile_worker_job::Job;
 
 use super::job_query_helpers::{
     get_flag_clause, get_now_clause, get_queue_clause, get_update_queue_clause,
 };
 use super::task_identifiers::TaskDetails;
 
-pub async fn get_job<'e>(
-    executor: impl PgExecutor<'e>,
+pub async fn get_job(
+    executor: &impl DbExecutor,
     task_details: &TaskDetails,
     escaped_schema: &str,
     worker_id: &str,
@@ -64,15 +64,44 @@ pub async fn get_job<'e>(
         "#
     );
 
-    let mut q = query_as(&sql).bind(worker_id).bind(task_details.task_ids());
-    if has_flags {
-        q = q.bind(flags_to_skip);
-    }
-    if let Some(ts) = now {
-        q = q.bind(ts);
+    #[cfg(feature = "driver-sqlx")]
+    if let Some(pool) = executor.try_sqlx_pool() {
+        let mut q = sqlx::query_as(&sql)
+            .bind(worker_id)
+            .bind(task_details.task_ids());
+        if has_flags {
+            q = q.bind(flags_to_skip);
+        }
+        if let Some(ts) = now {
+            q = q.bind(ts);
+        }
+
+        let job: Option<graphile_worker_job::DbJob> = q
+            .fetch_optional(pool)
+            .await
+            .map_err(graphile_worker_database::DbError::from)?;
+        return Ok(job.map(|job| {
+            let task_identifier = task_details.get_or_empty(job.id(), job.task_id());
+            Job::from_db_job(job, task_identifier)
+        }));
     }
 
-    let job: Option<DbJob> = q.fetch_optional(executor).await?;
+    let mut params = vec![
+        DbValue::Text(worker_id.to_string()),
+        DbValue::I32Array(task_details.task_ids().to_vec()),
+    ];
+    if has_flags {
+        params.push(DbValue::TextArray(flags_to_skip.to_vec()));
+    }
+    if let Some(ts) = now {
+        params.push(DbValue::TimestampTz(ts));
+    }
+
+    let job = executor
+        .fetch_optional(&sql, DbParams::from(params))
+        .await?
+        .map(|row| super::rows::db_job_from_row(&row))
+        .transpose()?;
     Ok(job.map(|job| {
         let task_identifier = task_details.get_or_empty(job.id(), job.task_id());
         Job::from_db_job(job, task_identifier)

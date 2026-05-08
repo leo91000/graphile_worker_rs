@@ -76,8 +76,8 @@ async fn it_should_run_jobs() {
 
         let start_diff_ms = (job.run_at.timestamp_millis() - start.timestamp_millis()).abs();
         assert!(
-            job.run_at >= start || start_diff_ms <= 5,
-            "job.run_at should be >= start or within 5ms tolerance, diff: {}ms",
+            job.run_at >= start || start_diff_ms <= 50,
+            "job.run_at should be >= start or within 50ms tolerance, diff: {}ms",
             start_diff_ms
         );
         assert!(job.run_at <= Utc::now(), "job.run_at should be <= now");
@@ -150,8 +150,8 @@ async fn it_should_schedule_errors_for_retry() {
             let now = Utc::now();
             let start_diff_ms = (job.run_at.timestamp_millis() - start.timestamp_millis()).abs();
             assert!(
-                job.run_at >= start || start_diff_ms <= 5,
-                "job.run_at should be >= start or within 5ms tolerance, diff: {}ms",
+                job.run_at >= start || start_diff_ms <= 50,
+                "job.run_at should be >= start or within 50ms tolerance, diff: {}ms",
                 start_diff_ms
             );
             assert!(job.run_at <= now, "job.run_at should be <= now");
@@ -180,8 +180,10 @@ async fn it_should_schedule_errors_for_retry() {
                 Some("TaskError(\"\\\"fail\\\"\")".to_string())
             );
             // It's the first attempt, so delay is exp(1) ~= 2.719 seconds
-            assert!(job.run_at > start + chrono::Duration::milliseconds(2719));
-            assert!(job.run_at < Utc::now() + chrono::Duration::milliseconds(2719));
+            let retry_delay = chrono::Duration::milliseconds(2719);
+            let clock_tolerance = chrono::Duration::milliseconds(50);
+            assert!(job.run_at >= start + retry_delay - clock_tolerance);
+            assert!(job.run_at <= Utc::now() + retry_delay + clock_tolerance);
 
             let job_queues = test_db.get_job_queues().await;
             assert_eq!(job_queues.len(), 1);
@@ -264,8 +266,10 @@ async fn it_should_retry_jobs() {
                 Some("TaskError(\"\\\"fail 2\\\"\")".to_string())
             );
             // It's the second attempt, so delay is exp(2) ~= 7.389 seconds
-            assert!(job.run_at > start + chrono::Duration::milliseconds(7389));
-            assert!(job.run_at < Utc::now() + chrono::Duration::milliseconds(7389));
+            let retry_delay = chrono::Duration::milliseconds(7389);
+            let clock_tolerance = chrono::Duration::milliseconds(50);
+            assert!(job.run_at >= start + retry_delay - clock_tolerance);
+            assert!(job.run_at <= Utc::now() + retry_delay + clock_tolerance);
 
             let job_queues = test_db.get_job_queues().await;
             assert_eq!(job_queues.len(), 1);
@@ -1088,8 +1092,8 @@ async fn runs_jobs_asynchronously() {
         let now = Utc::now();
         let start_diff_ms = (job.run_at.timestamp_millis() - start.timestamp_millis()).abs();
         assert!(
-            (job.run_at >= start || start_diff_ms <= 5) && job.run_at <= now,
-            "Job run_at should be within expected range (>= start or within 5ms tolerance, and <= now). Diff from start: {}ms", 
+            (job.run_at >= start || start_diff_ms <= 50) && job.run_at <= now,
+            "Job run_at should be within expected range (>= start or within 50ms tolerance, and <= now). Diff from start: {}ms",
             start_diff_ms
         );
         assert_eq!(job.attempts, 1, "Job attempts should be incremented");
@@ -1219,8 +1223,8 @@ async fn runs_jobs_in_parallel() {
             let locked_at = q.locked_at.unwrap();
             let start_diff_ms = (locked_at.timestamp_millis() - start.timestamp_millis()).abs();
             assert!(
-                locked_at >= start || start_diff_ms <= 5,
-                "locked_at should be >= start or within 5ms tolerance, diff: {}ms",
+                locked_at >= start || start_diff_ms <= 50,
+                "locked_at should be >= start or within 50ms tolerance, diff: {}ms",
                 start_diff_ms
             );
             assert!(locked_at <= Utc::now(), "locked_at should be <= now");

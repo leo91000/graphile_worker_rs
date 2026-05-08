@@ -127,7 +127,7 @@ async fn test_batchers_emit_lifecycle_hooks() {
 
         let worker = Arc::new(
             Worker::options()
-                .pg_pool(test_db.test_pool.clone())
+                .database(test_db.database.clone())
                 .concurrency(4)
                 .poll_interval(Duration::from_millis(50))
                 .complete_job_batch_delay(Duration::from_millis(10))
@@ -209,7 +209,7 @@ async fn test_complete_job_batch_delay() {
 
         let worker = Arc::new(
             Worker::options()
-                .pg_pool(test_db.test_pool.clone())
+                .database(test_db.database.clone())
                 .concurrency(4)
                 .poll_interval(Duration::from_millis(50))
                 .complete_job_batch_delay(Duration::from_millis(10))
@@ -261,7 +261,7 @@ async fn test_fail_job_batch_delay() {
 
         let worker = Arc::new(
             Worker::options()
-                .pg_pool(test_db.test_pool.clone())
+                .database(test_db.database.clone())
                 .concurrency(4)
                 .poll_interval(Duration::from_millis(50))
                 .fail_job_batch_delay(Duration::from_millis(10))
@@ -355,7 +355,7 @@ async fn test_both_batchers_together() {
 
         let worker = Arc::new(
             Worker::options()
-                .pg_pool(test_db.test_pool.clone())
+                .database(test_db.database.clone())
                 .concurrency(8)
                 .poll_interval(Duration::from_millis(50))
                 .complete_job_batch_delay(Duration::from_millis(10))
@@ -419,7 +419,7 @@ async fn test_shutdown_flushes_pending_completions() {
 
         let worker = Arc::new(
             Worker::options()
-                .pg_pool(test_db.test_pool.clone())
+                .database(test_db.database.clone())
                 .concurrency(4)
                 .poll_interval(Duration::from_millis(50))
                 .complete_job_batch_delay(Duration::from_millis(100))
@@ -477,7 +477,7 @@ async fn test_retryable_failures_processed_individually() {
 
         let worker = Arc::new(
             Worker::options()
-                .pg_pool(test_db.test_pool.clone())
+                .database(test_db.database.clone())
                 .concurrency(4)
                 .poll_interval(Duration::from_millis(50))
                 .fail_job_batch_delay(Duration::from_millis(10))
@@ -539,7 +539,7 @@ async fn test_permanent_failure_unlocks_job_and_queue() {
 
         let worker = Arc::new(
             Worker::options()
-                .pg_pool(test_db.test_pool.clone())
+                .database(test_db.database.clone())
                 .concurrency(4)
                 .poll_interval(Duration::from_millis(50))
                 .fail_job_batch_delay(Duration::from_millis(10))

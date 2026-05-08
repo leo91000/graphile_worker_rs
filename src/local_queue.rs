@@ -6,6 +6,7 @@ use std::time::Duration;
 use chrono::Utc;
 use derive_builder::Builder;
 use futures::FutureExt;
+use graphile_worker_database::Database;
 use graphile_worker_job::Job;
 pub use graphile_worker_lifecycle_hooks::LocalQueueMode;
 use graphile_worker_lifecycle_hooks::{
@@ -16,7 +17,6 @@ use graphile_worker_lifecycle_hooks::{
 use graphile_worker_runtime as runtime;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use rand::RngExt;
-use sqlx::PgPool;
 use thiserror::Error;
 
 use crate::streams::JobSignalSender;
@@ -221,7 +221,7 @@ struct LocalQueueState {
     ttl_timer_handle: runtime::Mutex<Option<runtime::AbortHandle>>,
     run_complete_notify: runtime::Notify,
     config: LocalQueueConfig,
-    pg_pool: PgPool,
+    database: Database,
     escaped_schema: String,
     worker_id: String,
     task_details: SharedTaskDetails,
@@ -244,7 +244,7 @@ impl LocalQueueState {
             ttl_timer_handle: runtime::Mutex::new(None),
             run_complete_notify: runtime::Notify::new(),
             config: params.config,
-            pg_pool: params.pg_pool,
+            database: params.database,
             escaped_schema: params.escaped_schema,
             worker_id: params.worker_id,
             task_details: params.task_details,
@@ -273,7 +273,7 @@ impl From<LocalQueueParams> for LocalQueue {
 
 pub struct LocalQueueParams {
     pub config: LocalQueueConfig,
-    pub pg_pool: PgPool,
+    pub database: Database,
     pub escaped_schema: String,
     pub worker_id: String,
     pub task_details: SharedTaskDetails,
@@ -467,7 +467,7 @@ impl LocalQueue {
         let task_details = self.0.task_details.read().await;
         let now = self.0.use_local_time.then(Utc::now);
         let result = batch_get_jobs(
-            &self.0.pg_pool,
+            &self.0.database,
             &task_details,
             &self.0.escaped_schema,
             &self.0.worker_id,
@@ -651,14 +651,14 @@ impl LocalQueue {
     }
 
     async fn return_jobs_with_retry(
-        pool: &PgPool,
+        database: &Database,
         jobs: &[Job],
         escaped_schema: &str,
         worker_id: &str,
     ) -> Result<(), LocalQueueError> {
         let mut attempt = 0u32;
         loop {
-            match return_jobs(pool, jobs, escaped_schema, worker_id).await {
+            match return_jobs(database, jobs, escaped_schema, worker_id).await {
                 Ok(()) => return Ok(()),
                 Err(e) => {
                     attempt += 1;
@@ -696,7 +696,7 @@ impl LocalQueue {
         if !jobs.is_empty() {
             let jobs_count = jobs.len();
             if let Err(e) = Self::return_jobs_with_retry(
-                &self.0.pg_pool,
+                &self.0.database,
                 &jobs,
                 &self.0.escaped_schema,
                 &self.0.worker_id,
@@ -733,7 +733,7 @@ impl LocalQueue {
         let task_details = self.0.task_details.read().await;
         let now = self.0.use_local_time.then(Utc::now);
         match get_job(
-            &self.0.pg_pool,
+            &self.0.database,
             &task_details,
             &self.0.escaped_schema,
             &self.0.worker_id,
@@ -820,7 +820,7 @@ impl LocalQueue {
         if !jobs.is_empty() {
             let jobs_count = jobs.len();
             Self::return_jobs_with_retry(
-                &self.0.pg_pool,
+                &self.0.database,
                 &jobs,
                 &self.0.escaped_schema,
                 &self.0.worker_id,

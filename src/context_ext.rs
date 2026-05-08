@@ -86,7 +86,7 @@ pub trait WorkerContextExt {
 
 impl WorkerContextExt for WorkerContext {
     fn utils(&self) -> WorkerUtils {
-        WorkerUtils::new(self.pg_pool().clone(), self.escaped_schema().to_string())
+        WorkerUtils::new(self.database().clone(), self.escaped_schema().to_string())
             .with_use_local_time(self.use_local_time())
             .with_task_details(self.task_details().clone())
     }

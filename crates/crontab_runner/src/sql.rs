@@ -1,12 +1,13 @@
 use chrono::prelude::*;
 use getset::Getters;
 use graphile_worker_crontab_types::{Crontab, JobKeyMode};
+use graphile_worker_database::{DbError, DbExecutor, DbParams, DbValue};
 use serde::Serialize;
 use serde_json::json;
-use sqlx::{query, query_as, FromRow, PgExecutor};
 use thiserror::Error;
 
-#[derive(FromRow, Debug, Getters)]
+#[cfg_attr(feature = "driver-sqlx", derive(sqlx::FromRow))]
+#[derive(Debug, Getters)]
 #[getset(get = "pub")]
 pub struct KnownCrontab {
     identifier: String,
@@ -14,27 +15,51 @@ pub struct KnownCrontab {
     last_execution: Option<DateTime<Local>>,
 }
 
-pub async fn get_known_crontabs<'e>(
-    executor: impl PgExecutor<'e>,
+impl KnownCrontab {
+    pub fn new(
+        identifier: String,
+        known_since: DateTime<Local>,
+        last_execution: Option<DateTime<Local>>,
+    ) -> Self {
+        Self {
+            identifier,
+            known_since,
+            last_execution,
+        }
+    }
+}
+
+pub async fn get_known_crontabs(
+    executor: &impl DbExecutor,
     escaped_schema: &str,
-) -> Result<Vec<KnownCrontab>, sqlx::Error> {
+) -> Result<Vec<KnownCrontab>, DbError> {
     let sql = format!(
         r#"
             select * from {escaped_schema}._private_known_crontabs
         "#
     );
 
-    let known_crontabs = query_as(&sql).fetch_all(executor).await?;
+    let rows = executor.fetch_all(&sql, DbParams::new()).await?;
+    let known_crontabs = rows
+        .into_iter()
+        .map(|row| {
+            Ok(KnownCrontab::new(
+                row.try_get("identifier")?,
+                row.try_get("known_since")?,
+                row.try_get("last_execution")?,
+            ))
+        })
+        .collect::<Result<Vec<_>, DbError>>()?;
 
     Ok(known_crontabs)
 }
 
-pub async fn insert_unknown_crontabs<'e, Tz: TimeZone, S: AsRef<str>>(
-    executor: impl PgExecutor<'e>,
+pub async fn insert_unknown_crontabs<Tz: TimeZone, S: AsRef<str>>(
+    executor: &impl DbExecutor,
     escaped_schema: &str,
     unknown_identifiers: &[S],
     start_time: &DateTime<Tz>,
-) -> Result<(), sqlx::Error>
+) -> Result<(), DbError>
 where
     Tz::Offset: Send + Sync,
 {
@@ -47,12 +72,20 @@ where
         "#
     );
 
-    let unknown_identifiers: Vec<&str> = unknown_identifiers.iter().map(|s| s.as_ref()).collect();
+    let unknown_identifiers: Vec<String> = unknown_identifiers
+        .iter()
+        .map(|s| s.as_ref().to_string())
+        .collect();
 
-    query(&sql)
-        .bind(unknown_identifiers)
-        .bind(start_time)
-        .execute(executor)
+    executor
+        .execute(
+            &sql,
+            vec![
+                DbValue::TextArray(unknown_identifiers),
+                DbValue::TimestampTz(start_time.with_timezone(&Utc)),
+            ]
+            .into(),
+        )
         .await?;
 
     Ok(())
@@ -96,13 +129,13 @@ pub struct CrontabJob {
 #[derive(Error, Debug)]
 pub enum ScheduleCronJobError {
     #[error("An sql error occured while scheduling cron job : {0}")]
-    QueryError(#[from] sqlx::Error),
+    QueryError(#[from] DbError),
     #[error("A JSON serialization error occured while scheduling cron job : {0}")]
     SerializationError(#[from] serde_json::Error),
 }
 
-pub async fn schedule_cron_jobs<'e, Tz: TimeZone>(
-    executor: impl PgExecutor<'e>,
+pub async fn schedule_cron_jobs<Tz: TimeZone>(
+    executor: &impl DbExecutor,
     crontab_jobs: &[CrontabJob],
     last_execution: &DateTime<Tz>,
     escaped_schema: &str,
@@ -159,11 +192,16 @@ where
 
     let app_time = use_local_time.then(Utc::now);
 
-    query(&statement)
-        .bind(serde_json::to_string(crontab_jobs)?)
-        .bind(last_execution)
-        .bind(app_time)
-        .execute(executor)
+    executor
+        .execute(
+            &statement,
+            vec![
+                DbValue::Json(serde_json::to_value(crontab_jobs)?),
+                DbValue::TimestampTz(last_execution.with_timezone(&Utc)),
+                DbValue::TimestampTzOpt(app_time),
+            ]
+            .into(),
+        )
         .await?;
 
     Ok(())

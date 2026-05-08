@@ -3,14 +3,34 @@ set dotenv-load
 test:
   cargo test --all
 
-test-runtime runtime="runtime-tokio":
+test-runtime runtime="runtime-tokio" driver="driver-sqlx":
   #!/usr/bin/env bash
   set -euo pipefail
   if [ -z "${DATABASE_URL:-}" ]; then
-    just test-docker-runtime '{{runtime}}'
+    just test-docker-runtime '{{runtime}}' '{{driver}}'
     exit 0
   fi
-  cargo test --all --no-default-features --features '{{runtime}},tls-rustls'
+  features='{{runtime}},{{driver}}'
+  target_args=(--lib --tests)
+  test_args=()
+  case '{{driver}}' in
+    driver-sqlx)
+      features="${features},tls-rustls"
+      target_args=(--all)
+      ;;
+    driver-tokio-postgres)
+      if [ '{{runtime}}' != 'runtime-tokio' ]; then
+        echo "driver-tokio-postgres only supports runtime-tokio tests" >&2
+        exit 1
+      fi
+      test_args=(-- --test-threads=1)
+      ;;
+    *)
+      echo "unknown postgres driver: {{driver}}" >&2
+      exit 1
+      ;;
+  esac
+  cargo test "${target_args[@]}" --no-default-features --features "${features}" "${test_args[@]}"
 
 test-docker:
   docker rm -f graphile-worker-rs-test 2> /dev/null || true
@@ -19,14 +39,14 @@ test-docker:
   DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo test --all
   docker rm -f graphile-worker-rs-test
 
-test-docker-runtime runtime="runtime-tokio":
+test-docker-runtime runtime="runtime-tokio" driver="driver-sqlx":
   #!/usr/bin/env bash
   set -euo pipefail
   docker rm -f graphile-worker-rs-test 2> /dev/null || true
   docker run -d --name graphile-worker-rs-test -p 54233:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=postgres postgres
   trap 'docker rm -f graphile-worker-rs-test' EXIT
   docker exec graphile-worker-rs-test bash -c 'for i in $(seq 30); do pg_isready -U postgres -h localhost && exit 0; sleep 1; done; echo "Postgres not ready after 30s" >&2; exit 1'
-  DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo test --all --no-default-features --features '{{runtime}},tls-rustls'
+  DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' just test-runtime '{{runtime}}' '{{driver}}'
 
 test-docker-all-runtimes:
   #!/usr/bin/env bash
@@ -35,8 +55,19 @@ test-docker-all-runtimes:
   docker run -d --name graphile-worker-rs-test -p 54233:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=postgres postgres
   trap 'docker rm -f graphile-worker-rs-test' EXIT
   docker exec graphile-worker-rs-test bash -c 'for i in $(seq 30); do pg_isready -U postgres -h localhost && exit 0; sleep 1; done; echo "Postgres not ready after 30s" >&2; exit 1'
-  DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo test --all --no-default-features --features 'runtime-tokio,tls-rustls'
-  DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo test --all --no-default-features --features 'runtime-async-std,tls-rustls'
+  DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' just test-runtime runtime-tokio driver-sqlx
+  DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' just test-runtime runtime-async-std driver-sqlx
+
+test-docker-all-matrices:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  docker rm -f graphile-worker-rs-test 2> /dev/null || true
+  docker run -d --name graphile-worker-rs-test -p 54233:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=postgres postgres
+  trap 'docker rm -f graphile-worker-rs-test' EXIT
+  docker exec graphile-worker-rs-test bash -c 'for i in $(seq 30); do pg_isready -U postgres -h localhost && exit 0; sleep 1; done; echo "Postgres not ready after 30s" >&2; exit 1'
+  DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' just test-runtime runtime-tokio driver-sqlx
+  DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' just test-runtime runtime-async-std driver-sqlx
+  DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' just test-runtime runtime-tokio driver-tokio-postgres
 
 coverage-docker:
   docker rm -f graphile-worker-rs-test 2> /dev/null || true

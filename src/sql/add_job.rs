@@ -1,9 +1,10 @@
 use crate::{errors::GraphileWorkerError, JobKeyMode, JobSpec};
 use chrono::{DateTime, Utc};
+#[cfg(feature = "driver-sqlx")]
+use graphile_worker_database::DbError;
+use graphile_worker_database::{DbExecutor, DbValue};
 use graphile_worker_job::Job;
 use indoc::formatdoc;
-use sqlx::{query_as, PgExecutor};
-use std::collections::HashMap;
 use tracing::info;
 
 use super::task_identifiers::TaskDetails;
@@ -24,7 +25,7 @@ pub struct JobToAdd<'a> {
 /// Add a job to the queue
 #[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn add_job(
-    executor: impl for<'e> PgExecutor<'e>,
+    executor: &impl DbExecutor,
     escaped_schema: &str,
     identifier: &str,
     payload: serde_json::Value,
@@ -51,18 +52,24 @@ pub async fn add_job(
 
     let run_at = spec.run_at().or_else(|| use_local_time.then(Utc::now));
 
-    let job = query_as(&sql)
-        .bind(identifier)
-        .bind(&payload)
-        .bind(spec.queue_name())
-        .bind(run_at)
-        .bind(spec.max_attempts())
-        .bind(spec.job_key())
-        .bind(spec.priority())
-        .bind(spec.flags())
-        .bind(job_key_mode)
-        .fetch_one(executor)
+    let row = executor
+        .fetch_one(
+            &sql,
+            vec![
+                DbValue::Text(identifier.to_string()),
+                DbValue::Json(payload.clone()),
+                DbValue::TextOpt(spec.queue_name().clone()),
+                DbValue::TimestampTzOpt(run_at),
+                DbValue::I32Opt((*spec.max_attempts()).map(i32::from)),
+                DbValue::TextOpt(spec.job_key().clone()),
+                DbValue::I32Opt((*spec.priority()).map(i32::from)),
+                DbValue::TextArrayOpt(spec.flags().clone()),
+                DbValue::TextOpt(job_key_mode),
+            ]
+            .into(),
+        )
         .await?;
+    let job = super::rows::db_job_from_row(&row)?;
 
     info!(
         identifier,
@@ -74,7 +81,6 @@ pub async fn add_job(
 }
 
 const BORROWED_BATCH_SERIALIZATION_THRESHOLD: usize = 512;
-const FAST_BATCH_INSERT_THRESHOLD: usize = 512;
 
 #[derive(serde::Serialize)]
 struct DbJobSpec {
@@ -100,57 +106,83 @@ struct BorrowedDbJobSpec<'a> {
     flags: Option<&'a [String]>,
 }
 
-#[derive(serde::Serialize)]
-struct FastDbJobSpec<'a> {
-    task_id: i32,
-    payload: &'a serde_json::Value,
-    run_at: Option<DateTime<Utc>>,
-    max_attempts: Option<i16>,
-    priority: Option<i16>,
-}
-
-fn build_fast_db_specs<'a>(
-    jobs: &'a [JobToAdd<'a>],
-    task_details: &TaskDetails,
+fn build_batch_specs_json<'a>(
+    jobs: &[JobToAdd<'a>],
     default_run_at: Option<DateTime<Utc>>,
-) -> Option<Vec<FastDbJobSpec<'a>>> {
-    let mut db_specs = Vec::with_capacity(jobs.len());
-    let mut task_ids = HashMap::new();
-    for job in jobs {
-        if job.spec.queue_name().is_some()
-            || job.spec.job_key().is_some()
-            || job
-                .spec
-                .flags()
-                .as_ref()
-                .is_some_and(|flags| !flags.is_empty())
-        {
-            return None;
-        }
-
-        let task_id = if let Some(task_id) = task_ids.get(job.identifier) {
-            *task_id
-        } else {
-            let task_id = task_details.get_id(job.identifier)?;
-            task_ids.insert(job.identifier, task_id);
-            task_id
-        };
-
-        db_specs.push(FastDbJobSpec {
-            task_id,
-            payload: &job.payload,
-            run_at: job.spec.run_at().or(default_run_at),
-            max_attempts: *job.spec.max_attempts(),
-            priority: *job.spec.priority(),
-        });
+) -> serde_json::Result<serde_json::Value> {
+    if jobs.len() >= BORROWED_BATCH_SERIALIZATION_THRESHOLD {
+        let db_specs: Vec<BorrowedDbJobSpec> = jobs
+            .iter()
+            .map(|job| BorrowedDbJobSpec {
+                identifier: job.identifier,
+                payload: &job.payload,
+                queue_name: job.spec.queue_name().as_deref(),
+                run_at: job.spec.run_at().or(default_run_at),
+                max_attempts: *job.spec.max_attempts(),
+                job_key: job.spec.job_key().as_deref(),
+                priority: *job.spec.priority(),
+                flags: job.spec.flags().as_deref(),
+            })
+            .collect();
+        return serde_json::to_value(&db_specs);
     }
 
-    Some(db_specs)
+    let db_specs: Vec<DbJobSpec> = jobs
+        .iter()
+        .map(|job| DbJobSpec {
+            identifier: job.identifier.to_string(),
+            payload: job.payload.clone(),
+            queue_name: job.spec.queue_name().clone(),
+            run_at: job.spec.run_at().or(default_run_at),
+            max_attempts: *job.spec.max_attempts(),
+            job_key: job.spec.job_key().clone(),
+            priority: *job.spec.priority(),
+            flags: job.spec.flags().clone(),
+        })
+        .collect();
+    serde_json::to_value(&db_specs)
+}
+
+#[cfg(feature = "driver-sqlx")]
+async fn add_jobs_sqlx<'a>(
+    pool: &sqlx::PgPool,
+    escaped_schema: &str,
+    jobs: &[JobToAdd<'a>],
+    task_details: &TaskDetails,
+    job_key_preserve_run_at: bool,
+    default_run_at: Option<DateTime<Utc>>,
+) -> Result<Vec<Job>, GraphileWorkerError> {
+    let sql = formatdoc!(
+        r#"
+            SELECT * FROM {escaped_schema}.add_jobs(
+                array(
+                    SELECT json_populate_recordset(null::{escaped_schema}.job_spec, $1::json)
+                ),
+                $2::boolean
+            );
+        "#
+    );
+
+    let specs_json = build_batch_specs_json(jobs, default_run_at)?;
+    let db_jobs: Vec<graphile_worker_job::DbJob> = sqlx::query_as(&sql)
+        .bind(&specs_json)
+        .bind(job_key_preserve_run_at)
+        .fetch_all(pool)
+        .await
+        .map_err(DbError::from)?;
+
+    Ok(db_jobs
+        .into_iter()
+        .map(|db_job| {
+            let identifier = task_details.get_or_empty(db_job.id(), db_job.task_id());
+            Job::from_db_job(db_job, identifier)
+        })
+        .collect())
 }
 
 #[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn add_jobs<'a>(
-    executor: impl for<'e> PgExecutor<'e>,
+    executor: &impl DbExecutor,
     escaped_schema: &str,
     jobs: &[JobToAdd<'a>],
     task_details: &TaskDetails,
@@ -172,105 +204,46 @@ pub async fn add_jobs<'a>(
     }
 
     let default_run_at = use_local_time.then(Utc::now);
-    let fast_db_specs = if jobs.len() >= FAST_BATCH_INSERT_THRESHOLD {
-        build_fast_db_specs(jobs, task_details, default_run_at)
-    } else {
-        None
-    };
+    #[cfg(feature = "driver-sqlx")]
+    if let Some(pool) = executor.try_sqlx_pool() {
+        let result = add_jobs_sqlx(
+            pool,
+            escaped_schema,
+            jobs,
+            task_details,
+            job_key_preserve_run_at,
+            default_run_at,
+        )
+        .await?;
+        info!(count = result.len(), "Jobs added to queue in batch");
+        return Ok(result);
+    }
 
-    let db_jobs: Vec<graphile_worker_job::DbJob> = if let Some(db_specs) = fast_db_specs {
-        let sql = formatdoc!(
-            r#"
-                WITH specs AS (
-                    SELECT *
-                    FROM json_to_recordset($1::json) AS spec(
-                        task_id int,
-                        payload json,
-                        run_at timestamptz,
-                        max_attempts int,
-                        priority int
-                    )
+    let sql = formatdoc!(
+        r#"
+            SELECT * FROM {escaped_schema}.add_jobs(
+                array(
+                    SELECT json_populate_recordset(null::{escaped_schema}.job_spec, $1::json)
                 ),
-                notified AS (
-                    SELECT pg_notify('jobs:insert', '{{"r":' || random()::text || ',"count":' || $2::int::text || '}}')
-                )
-                INSERT INTO {escaped_schema}._private_jobs AS jobs (
-                    task_id,
-                    payload,
-                    run_at,
-                    max_attempts,
-                    priority
-                )
-                SELECT
-                    specs.task_id,
-                    coalesce(specs.payload, '{{}}'::json),
-                    coalesce(specs.run_at, now()),
-                    coalesce(specs.max_attempts, 25),
-                    coalesce(specs.priority, 0)
-                FROM specs
-                CROSS JOIN notified
-                RETURNING *
-            "#
-        );
+                $2::boolean
+            );
+        "#
+    );
 
-        let specs_json = serde_json::to_value(&db_specs)?;
-        let job_count = i32::try_from(jobs.len()).unwrap_or(i32::MAX);
-
-        query_as(&sql)
-            .bind(&specs_json)
-            .bind(job_count)
-            .fetch_all(executor)
-            .await?
-    } else {
-        let sql = formatdoc!(
-            r#"
-                SELECT * FROM {escaped_schema}.add_jobs(
-                    array(
-                        SELECT json_populate_recordset(null::{escaped_schema}.job_spec, $1::json)
-                    ),
-                    $2::boolean
-                );
-            "#
-        );
-
-        let specs_json = if jobs.len() >= BORROWED_BATCH_SERIALIZATION_THRESHOLD {
-            let db_specs: Vec<BorrowedDbJobSpec> = jobs
-                .iter()
-                .map(|job| BorrowedDbJobSpec {
-                    identifier: job.identifier,
-                    payload: &job.payload,
-                    queue_name: job.spec.queue_name().as_deref(),
-                    run_at: job.spec.run_at().or(default_run_at),
-                    max_attempts: *job.spec.max_attempts(),
-                    job_key: job.spec.job_key().as_deref(),
-                    priority: *job.spec.priority(),
-                    flags: job.spec.flags().as_deref(),
-                })
-                .collect();
-            serde_json::to_value(&db_specs)?
-        } else {
-            let db_specs: Vec<DbJobSpec> = jobs
-                .iter()
-                .map(|job| DbJobSpec {
-                    identifier: job.identifier.to_string(),
-                    payload: job.payload.clone(),
-                    queue_name: job.spec.queue_name().clone(),
-                    run_at: job.spec.run_at().or(default_run_at),
-                    max_attempts: *job.spec.max_attempts(),
-                    job_key: job.spec.job_key().clone(),
-                    priority: *job.spec.priority(),
-                    flags: job.spec.flags().clone(),
-                })
-                .collect();
-            serde_json::to_value(&db_specs)?
-        };
-
-        query_as(&sql)
-            .bind(&specs_json)
-            .bind(job_key_preserve_run_at)
-            .fetch_all(executor)
-            .await?
-    };
+    let specs_json = build_batch_specs_json(jobs, default_run_at)?;
+    let db_jobs: Vec<graphile_worker_job::DbJob> = executor
+        .fetch_all(
+            &sql,
+            vec![
+                DbValue::Json(specs_json),
+                DbValue::Bool(job_key_preserve_run_at),
+            ]
+            .into(),
+        )
+        .await?
+        .iter()
+        .map(super::rows::db_job_from_row)
+        .collect::<std::result::Result<Vec<_>, _>>()?;
 
     info!(count = db_jobs.len(), "Jobs added to queue in batch");
 

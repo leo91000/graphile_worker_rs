@@ -2,14 +2,14 @@ use chrono::{DateTime, Utc};
 use derive_builder::Builder;
 use getset::Getters;
 use serde_json::Value;
-use sqlx::FromRow;
 
 /// `DbJob` represents a job as stored in the database.
 ///
 /// It contains all the fields from the database table but doesn't include
 /// the task identifier string, which is provided separately when constructing
 /// a `Job` instance for use in the worker system.
-#[derive(FromRow, Getters, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "driver-sqlx", derive(sqlx::FromRow))]
+#[derive(Getters, Debug, Clone, PartialEq, Eq)]
 #[getset(get = "pub")]
 #[allow(dead_code)]
 pub struct DbJob {
@@ -52,7 +52,8 @@ pub struct DbJob {
 /// This struct is used throughout the worker system for job processing and
 /// contains everything needed to execute a job, including the string identifier
 /// of the task which is used to look up the appropriate handler function.
-#[derive(FromRow, Getters, Debug, Clone, PartialEq, Eq, Builder)]
+#[cfg_attr(feature = "driver-sqlx", derive(sqlx::FromRow))]
+#[derive(Getters, Debug, Clone, PartialEq, Eq, Builder)]
 #[getset(get = "pub")]
 #[builder(build_fn(private, name = "build_internal"), pattern = "owned")]
 #[allow(dead_code)]
@@ -155,6 +156,47 @@ impl Job {
             flags: db_job.flags,
             task_id: db_job.task_id,
             task_identifier,
+        }
+    }
+}
+
+impl DbJob {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        id: i64,
+        job_queue_id: Option<i32>,
+        payload: serde_json::Value,
+        priority: i16,
+        run_at: DateTime<Utc>,
+        attempts: i16,
+        max_attempts: i16,
+        last_error: Option<String>,
+        created_at: DateTime<Utc>,
+        updated_at: DateTime<Utc>,
+        key: Option<String>,
+        revision: i32,
+        locked_at: Option<DateTime<Utc>>,
+        locked_by: Option<String>,
+        flags: Option<Value>,
+        task_id: i32,
+    ) -> Self {
+        Self {
+            id,
+            job_queue_id,
+            payload,
+            priority,
+            run_at,
+            attempts,
+            max_attempts,
+            last_error,
+            created_at,
+            updated_at,
+            key,
+            revision,
+            locked_at,
+            locked_by,
+            flags,
+            task_id,
         }
     }
 }

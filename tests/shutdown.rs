@@ -32,7 +32,7 @@ async fn request_shutdown_executes_scheduled_jobs() {
 
         let worker = Arc::new(
             Worker::options()
-                .pg_pool(test_db.test_pool.clone())
+                .database(test_db.database.clone())
                 .concurrency(3)
                 .listen_os_shutdown_signals(false)
                 .define_job::<ShutdownJob>()

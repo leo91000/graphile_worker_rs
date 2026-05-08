@@ -1,0 +1,44 @@
+[package]
+name = "graphile_worker_database"
+version = "0.1.0"
+edition = "2021"
+license-file = "LICENSE.md"
+description = "Database driver abstraction for graphile_worker"
+homepage = "https://docs.rs/graphile_worker"
+documentation = "https://docs.rs/graphile_worker"
+repository = "https://github.com/leo91000/graphile_worker_rs"
+keywords = []
+categories = []
+readme = "README.md"
+
+[dependencies]
+chrono.workspace = true
+deadpool-postgres = { version = "0.14.1", optional = true }
+futures.workspace = true
+serde_json.workspace = true
+sqlx = { workspace = true, optional = true }
+thiserror.workspace = true
+tokio = { workspace = true, optional = true, features = ["rt"] }
+tokio-postgres = { version = "0.7.17", optional = true, default-features = false, features = [
+  "array-impls",
+  "with-chrono-0_4",
+  "with-serde_json-1",
+] }
+tokio-stream = { version = "0.1.17", optional = true, features = ["sync"] }
+
+[features]
+default = ["driver-sqlx"]
+driver-sqlx = ["sqlx"]
+driver-tokio-postgres = [
+  "deadpool-postgres",
+  "tokio",
+  "tokio-postgres",
+  "tokio-stream",
+]
+runtime-tokio = [
+  "sqlx?/runtime-tokio",
+  "tokio-postgres?/runtime",
+]
+runtime-async-std = ["sqlx?/runtime-async-std"]
+tls-native-tls = ["sqlx?/tls-native-tls"]
+tls-rustls = ["sqlx?/tls-rustls"]

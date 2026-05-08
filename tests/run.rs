@@ -33,10 +33,10 @@ async fn it_will_execute_jobs_as_they_come_up_and_exits_cleanly() {
 
         // Create a worker that will execute the job
         let worker_fut = spawn_local({
-            let test_pool = test_db.test_pool.clone();
+            let database = test_db.database.clone();
             async move {
                 Worker::options()
-                    .pg_pool(test_pool)
+                    .database(database)
                     .concurrency(3)
                     .define_job::<Job3>()
                     .init()

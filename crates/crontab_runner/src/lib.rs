@@ -4,9 +4,9 @@ use backfill::register_and_backfill_items;
 use chrono::prelude::*;
 use futures::FutureExt;
 use graphile_worker_crontab_types::Crontab;
+use graphile_worker_database::DbExecutor;
 use graphile_worker_lifecycle_hooks::{CronJobScheduledContext, CronTickContext, HookRegistry};
 use graphile_worker_shutdown_signal::ShutdownSignal;
-use sqlx::PgExecutor;
 use tracing::{debug, warn};
 
 pub use crate::clock::mock::MockClock;
@@ -24,13 +24,13 @@ pub mod clock;
 mod sql;
 mod utils;
 
-pub async fn cron_main<'e, 'h>(
-    executor: impl PgExecutor<'e> + Clone,
+pub async fn cron_main(
+    executor: &impl DbExecutor,
     escaped_schema: &str,
     crontabs: &[Crontab],
     use_local_time: bool,
     shutdown_signal: ShutdownSignal,
-    hooks: &'h HookRegistry,
+    hooks: &HookRegistry,
 ) -> Result<(), ScheduleCronJobError> {
     CronRunner::new(executor, escaped_schema, crontabs, hooks)
         .use_local_time(use_local_time)
@@ -39,7 +39,7 @@ pub async fn cron_main<'e, 'h>(
 }
 
 pub struct CronRunner<'a, E, C = SystemClock> {
-    executor: E,
+    executor: &'a E,
     escaped_schema: &'a str,
     crontabs: &'a [Crontab],
     use_local_time: bool,
@@ -47,9 +47,9 @@ pub struct CronRunner<'a, E, C = SystemClock> {
     clock: C,
 }
 
-impl<'a, E> CronRunner<'a, E, SystemClock> {
+impl<'a, E: DbExecutor> CronRunner<'a, E, SystemClock> {
     pub fn new(
-        executor: E,
+        executor: &'a E,
         escaped_schema: &'a str,
         crontabs: &'a [Crontab],
         hooks: &'a HookRegistry,
@@ -65,7 +65,7 @@ impl<'a, E> CronRunner<'a, E, SystemClock> {
     }
 }
 
-impl<'a, E, C: Clock> CronRunner<'a, E, C> {
+impl<'a, E: DbExecutor, C: Clock> CronRunner<'a, E, C> {
     pub fn use_local_time(mut self, use_local_time: bool) -> Self {
         self.use_local_time = use_local_time;
         self
@@ -82,18 +82,15 @@ impl<'a, E, C: Clock> CronRunner<'a, E, C> {
         }
     }
 
-    pub async fn run<'e>(
+    pub async fn run(
         self,
         mut shutdown_signal: ShutdownSignal,
-    ) -> Result<(), ScheduleCronJobError>
-    where
-        E: PgExecutor<'e> + Clone,
-    {
+    ) -> Result<(), ScheduleCronJobError> {
         let start = self.clock.now();
         debug!(start = ?start, "cron:starting");
 
         register_and_backfill_items(
-            self.executor.clone(),
+            self.executor,
             self.escaped_schema,
             self.crontabs,
             &start,
@@ -162,7 +159,7 @@ impl<'a, E, C: Clock> CronRunner<'a, E, C> {
             if !jobs.is_empty() {
                 debug!(nb_jobs = jobs.len(), at = ?ts, "cron:schedule");
                 schedule_cron_jobs(
-                    self.executor.clone(),
+                    self.executor,
                     &jobs,
                     &ts,
                     self.escaped_schema,

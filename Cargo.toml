@@ -42,9 +42,10 @@ indoc = "2.0.7"
 derive_builder = "0.20.2"
 
 [features]
-default = ["runtime-tokio", "tls-rustls"]
+default = ["runtime-tokio", "tls-rustls", "driver-sqlx"]
 runtime-tokio = [
-  "sqlx/runtime-tokio",
+  "graphile_worker_database/runtime-tokio",
+  "sqlx?/runtime-tokio",
   "graphile_worker_crontab_runner/runtime-tokio",
   "graphile_worker_job/runtime-tokio",
   "graphile_worker_ctx/runtime-tokio",
@@ -56,7 +57,8 @@ runtime-tokio = [
   "graphile_worker_runtime/runtime-tokio",
 ]
 runtime-async-std = [
-  "sqlx/runtime-async-std",
+  "graphile_worker_database/runtime-async-std",
+  "sqlx?/runtime-async-std",
   "graphile_worker_crontab_runner/runtime-async-std",
   "graphile_worker_job/runtime-async-std",
   "graphile_worker_ctx/runtime-async-std",
@@ -68,14 +70,30 @@ runtime-async-std = [
   "graphile_worker_runtime/runtime-async-std",
 ]
 tls-native-tls = [
-  "sqlx/tls-native-tls",
+  "graphile_worker_database/tls-native-tls",
+  "sqlx?/tls-native-tls",
   "graphile_worker_crontab_runner/tls-native-tls",
   "graphile_worker_migrations/tls-native-tls",
 ]
 tls-rustls = [
-  "sqlx/tls-rustls",
+  "graphile_worker_database/tls-rustls",
+  "sqlx?/tls-rustls",
   "graphile_worker_crontab_runner/tls-rustls",
   "graphile_worker_migrations/tls-rustls",
+]
+driver-sqlx = [
+  "graphile_worker_database/driver-sqlx",
+  "graphile_worker_job/driver-sqlx",
+  "graphile_worker_ctx/driver-sqlx",
+  "graphile_worker_lifecycle_hooks/driver-sqlx",
+  "graphile_worker_crontab_runner/driver-sqlx",
+  "graphile_worker_migrations/driver-sqlx",
+  "sqlx",
+]
+driver-tokio-postgres = [
+  "graphile_worker_database/driver-tokio-postgres",
+  "graphile_worker_crontab_runner/driver-tokio-postgres",
+  "graphile_worker_migrations/driver-tokio-postgres",
 ]
 opentelemetry_0_30 = [
     "opentelemetry-30",
@@ -99,6 +117,7 @@ graphile_worker_lifecycle_hooks = { path = "./crates/lifecycle_hooks", version =
 graphile_worker_job_spec = { path = "./crates/job_spec", version = "0.1.2" }
 graphile_worker_task_details = { path = "./crates/task_details", version = "0.1.2", default-features = false }
 graphile_worker_runtime = { path = "./crates/runtime", version = "0.1.0", default-features = false }
+graphile_worker_database = { path = "./crates/database", version = "0.1.0", default-features = false }
 chrono = { version = "0.4.44", features = ["serde"] }
 futures = "0.3.32"
 getset = "0.1.6"
@@ -110,7 +129,7 @@ sqlx = { version = "0.8.6", features = [
   "json",
   "chrono",
   "macros",
-], default-features = false }
+], default-features = false, optional = true }
 thiserror = "2.0.18"
 tracing = "0.1.44"
 tokio = { version = "1.52.3", features = ["macros", "signal"] }
@@ -124,6 +143,7 @@ tracing-opentelemetry-30 = { package = "tracing-opentelemetry", version = "0.31.
 tracing-opentelemetry = { version = "0.32.1", optional = true }
 
 [dev-dependencies]
+sqlx = { workspace = true, features = ["runtime-tokio", "tls-rustls"] }
 tokio = { version = "1.52.3", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 uuid = { version = "1.23.1", features = ["v7"] }

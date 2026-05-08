@@ -2,13 +2,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::FutureExt;
+use graphile_worker_database::{Database, DbExecutor, DbValue};
 use graphile_worker_lifecycle_hooks::{
     HookRegistry, JobCompleteContext, JobFailContext, JobPermanentlyFailContext,
 };
 use graphile_worker_runtime as runtime;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use indoc::formatdoc;
-use sqlx::PgPool;
 use tracing::{error, trace, warn};
 
 use crate::sql::fail_job::{fail_job, fail_jobs, FailedJob};
@@ -26,7 +26,7 @@ pub struct CompletionRequest {
 pub struct CompletionBatcher {
     tx: runtime::Sender<CompletionRequest>,
     task: runtime::Mutex<Option<runtime::JoinHandle<()>>>,
-    pg_pool: PgPool,
+    database: Database,
     escaped_schema: String,
     worker_id: String,
     hooks: Arc<HookRegistry>,
@@ -35,18 +35,19 @@ pub struct CompletionBatcher {
 impl CompletionBatcher {
     pub fn new(
         delay: Duration,
-        pg_pool: PgPool,
+        database: impl Into<Database>,
         escaped_schema: String,
         worker_id: String,
         hooks: Arc<HookRegistry>,
         shutdown_signal: ShutdownSignal,
     ) -> Self {
+        let database = database.into();
         let (tx, rx) = runtime::channel(BATCHER_CHANNEL_CAPACITY);
 
         let task = runtime::spawn(completion_batcher_task(
             rx,
             delay,
-            pg_pool.clone(),
+            database.clone(),
             escaped_schema.clone(),
             worker_id.clone(),
             hooks.clone(),
@@ -56,7 +57,7 @@ impl CompletionBatcher {
         Self {
             tx,
             task: runtime::Mutex::new(Some(task)),
-            pg_pool,
+            database,
             escaped_schema,
             worker_id,
             hooks,
@@ -67,7 +68,8 @@ impl CompletionBatcher {
         if let Err(e) = self.tx.send(req).await {
             warn!("Batcher closed, completing job directly");
             let req = e.0;
-            if complete_job_direct(&req, &self.pg_pool, &self.escaped_schema, &self.worker_id).await
+            if complete_job_direct(&req, &self.database, &self.escaped_schema, &self.worker_id)
+                .await
             {
                 emit_completion_hook(&req, &self.worker_id, &self.hooks).await;
             }
@@ -86,7 +88,7 @@ impl CompletionBatcher {
 async fn completion_batcher_task(
     rx: runtime::Receiver<CompletionRequest>,
     delay: Duration,
-    pg_pool: PgPool,
+    database: Database,
     escaped_schema: String,
     worker_id: String,
     hooks: Arc<HookRegistry>,
@@ -101,7 +103,7 @@ async fn completion_batcher_task(
             drain_and_flush(
                 &rx,
                 &mut batch,
-                &pg_pool,
+                &database,
                 &escaped_schema,
                 &worker_id,
                 &hooks,
@@ -111,7 +113,7 @@ async fn completion_batcher_task(
         }
 
         let Some(first) = first.item else {
-            flush_batch(&batch, &pg_pool, &escaped_schema, &worker_id, &hooks).await;
+            flush_batch(&batch, &database, &escaped_schema, &worker_id, &hooks).await;
             return;
         };
 
@@ -130,7 +132,7 @@ async fn completion_batcher_task(
                     drain_and_flush(
                         &rx,
                         &mut batch,
-                        &pg_pool,
+                        &database,
                         &escaped_schema,
                         &worker_id,
                         &hooks,
@@ -144,13 +146,13 @@ async fn completion_batcher_task(
             match result {
                 Ok(item) => batch.push(item),
                 Err(_) => {
-                    flush_batch(&batch, &pg_pool, &escaped_schema, &worker_id, &hooks).await;
+                    flush_batch(&batch, &database, &escaped_schema, &worker_id, &hooks).await;
                     return;
                 }
             }
         }
 
-        flush_batch(&batch, &pg_pool, &escaped_schema, &worker_id, &hooks).await;
+        flush_batch(&batch, &database, &escaped_schema, &worker_id, &hooks).await;
         batch.clear();
     }
 }
@@ -177,7 +179,7 @@ async fn recv_or_shutdown<T>(
 async fn drain_and_flush(
     rx: &runtime::Receiver<CompletionRequest>,
     batch: &mut Vec<CompletionRequest>,
-    pg_pool: &PgPool,
+    database: &Database,
     escaped_schema: &str,
     worker_id: &str,
     hooks: &Arc<HookRegistry>,
@@ -185,12 +187,12 @@ async fn drain_and_flush(
     while let Ok(item) = rx.try_recv() {
         batch.push(item);
     }
-    flush_batch(batch, pg_pool, escaped_schema, worker_id, hooks).await;
+    flush_batch(batch, database, escaped_schema, worker_id, hooks).await;
 }
 
 async fn flush_batch(
     batch: &[CompletionRequest],
-    pg_pool: &PgPool,
+    database: &Database,
     escaped_schema: &str,
     worker_id: &str,
     hooks: &Arc<HookRegistry>,
@@ -227,10 +229,15 @@ async fn flush_batch(
             "#
         );
 
-        match sqlx::query(&sql)
-            .bind(&with_queue_ids)
-            .bind(worker_id)
-            .execute(pg_pool)
+        match database
+            .execute(
+                &sql,
+                vec![
+                    DbValue::I64Array(with_queue_ids),
+                    DbValue::Text(worker_id.to_string()),
+                ]
+                .into(),
+            )
             .await
         {
             Ok(_) => true,
@@ -251,9 +258,8 @@ async fn flush_batch(
             "#
         );
 
-        match sqlx::query(&sql)
-            .bind(&without_queue_ids)
-            .execute(pg_pool)
+        match database
+            .execute(&sql, vec![DbValue::I64Array(without_queue_ids)].into())
             .await
         {
             Ok(_) => true,
@@ -279,7 +285,7 @@ async fn flush_batch(
 
 async fn complete_job_direct(
     req: &CompletionRequest,
-    pg_pool: &PgPool,
+    database: &Database,
     escaped_schema: &str,
     worker_id: &str,
 ) -> bool {
@@ -298,10 +304,15 @@ async fn complete_job_direct(
             "#
         );
 
-        if let Err(e) = sqlx::query(&sql)
-            .bind(req.job_id)
-            .bind(worker_id)
-            .execute(pg_pool)
+        if let Err(e) = database
+            .execute(
+                &sql,
+                vec![
+                    DbValue::I64(req.job_id),
+                    DbValue::Text(worker_id.to_string()),
+                ]
+                .into(),
+            )
             .await
         {
             error!(error = ?e, job_id = req.job_id, "Failed to complete job directly (with queue)");
@@ -315,7 +326,10 @@ async fn complete_job_direct(
             "#
         );
 
-        if let Err(e) = sqlx::query(&sql).bind(req.job_id).execute(pg_pool).await {
+        if let Err(e) = database
+            .execute(&sql, vec![DbValue::I64(req.job_id)].into())
+            .await
+        {
             error!(error = ?e, job_id = req.job_id, "Failed to complete job directly");
             return false;
         }
@@ -347,7 +361,7 @@ pub struct FailureRequest {
 pub struct FailureBatcher {
     tx: runtime::Sender<FailureRequest>,
     task: runtime::Mutex<Option<runtime::JoinHandle<()>>>,
-    pg_pool: PgPool,
+    database: Database,
     escaped_schema: String,
     worker_id: String,
     hooks: Arc<HookRegistry>,
@@ -356,18 +370,19 @@ pub struct FailureBatcher {
 impl FailureBatcher {
     pub fn new(
         delay: Duration,
-        pg_pool: PgPool,
+        database: impl Into<Database>,
         escaped_schema: String,
         worker_id: String,
         hooks: Arc<HookRegistry>,
         shutdown_signal: ShutdownSignal,
     ) -> Self {
+        let database = database.into();
         let (tx, rx) = runtime::channel(BATCHER_CHANNEL_CAPACITY);
 
         let task = runtime::spawn(failure_batcher_task(
             rx,
             delay,
-            pg_pool.clone(),
+            database.clone(),
             escaped_schema.clone(),
             worker_id.clone(),
             hooks.clone(),
@@ -377,7 +392,7 @@ impl FailureBatcher {
         Self {
             tx,
             task: runtime::Mutex::new(Some(task)),
-            pg_pool,
+            database,
             escaped_schema,
             worker_id,
             hooks,
@@ -388,7 +403,7 @@ impl FailureBatcher {
         if let Err(e) = self.tx.send(req).await {
             warn!("Batcher closed, failing job directly");
             let req = e.0;
-            if fail_job_direct(&req, &self.pg_pool, &self.escaped_schema, &self.worker_id).await {
+            if fail_job_direct(&req, &self.database, &self.escaped_schema, &self.worker_id).await {
                 emit_failure_hook(&req, &self.worker_id, &self.hooks).await;
             }
         }
@@ -406,7 +421,7 @@ impl FailureBatcher {
 async fn failure_batcher_task(
     rx: runtime::Receiver<FailureRequest>,
     delay: Duration,
-    pg_pool: PgPool,
+    database: Database,
     escaped_schema: String,
     worker_id: String,
     hooks: Arc<HookRegistry>,
@@ -421,7 +436,7 @@ async fn failure_batcher_task(
             drain_and_flush_failures(
                 &rx,
                 &mut batch,
-                &pg_pool,
+                &database,
                 &escaped_schema,
                 &worker_id,
                 &hooks,
@@ -431,7 +446,7 @@ async fn failure_batcher_task(
         }
 
         let Some(first) = first.item else {
-            flush_failure_batch(&batch, &pg_pool, &escaped_schema, &worker_id, &hooks).await;
+            flush_failure_batch(&batch, &database, &escaped_schema, &worker_id, &hooks).await;
             return;
         };
 
@@ -450,7 +465,7 @@ async fn failure_batcher_task(
                     drain_and_flush_failures(
                         &rx,
                         &mut batch,
-                        &pg_pool,
+                        &database,
                         &escaped_schema,
                         &worker_id,
                         &hooks,
@@ -464,14 +479,14 @@ async fn failure_batcher_task(
             match result {
                 Ok(item) => batch.push(item),
                 Err(_) => {
-                    flush_failure_batch(&batch, &pg_pool, &escaped_schema, &worker_id, &hooks)
+                    flush_failure_batch(&batch, &database, &escaped_schema, &worker_id, &hooks)
                         .await;
                     return;
                 }
             }
         }
 
-        flush_failure_batch(&batch, &pg_pool, &escaped_schema, &worker_id, &hooks).await;
+        flush_failure_batch(&batch, &database, &escaped_schema, &worker_id, &hooks).await;
         batch.clear();
     }
 }
@@ -479,7 +494,7 @@ async fn failure_batcher_task(
 async fn drain_and_flush_failures(
     rx: &runtime::Receiver<FailureRequest>,
     batch: &mut Vec<FailureRequest>,
-    pg_pool: &PgPool,
+    database: &Database,
     escaped_schema: &str,
     worker_id: &str,
     hooks: &Arc<HookRegistry>,
@@ -487,12 +502,12 @@ async fn drain_and_flush_failures(
     while let Ok(item) = rx.try_recv() {
         batch.push(item);
     }
-    flush_failure_batch(batch, pg_pool, escaped_schema, worker_id, hooks).await;
+    flush_failure_batch(batch, database, escaped_schema, worker_id, hooks).await;
 }
 
 async fn flush_failure_batch(
     batch: &[FailureRequest],
-    pg_pool: &PgPool,
+    database: &Database,
     escaped_schema: &str,
     worker_id: &str,
     hooks: &Arc<HookRegistry>,
@@ -511,7 +526,7 @@ async fn flush_failure_batch(
         })
         .collect();
 
-    match fail_jobs(pg_pool, &failed_jobs, escaped_schema, worker_id).await {
+    match fail_jobs(database, &failed_jobs, escaped_schema, worker_id).await {
         Ok(()) => {
             if !hooks.is_empty() {
                 for req in batch {
@@ -523,7 +538,7 @@ async fn flush_failure_batch(
             error!(error = ?e, batch_size = batch.len(), "Failed to fail jobs");
 
             for req in batch {
-                if fail_job_direct(req, pg_pool, escaped_schema, worker_id).await {
+                if fail_job_direct(req, database, escaped_schema, worker_id).await {
                     emit_failure_hook(req, worker_id, hooks).await;
                 }
             }
@@ -558,12 +573,12 @@ async fn emit_failure_hook(req: &FailureRequest, worker_id: &str, hooks: &Arc<Ho
 
 async fn fail_job_direct(
     req: &FailureRequest,
-    pg_pool: &PgPool,
+    database: &Database,
     escaped_schema: &str,
     worker_id: &str,
 ) -> bool {
     if let Err(e) = fail_job(
-        pg_pool,
+        database,
         &req.job,
         escaped_schema,
         worker_id,
@@ -578,12 +593,12 @@ async fn fail_job_direct(
 
     true
 }
-#[cfg(test)]
+#[cfg(all(test, feature = "driver-sqlx"))]
 mod tests {
     use super::*;
     use futures::FutureExt;
     use graphile_worker_lifecycle_hooks::{JobComplete, JobFail};
-    use sqlx::postgres::PgPoolOptions;
+    use sqlx::{postgres::PgPoolOptions, PgPool};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     static SCHEMA_COUNTER: AtomicUsize = AtomicUsize::new(0);

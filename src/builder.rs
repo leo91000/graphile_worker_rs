@@ -8,6 +8,7 @@ use futures::FutureExt;
 use graphile_worker_crontab_parser::{parse_crontab, CrontabParseError};
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_ctx::WorkerContext;
+use graphile_worker_database::{Database, DbError};
 use graphile_worker_extensions::Extensions;
 use graphile_worker_lifecycle_hooks::{Event, HookRegistry, Plugin};
 use graphile_worker_migrations::migrate;
@@ -15,8 +16,6 @@ use graphile_worker_runtime::Notify;
 use graphile_worker_shutdown_signal::{shutdown_signal, ShutdownSignal};
 use graphile_worker_task_handler::{run_task_from_worker_ctx, TaskHandler};
 use rand::Rng;
-use sqlx::postgres::PgPoolOptions;
-use sqlx::PgPool;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -49,6 +48,35 @@ fn combine_shutdown_signals(left: ShutdownSignal, right: ShutdownSignal) -> Shut
     }
     .boxed()
     .shared()
+}
+
+#[cfg(feature = "driver-sqlx")]
+async fn connect_default_database(db_url: &str, max_connections: u32) -> Result<Database, DbError> {
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(max_connections)
+        .connect(db_url)
+        .await
+        .map_err(DbError::from)?;
+    Ok(pool.into())
+}
+
+#[cfg(all(not(feature = "driver-sqlx"), feature = "driver-tokio-postgres"))]
+async fn connect_default_database(db_url: &str, max_connections: u32) -> Result<Database, DbError> {
+    let database = graphile_worker_database::tokio_postgres::TokioPostgresDatabase::from_url(
+        db_url,
+        max_connections as usize,
+    )?;
+    Ok(database.into())
+}
+
+#[cfg(not(any(feature = "driver-sqlx", feature = "driver-tokio-postgres")))]
+async fn connect_default_database(
+    _db_url: &str,
+    _max_connections: u32,
+) -> Result<Database, DbError> {
+    Err(DbError::new(
+        "database_url requires enabling a database driver feature",
+    ))
 }
 
 /// Configuration options for initializing a Graphile Worker instance.
@@ -102,7 +130,7 @@ pub struct WorkerOptions {
     jobs: HashMap<String, WorkerFn>,
 
     /// PostgreSQL connection pool
-    pg_pool: Option<PgPool>,
+    database: Option<Database>,
 
     /// PostgreSQL connection string
     database_url: Option<String>,
@@ -152,14 +180,14 @@ pub struct WorkerOptions {
 pub enum WorkerBuildError {
     /// Failed to connect to the PostgreSQL database
     #[error("Error occurred while connecting to the PostgreSQL database: {0}")]
-    ConnectError(#[from] sqlx::Error),
+    ConnectError(#[from] DbError),
 
     /// Failed while executing a database query
     #[error("Error occurred while executing a query: {0}")]
     QueryError(#[from] crate::errors::GraphileWorkerError),
 
-    /// The database URL was not provided and no PgPool was supplied
-    #[error("Missing database_url configuration - must provide either database_url or pg_pool")]
+    /// The database URL was not provided and no Database was supplied
+    #[error("Missing database configuration - must provide either database_url or database")]
     MissingDatabaseUrl,
 
     /// Failed to apply database migrations
@@ -210,29 +238,26 @@ impl WorkerOptions {
     pub async fn init(self) -> Result<Worker, WorkerBuildError> {
         let listen_os_shutdown_signals = self.listen_os_shutdown_signals.unwrap_or(true);
 
-        let pg_pool = match self.pg_pool {
-            Some(pg_pool) => pg_pool,
+        let database = match self.database {
+            Some(database) => database,
             None => {
                 let db_url = self
                     .database_url
                     .ok_or(WorkerBuildError::MissingDatabaseUrl)?;
 
-                PgPoolOptions::new()
-                    .max_connections(self.max_pg_conn.unwrap_or(20))
-                    .connect(&db_url)
-                    .await?
+                connect_default_database(&db_url, self.max_pg_conn.unwrap_or(20)).await?
             }
         };
 
         let schema = self
             .schema
             .unwrap_or_else(|| String::from("graphile_worker"));
-        let escaped_schema = escape_identifier(&pg_pool, &schema).await?;
+        let escaped_schema = escape_identifier(&database, &schema).await?;
 
-        migrate(&pg_pool, &escaped_schema).await?;
+        migrate(&database, &escaped_schema).await?;
 
         let task_details: SharedTaskDetails = get_tasks_details(
-            &pg_pool,
+            &database,
             &escaped_schema,
             self.jobs.keys().cloned().collect(),
         )
@@ -265,7 +290,7 @@ impl WorkerOptions {
         let completion_batcher = self.complete_job_batch_delay.map(|delay| {
             Arc::new(CompletionBatcher::new(
                 delay,
-                pg_pool.clone(),
+                database.clone(),
                 escaped_schema.clone(),
                 worker_id.clone(),
                 hooks.clone(),
@@ -276,7 +301,7 @@ impl WorkerOptions {
         let failure_batcher = self.fail_job_batch_delay.map(|delay| {
             Arc::new(FailureBatcher::new(
                 delay,
-                pg_pool.clone(),
+                database.clone(),
                 escaped_schema.clone(),
                 worker_id.clone(),
                 hooks.clone(),
@@ -289,7 +314,7 @@ impl WorkerOptions {
             concurrency,
             poll_interval,
             jobs: self.jobs,
-            pg_pool,
+            database,
             escaped_schema,
             task_details,
             forbidden_flags: self.forbidden_flags,
@@ -373,8 +398,14 @@ impl WorkerOptions {
     ///
     /// # Note
     /// If both `pg_pool` and `database_url` are provided, `pg_pool` takes precedence.
-    pub fn pg_pool(mut self, value: PgPool) -> Self {
-        self.pg_pool = Some(value);
+    pub fn database(mut self, value: impl Into<Database>) -> Self {
+        self.database = Some(value.into());
+        self
+    }
+
+    #[cfg(feature = "driver-sqlx")]
+    pub fn pg_pool(mut self, value: sqlx::PgPool) -> Self {
+        self.database = Some(value.into());
         self
     }
 
