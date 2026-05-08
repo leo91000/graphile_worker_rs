@@ -198,7 +198,7 @@ impl Worker {
             })
             .await;
 
-        let local_queue = self.create_local_queue();
+        let local_queue = self.create_local_queues();
         let job_runner = self.job_runner_internal(local_queue);
         let crontab_scheduler = self.crontab_scheduler();
 
@@ -322,23 +322,31 @@ impl Worker {
     /// A `Result` that is:
     /// - `Ok(())` if the job runner shuts down gracefully
     /// - `Err(WorkerRuntimeError)` if an error occurs during execution
-    fn create_local_queue(&self) -> Option<(LocalQueue, crate::streams::JobSignalReceiver)> {
+    fn create_local_queues(&self) -> Option<(Vec<LocalQueue>, crate::streams::JobSignalReceiver)> {
         if let Some(ref config) = self.local_queue_config {
             let (tx, rx) = runtime::channel(self.concurrency * 2);
-            let queue = LocalQueue::new(crate::local_queue::LocalQueueParams {
-                config: config.clone(),
-                pg_pool: self.pg_pool.clone(),
-                escaped_schema: self.escaped_schema.clone(),
-                worker_id: self.worker_id.clone(),
-                task_details: self.task_details.clone(),
-                poll_interval: self.poll_interval,
-                continuous: true,
-                shutdown_signal: Some(self.shutdown_signal.clone()),
-                hooks: self.hooks.clone(),
-                job_signal_sender: tx,
-                use_local_time: self.use_local_time,
-            });
-            Some((queue, rx))
+            if config.queue_count == 0 {
+                panic!("local_queue.queue_count must be greater than 0");
+            }
+            let queue_count = config.queue_count.min(self.concurrency);
+            let queues = (0..queue_count)
+                .map(|_| {
+                    LocalQueue::new(crate::local_queue::LocalQueueParams {
+                        config: config.clone(),
+                        pg_pool: self.pg_pool.clone(),
+                        escaped_schema: self.escaped_schema.clone(),
+                        worker_id: self.worker_id.clone(),
+                        task_details: self.task_details.clone(),
+                        poll_interval: self.poll_interval,
+                        continuous: true,
+                        shutdown_signal: Some(self.shutdown_signal.clone()),
+                        hooks: self.hooks.clone(),
+                        job_signal_sender: tx.clone(),
+                        use_local_time: self.use_local_time,
+                    })
+                })
+                .collect();
+            Some((queues, rx))
         } else {
             None
         }
@@ -363,10 +371,10 @@ impl Worker {
 
     async fn job_runner_internal(
         &self,
-        local_queue: Option<(LocalQueue, crate::streams::JobSignalReceiver)>,
+        local_queue: Option<(Vec<LocalQueue>, crate::streams::JobSignalReceiver)>,
     ) -> Result<(), WorkerRuntimeError> {
         match local_queue {
-            Some((local_queue, rx)) => self.job_runner_with_local_queue(local_queue, rx).await,
+            Some((local_queues, rx)) => self.job_runner_with_local_queue(local_queues, rx).await,
             None => self.job_runner_direct().await,
         }
     }
@@ -374,7 +382,7 @@ impl Worker {
     /// Job runner implementation using LocalQueue for batch-fetching jobs.
     async fn job_runner_with_local_queue(
         &self,
-        local_queue: LocalQueue,
+        local_queues: Vec<LocalQueue>,
         job_signal_rx: crate::streams::JobSignalReceiver,
     ) -> Result<(), WorkerRuntimeError> {
         let job_signal = job_signal_stream_with_receiver(
@@ -391,8 +399,8 @@ impl Worker {
         let worker_handles = FuturesUnordered::new();
         let runner = self.runner();
 
-        for _ in 0..self.concurrency {
-            let local_queue = local_queue.clone();
+        for index in 0..self.concurrency {
+            let local_queue = local_queues[index % local_queues.len()].clone();
             let runner = runner.clone();
             let source_rx = source_rx.clone();
             worker_handles.push(runtime::spawn(async move {
@@ -407,8 +415,10 @@ impl Worker {
 
         dispatch_job_signals(job_signal, source_tx, worker_handles, self.concurrency).await?;
 
-        if let Err(e) = local_queue.release().await {
-            warn!(error = %e, "Error releasing LocalQueue");
+        for local_queue in local_queues {
+            if let Err(e) = local_queue.release().await {
+                warn!(error = %e, "Error releasing LocalQueue");
+            }
         }
 
         Ok(())

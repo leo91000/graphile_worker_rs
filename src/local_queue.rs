@@ -99,12 +99,32 @@ impl RefetchDelayConfigBuilder {
 #[derive(Debug, Clone, Builder)]
 #[builder(build_fn(private, name = "build_internal"), pattern = "owned")]
 pub struct LocalQueueConfig {
+    /// Maximum number of jobs each local queue may fetch and hold at once.
+    ///
+    /// When `queue_count` is greater than 1, this value is per local queue.
+    /// For example, `size = 1_250` and `queue_count = 4` allows up to 5,000
+    /// jobs to be locked locally across the worker.
     #[builder(default = "DEFAULT_LOCAL_QUEUE_SIZE")]
     pub size: usize,
+    /// How long locally fetched jobs may stay unclaimed before being returned to the database.
     #[builder(default = "DEFAULT_LOCAL_QUEUE_TTL")]
     pub ttl: Duration,
+    /// Optional delay strategy used when a fetch returns fewer jobs than requested.
     #[builder(default, setter(strip_option))]
     pub refetch_delay: Option<RefetchDelayConfig>,
+    /// Number of independent local queues to run inside this worker.
+    ///
+    /// Multiple queues can improve throughput for very small high-volume jobs by
+    /// letting the worker fetch several batches in parallel. This also increases
+    /// the maximum number of jobs locked locally to `size * queue_count`, so keep
+    /// `size` lower when increasing this value.
+    ///
+    /// If this is greater than the worker concurrency, only `concurrency` queues
+    /// are started because every local queue needs at least one worker draining it.
+    ///
+    /// Defaults to 1, which preserves the original single-local-queue behavior.
+    #[builder(default = "1")]
+    pub queue_count: usize,
 }
 
 impl Default for LocalQueueConfig {
@@ -129,6 +149,20 @@ impl LocalQueueConfig {
     pub fn with_refetch_delay(self, refetch_delay: RefetchDelayConfig) -> Self {
         Self {
             refetch_delay: Some(refetch_delay),
+            ..self
+        }
+    }
+
+    /// Sets how many independent local queues this worker should run.
+    ///
+    /// `size` is applied to each queue, so total local capacity is
+    /// `size * queue_count`. Higher values increase parallel fetch capacity but
+    /// can also lock more jobs locally and increase database load.
+    ///
+    /// If this is greater than worker concurrency, it is capped at concurrency.
+    pub fn with_queue_count(self, queue_count: usize) -> Self {
+        Self {
+            queue_count,
             ..self
         }
     }
@@ -319,6 +353,10 @@ impl LocalQueue {
 
         if params.config.size == 0 {
             panic!("local_queue.size must be greater than 0");
+        }
+
+        if params.config.queue_count == 0 {
+            panic!("local_queue.queue_count must be greater than 0");
         }
 
         if params.config.size > i32::MAX as usize {
@@ -860,18 +898,22 @@ mod tests {
         let config = LocalQueueConfig::default()
             .with_size(7)
             .with_ttl(Duration::from_secs(3))
-            .with_refetch_delay(refetch_delay.clone());
+            .with_refetch_delay(refetch_delay.clone())
+            .with_queue_count(3);
         assert_eq!(config.size, 7);
         assert_eq!(config.ttl, Duration::from_secs(3));
         assert!(config.refetch_delay.is_some());
+        assert_eq!(config.queue_count, 3);
 
         let built_config = LocalQueueConfig::builder()
             .size(8)
             .ttl(Duration::from_secs(4))
             .refetch_delay(built_refetch_delay)
+            .queue_count(2)
             .build();
         assert_eq!(built_config.size, 8);
         assert_eq!(built_config.ttl, Duration::from_secs(4));
         assert!(built_config.refetch_delay.is_some());
+        assert_eq!(built_config.queue_count, 2);
     }
 }

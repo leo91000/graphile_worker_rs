@@ -1,9 +1,10 @@
 use graphile_worker::{
-    IntoTaskHandlerResult, JobSpec, LocalQueueConfig, RefetchDelayConfig, TaskHandler, Worker,
-    WorkerContext,
+    HookRegistry, IntoTaskHandlerResult, JobSpec, LocalQueueConfig, LocalQueueInit, Plugin,
+    RefetchDelayConfig, TaskHandler, Worker, WorkerContext,
 };
 use graphile_worker_runtime::sleep as runtime_sleep;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::{
@@ -103,6 +104,37 @@ impl TaskHandler for BatchJob {
     }
 }
 
+#[derive(Clone)]
+struct LocalQueueInitCounterPlugin {
+    counter: Arc<AtomicU32>,
+}
+
+impl Plugin for LocalQueueInitCounterPlugin {
+    fn register(self, hooks: &mut HookRegistry) {
+        hooks.on(LocalQueueInit, move |_ctx| {
+            let counter = self.counter.clone();
+            async move {
+                counter.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct MultiLocalQueueJob {
+    id: u32,
+}
+
+static MULTI_LOCAL_QUEUE_CALL_COUNT: StaticCounter = StaticCounter::new();
+
+impl TaskHandler for MultiLocalQueueJob {
+    const IDENTIFIER: &'static str = "multi_local_queue_job";
+
+    async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {
+        MULTI_LOCAL_QUEUE_CALL_COUNT.increment().await;
+    }
+}
+
 #[tokio::test]
 async fn local_queue_batch_fetches_jobs() {
     with_test_db(|test_db| async move {
@@ -149,6 +181,118 @@ async fn local_queue_batch_fetches_jobs() {
             BATCH_CALL_COUNT.get().await,
             20,
             "All 20 jobs should have been executed"
+        );
+
+        worker_fut.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn local_queue_can_run_multiple_local_queues() {
+    with_test_db(|test_db| async move {
+        MULTI_LOCAL_QUEUE_CALL_COUNT.reset().await;
+        let utils = test_db.worker_utils();
+        utils.migrate().await.expect("Failed to migrate");
+
+        for i in 1..=12 {
+            utils
+                .add_job(MultiLocalQueueJob { id: i }, JobSpec::default())
+                .await
+                .expect("Failed to add job");
+        }
+
+        let init_count = Arc::new(AtomicU32::new(0));
+        let plugin = LocalQueueInitCounterPlugin {
+            counter: init_count.clone(),
+        };
+
+        let worker_fut = spawn_local({
+            let test_pool = test_db.test_pool.clone();
+            async move {
+                Worker::options()
+                    .pg_pool(test_pool)
+                    .concurrency(4)
+                    .local_queue(LocalQueueConfig::default().with_size(3).with_queue_count(4))
+                    .define_job::<MultiLocalQueueJob>()
+                    .add_plugin(plugin)
+                    .init()
+                    .await
+                    .expect("Failed to create worker")
+                    .run()
+                    .await
+                    .expect("Failed to run worker");
+            }
+        });
+
+        let start_time = Instant::now();
+        while MULTI_LOCAL_QUEUE_CALL_COUNT.get().await < 12 {
+            if start_time.elapsed().as_secs() > 10 {
+                worker_fut.abort();
+                panic!(
+                    "All jobs should have been executed by now, got {}",
+                    MULTI_LOCAL_QUEUE_CALL_COUNT.get().await
+                );
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+
+        assert_eq!(
+            init_count.load(Ordering::SeqCst),
+            4,
+            "A worker with queue_count=4 should start four local queues"
+        );
+
+        worker_fut.abort();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn local_queue_count_is_limited_by_concurrency() {
+    with_test_db(|test_db| async move {
+        let utils = test_db.worker_utils();
+        utils.migrate().await.expect("Failed to migrate");
+
+        let init_count = Arc::new(AtomicU32::new(0));
+        let plugin = LocalQueueInitCounterPlugin {
+            counter: init_count.clone(),
+        };
+
+        let worker_fut = spawn_local({
+            let test_pool = test_db.test_pool.clone();
+            async move {
+                Worker::options()
+                    .pg_pool(test_pool)
+                    .concurrency(2)
+                    .local_queue(LocalQueueConfig::default().with_size(3).with_queue_count(4))
+                    .define_job::<MultiLocalQueueJob>()
+                    .add_plugin(plugin)
+                    .init()
+                    .await
+                    .expect("Failed to create worker")
+                    .run()
+                    .await
+                    .expect("Failed to run worker");
+            }
+        });
+
+        let start_time = Instant::now();
+        while init_count.load(Ordering::SeqCst) < 2 {
+            if start_time.elapsed().as_secs() > 5 {
+                worker_fut.abort();
+                panic!(
+                    "Expected two local queues to initialize, got {}",
+                    init_count.load(Ordering::SeqCst)
+                );
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+
+        assert_eq!(
+            init_count.load(Ordering::SeqCst),
+            2,
+            "queue_count should be capped at worker concurrency"
         );
 
         worker_fut.abort();

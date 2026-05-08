@@ -669,6 +669,10 @@ impl WorkerOptions {
     /// as they wait in the local cache. The cache has a TTL after which
     /// unclaimed jobs are returned to the database.
     ///
+    /// `LocalQueueConfig::queue_count` can be raised above 1 to run multiple
+    /// independent local queues in the same worker. `size` is applied per queue,
+    /// so total local capacity is `size * queue_count`.
+    ///
     /// Workers with `forbidden_flags` will bypass the LocalQueue and fetch
     /// jobs directly from the database.
     ///
@@ -681,6 +685,7 @@ impl WorkerOptions {
     ///     .local_queue(
     ///         LocalQueueConfig::default()
     ///             .with_size(100)
+    ///             .with_queue_count(2)
     ///             .with_ttl(Duration::from_secs(300))
     ///             .with_refetch_delay(
     ///                 RefetchDelayConfig::default()
