@@ -42,3 +42,6 @@ runtime-tokio = [
 runtime-async-std = ["sqlx?/runtime-async-std"]
 tls-native-tls = ["sqlx?/tls-native-tls"]
 tls-rustls = ["sqlx?/tls-rustls"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }

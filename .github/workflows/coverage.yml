@@ -33,7 +33,7 @@ jobs:
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin
       - name: Run cargo-tarpaulin
-        run: cargo tarpaulin --verbose --out Xml --skip-clean --workspace
+        run: cargo tarpaulin --verbose --out Xml --skip-clean --workspace --features driver-tokio-postgres --timeout 300 -- --test-threads=1
         env:
           DATABASE_URL: postgres://testuser:testpassword@localhost:5432/testdb
       - name: Upload to Codecov
