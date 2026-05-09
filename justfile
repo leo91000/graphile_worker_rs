@@ -74,7 +74,10 @@ coverage-docker:
   docker run -d --name graphile-worker-rs-test -p 54233:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=postgres postgres
   docker exec graphile-worker-rs-test bash -c 'for i in $(seq 30); do pg_isready -U postgres -h localhost && exit 0; sleep 1; done; echo "Postgres not ready after 30s" >&2; exit 1'
   DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo tarpaulin --all --out Xml --timeout 300 -- --test-threads=1
+  mv cobertura.xml cobertura-sqlx.xml
   DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo tarpaulin --all --out Xml --no-default-features --features driver-tokio-postgres --timeout 300 -- --test-threads=1
+  mv cobertura.xml cobertura-tokio-postgres.xml
+  DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo tarpaulin --all --out Xml --features driver-tokio-postgres --timeout 300 -- --test-threads=1
   docker rm -f graphile-worker-rs-test
 
 coverage-diff branch="main":

@@ -44,6 +44,20 @@ jobs:
           mv cobertura.xml cobertura-tokio-postgres.xml
         env:
           DATABASE_URL: postgres://testuser:testpassword@localhost:5432/testdb
+      - name: Run cargo-tarpaulin with combined drivers
+        run: |
+          cargo tarpaulin --verbose --out Xml --skip-clean --workspace --features driver-tokio-postgres --timeout 300 -- --test-threads=1
+          mv cobertura.xml cobertura-combined.xml
+        env:
+          DATABASE_URL: postgres://testuser:testpassword@localhost:5432/testdb
+      - name: Upload combined coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          file: ./cobertura-combined.xml
+          fail_ci_if_error: true
+          verbose: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload SQLx coverage to Codecov
         uses: codecov/codecov-action@v6
         with:
