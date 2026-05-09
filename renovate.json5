@@ -18,7 +18,12 @@
   },
   packageRules: [
     {
-      matchDepNames: ['opentelemetry-30', 'tracing-opentelemetry-30'],
+      matchDepNames: [
+        'opentelemetry',
+        'opentelemetry-30',
+        'tracing-opentelemetry',
+        'tracing-opentelemetry-30',
+      ],
       enabled: false,
     },
     {
