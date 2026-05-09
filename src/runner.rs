@@ -417,14 +417,15 @@ impl Worker {
         let (source_tx, source_rx) = runtime::channel(self.concurrency * 4);
         let worker_handles = FuturesUnordered::new();
         let runner = self.runner();
+        let local_queues = Arc::new(local_queues);
 
         for index in 0..self.concurrency {
-            let local_queue = local_queues[index % local_queues.len()].clone();
+            let local_queues = local_queues.clone();
             let runner = runner.clone();
             let source_rx = source_rx.clone();
             worker_handles.push(runtime::spawn(async move {
                 while let Ok(source) = source_rx.recv().await {
-                    process_local_queue_source(&runner, &local_queue, source).await?;
+                    process_local_queue_source(&runner, &local_queues, index, source).await?;
                 }
 
                 Ok::<(), ProcessJobError>(())
@@ -435,7 +436,7 @@ impl Worker {
         let dispatch_result =
             dispatch_job_signals(job_signal, source_tx, worker_handles, self.concurrency).await;
 
-        for local_queue in local_queues {
+        for local_queue in local_queues.iter() {
             if let Err(e) = local_queue.release().await {
                 warn!(error = %e, "Error releasing LocalQueue");
             }
@@ -623,16 +624,19 @@ where
 
 async fn process_local_queue_source(
     worker: &WorkerRunner,
-    local_queue: &LocalQueue,
+    local_queues: &[LocalQueue],
+    start_index: usize,
     source: StreamSource,
 ) -> Result<(), ProcessJobError> {
     if matches!(source, StreamSource::PgListener) {
-        local_queue.pulse(1).await;
+        local_queues[start_index % local_queues.len()]
+            .pulse(1)
+            .await;
     }
 
     let mut source = source;
     loop {
-        let job = local_queue.get_job(&worker.forbidden_flags).await;
+        let job = get_job_from_local_queues(worker, local_queues, start_index).await;
 
         let Some(job) = job else {
             break;
@@ -655,6 +659,30 @@ async fn process_local_queue_source(
     }
 
     Ok(())
+}
+
+async fn get_job_from_local_queues(
+    worker: &WorkerRunner,
+    local_queues: &[LocalQueue],
+    start_index: usize,
+) -> Option<Job> {
+    if !worker.forbidden_flags.is_empty() {
+        return local_queues[start_index % local_queues.len()]
+            .get_job(&worker.forbidden_flags)
+            .await;
+    }
+
+    for offset in 0..local_queues.len() {
+        let queue_index = (start_index + offset) % local_queues.len();
+        if let Some(job) = local_queues[queue_index]
+            .get_job(&worker.forbidden_flags)
+            .await
+        {
+            return Some(job);
+        }
+    }
+
+    None
 }
 
 /// Fetches and processes a single job from the queue.
