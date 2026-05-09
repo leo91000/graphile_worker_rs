@@ -176,6 +176,7 @@ impl Worker {
         WorkerOptions::default()
     }
 
+    /// Returns the underlying SQLx PostgreSQL pool when the worker uses the SQLx driver.
     #[cfg(feature = "driver-sqlx")]
     pub fn try_pg_pool(&self) -> Option<&sqlx::PgPool> {
         self.database
@@ -183,6 +184,10 @@ impl Worker {
             .map(|database| database.pool())
     }
 
+    /// Returns the underlying SQLx PostgreSQL pool.
+    ///
+    /// # Panics
+    /// Panics if the worker was configured with a non-SQLx database driver.
     #[cfg(feature = "driver-sqlx")]
     pub fn pg_pool(&self) -> &sqlx::PgPool {
         self.try_pg_pool()

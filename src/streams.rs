@@ -155,6 +155,7 @@ async fn job_signal_stream_internal(
         enum NextSignal {
             Source(StreamSource),
             InternalClosed,
+            PgListenerClosed,
             Shutdown,
         }
 
@@ -169,7 +170,17 @@ async fn job_signal_stream_internal(
                 futures::select_biased! {
                     _ = shutdown => NextSignal::Shutdown,
                     _ = interval => NextSignal::Source(StreamSource::Polling),
-                    _ = pg_listener => NextSignal::Source(StreamSource::PgListener),
+                    res = pg_listener => match res {
+                        Some(Ok(_)) => NextSignal::Source(StreamSource::PgListener),
+                        Some(Err(error)) => {
+                            warn!(?error, "PostgreSQL notification listener failed; falling back to polling");
+                            NextSignal::PgListenerClosed
+                        }
+                        None => {
+                            warn!("PostgreSQL notification listener closed; falling back to polling");
+                            NextSignal::PgListenerClosed
+                        }
+                    },
                     res = internal => {
                         if res.is_ok() {
                             NextSignal::Source(StreamSource::Internal)
@@ -206,7 +217,17 @@ async fn job_signal_stream_internal(
                 futures::select_biased! {
                     _ = shutdown => NextSignal::Shutdown,
                     _ = interval => NextSignal::Source(StreamSource::Polling),
-                    _ = pg_listener => NextSignal::Source(StreamSource::PgListener),
+                    res = pg_listener => match res {
+                        Some(Ok(_)) => NextSignal::Source(StreamSource::PgListener),
+                        Some(Err(error)) => {
+                            warn!(?error, "PostgreSQL notification listener failed; falling back to polling");
+                            NextSignal::PgListenerClosed
+                        }
+                        None => {
+                            warn!("PostgreSQL notification listener closed; falling back to polling");
+                            NextSignal::PgListenerClosed
+                        }
+                    },
                 }
             } else {
                 let interval = f.interval.tick().fuse();
@@ -228,6 +249,12 @@ async fn job_signal_stream_internal(
             NextSignal::InternalClosed => {
                 warn!("Job signal stream internal channel closed");
                 None
+            }
+            NextSignal::PgListenerClosed => {
+                f.pg_listener = None;
+                let source = StreamSource::Polling;
+                f.yield_n = Some((NonZeroUsize::new(f.concurrency).unwrap(), source));
+                Some((source, f))
             }
             NextSignal::Shutdown => None,
         }

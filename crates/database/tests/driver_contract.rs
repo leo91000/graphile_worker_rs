@@ -191,6 +191,16 @@ async fn database_wrapper_delegates_to_inner_driver() {
             .unwrap(),
         1
     );
+    assert_eq!(
+        database
+            .fetch_optional("select value", DbParams::new())
+            .await
+            .unwrap()
+            .expect("one row")
+            .try_get::<i32>("value")
+            .unwrap(),
+        1
+    );
     assert!(database.listen("events").await.unwrap().is_none());
     assert_eq!(
         database.execute("select 1", DbParams::new()).await.unwrap(),
@@ -312,6 +322,16 @@ async fn exercise_executor(executor: &impl DbExecutor) {
         .unwrap()
         .expect("one row");
     assert_eq!(fetched.try_get::<i32>("value").unwrap(), 123);
+
+    let first = executor
+        .fetch_optional(
+            "select value::int4 from unnest(array[1, 2]) as values(value)",
+            DbParams::new(),
+        )
+        .await
+        .unwrap()
+        .expect("one row");
+    assert_eq!(first.try_get::<i32>("value").unwrap(), 1);
 
     let none = executor
         .fetch_optional("select 123::int4 as value where false", DbParams::new())

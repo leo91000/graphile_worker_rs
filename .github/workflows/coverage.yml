@@ -32,14 +32,32 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin
-      - name: Run cargo-tarpaulin
-        run: cargo tarpaulin --verbose --out Xml --skip-clean --workspace --features driver-tokio-postgres --timeout 300 -- --test-threads=1
+      - name: Run cargo-tarpaulin with SQLx
+        run: |
+          cargo tarpaulin --verbose --out Xml --skip-clean --workspace --timeout 300 -- --test-threads=1
+          mv cobertura.xml cobertura-sqlx.xml
         env:
           DATABASE_URL: postgres://testuser:testpassword@localhost:5432/testdb
-      - name: Upload to Codecov
+      - name: Run cargo-tarpaulin with tokio-postgres
+        run: |
+          cargo tarpaulin --verbose --out Xml --skip-clean --workspace --no-default-features --features driver-tokio-postgres --timeout 300 -- --test-threads=1
+          mv cobertura.xml cobertura-tokio-postgres.xml
+        env:
+          DATABASE_URL: postgres://testuser:testpassword@localhost:5432/testdb
+      - name: Upload SQLx coverage to Codecov
         uses: codecov/codecov-action@v6
         with:
-          file: ./cobertura.xml
+          file: ./cobertura-sqlx.xml
+          flags: sqlx
+          fail_ci_if_error: true
+          verbose: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload tokio-postgres coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          file: ./cobertura-tokio-postgres.xml
+          flags: tokio-postgres
           fail_ci_if_error: true
           verbose: true
         env:

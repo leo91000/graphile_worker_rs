@@ -229,7 +229,7 @@ fn missing_field<T>(field: &str) -> T {
     panic!("UninitializedField(\"{field}\")")
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "driver-sqlx"))]
 mod tests {
     use super::*;
     use graphile_worker_extensions::Extensions;

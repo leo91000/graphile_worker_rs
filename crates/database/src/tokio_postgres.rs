@@ -1,10 +1,10 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
 
 use chrono::{DateTime, Utc};
 use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
 use futures::StreamExt;
 use serde_json::Value;
+use tokio::sync::Mutex;
 use tokio_postgres::types::{ToSql, Type};
 use tokio_postgres::{AsyncMessage, NoTls, Row};
 
@@ -267,24 +267,6 @@ pub struct TokioPostgresTransaction {
     client: Mutex<Option<deadpool_postgres::Client>>,
 }
 
-impl TokioPostgresTransaction {
-    fn take_client(&self) -> Result<deadpool_postgres::Client, DbError> {
-        self.client
-            .lock()
-            .map_err(|_| DbError::new("transaction mutex was poisoned"))?
-            .take()
-            .ok_or_else(|| DbError::new("transaction is already in use or has been committed"))
-    }
-
-    fn put_client(&self, client: deadpool_postgres::Client) -> Result<(), DbError> {
-        *self
-            .client
-            .lock()
-            .map_err(|_| DbError::new("transaction mutex was poisoned"))? = Some(client);
-        Ok(())
-    }
-}
-
 impl DbExecutor for TokioPostgresTransaction {
     fn execute<'a>(
         &'a self,
@@ -292,12 +274,13 @@ impl DbExecutor for TokioPostgresTransaction {
         params: DbParams,
     ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
         Box::pin(async move {
-            let client = self.take_client()?;
+            let mut guard = self.client.lock().await;
+            let client = guard
+                .as_mut()
+                .ok_or_else(|| DbError::new("transaction has already been committed"))?;
             let params = boxed_params(params);
             let refs = param_refs(&params);
-            let result = client.execute(sql, &refs).await.map_err(Into::into);
-            self.put_client(client)?;
-            result
+            client.execute(sql, &refs).await.map_err(Into::into)
         })
     }
 
@@ -307,12 +290,14 @@ impl DbExecutor for TokioPostgresTransaction {
         params: DbParams,
     ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
         Box::pin(async move {
-            let client = self.take_client()?;
+            let mut guard = self.client.lock().await;
+            let client = guard
+                .as_mut()
+                .ok_or_else(|| DbError::new("transaction has already been committed"))?;
             let params = boxed_params(params);
             let refs = param_refs(&params);
-            let rows = client.query(sql, &refs).await;
-            self.put_client(client)?;
-            rows?.into_iter().map(tokio_row_to_db_row).collect()
+            let rows = client.query(sql, &refs).await?;
+            rows.into_iter().map(tokio_row_to_db_row).collect()
         })
     }
 }
@@ -320,18 +305,20 @@ impl DbExecutor for TokioPostgresTransaction {
 impl TransactionDriver for TokioPostgresTransaction {
     fn commit(self: Box<Self>) -> crate::BoxFuture<'static, Result<(), DbError>> {
         Box::pin(async move {
-            let client = self.take_client()?;
-            client.batch_execute("COMMIT").await.map_err(Into::into)
+            let mut guard = self.client.lock().await;
+            let client = guard
+                .as_mut()
+                .ok_or_else(|| DbError::new("transaction has already been committed"))?;
+            client.batch_execute("COMMIT").await?;
+            guard.take();
+            Ok(())
         })
     }
 }
 
 impl Drop for TokioPostgresTransaction {
     fn drop(&mut self) {
-        let Ok(mut client) = self.client.lock() else {
-            return;
-        };
-        let Some(client) = client.take() else {
+        let Some(client) = self.client.get_mut().take() else {
             return;
         };
         drop(tokio::spawn(async move {

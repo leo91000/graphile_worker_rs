@@ -1,25 +1,22 @@
-use graphile_worker_database::{BoxFuture, DbError, DbExecutor, DbParams, DbTransaction};
+use graphile_worker_database::{DbError, DbExecutor, DbParams, DbTransaction};
 
+#[allow(async_fn_in_trait)]
 pub trait MigrationExecutor {
-    fn execute_statement<'a>(&'a mut self, stmt: &'a str) -> BoxFuture<'a, Result<(), DbError>>;
+    async fn execute_statement(&mut self, stmt: &str) -> Result<(), DbError>;
 }
 
 impl MigrationExecutor for DbTransaction {
-    fn execute_statement<'a>(&'a mut self, stmt: &'a str) -> BoxFuture<'a, Result<(), DbError>> {
-        Box::pin(async move {
-            self.execute(stmt, DbParams::new()).await?;
-            Ok(())
-        })
+    async fn execute_statement(&mut self, stmt: &str) -> Result<(), DbError> {
+        self.execute(stmt, DbParams::new()).await?;
+        Ok(())
     }
 }
 
 #[cfg(feature = "driver-sqlx")]
 impl MigrationExecutor for sqlx::Transaction<'_, sqlx::Postgres> {
-    fn execute_statement<'a>(&'a mut self, stmt: &'a str) -> BoxFuture<'a, Result<(), DbError>> {
-        Box::pin(async move {
-            sqlx::query(stmt).execute(self.as_mut()).await?;
-            Ok(())
-        })
+    async fn execute_statement(&mut self, stmt: &str) -> Result<(), DbError> {
+        sqlx::query(stmt).execute(self.as_mut()).await?;
+        Ok(())
     }
 }
 

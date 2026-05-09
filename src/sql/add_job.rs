@@ -143,6 +143,19 @@ fn build_batch_specs_json<'a>(
     serde_json::to_value(&db_specs)
 }
 
+fn add_jobs_sql(escaped_schema: &str) -> String {
+    formatdoc!(
+        r#"
+            SELECT * FROM {escaped_schema}.add_jobs(
+                array(
+                    SELECT json_populate_recordset(null::{escaped_schema}.job_spec, $1::json)
+                ),
+                $2::boolean
+            );
+        "#
+    )
+}
+
 #[cfg(feature = "driver-sqlx")]
 async fn add_jobs_sqlx<'a>(
     pool: &sqlx::PgPool,
@@ -152,16 +165,7 @@ async fn add_jobs_sqlx<'a>(
     job_key_preserve_run_at: bool,
     default_run_at: Option<DateTime<Utc>>,
 ) -> Result<Vec<Job>, GraphileWorkerError> {
-    let sql = formatdoc!(
-        r#"
-            SELECT * FROM {escaped_schema}.add_jobs(
-                array(
-                    SELECT json_populate_recordset(null::{escaped_schema}.job_spec, $1::json)
-                ),
-                $2::boolean
-            );
-        "#
-    );
+    let sql = add_jobs_sql(escaped_schema);
 
     let specs_json = build_batch_specs_json(jobs, default_run_at)?;
     let db_jobs: Vec<graphile_worker_job::DbJob> = sqlx::query_as(&sql)
@@ -219,16 +223,7 @@ pub async fn add_jobs<'a>(
         return Ok(result);
     }
 
-    let sql = formatdoc!(
-        r#"
-            SELECT * FROM {escaped_schema}.add_jobs(
-                array(
-                    SELECT json_populate_recordset(null::{escaped_schema}.job_spec, $1::json)
-                ),
-                $2::boolean
-            );
-        "#
-    );
+    let sql = add_jobs_sql(escaped_schema);
 
     let specs_json = build_batch_specs_json(jobs, default_run_at)?;
     let db_jobs: Vec<graphile_worker_job::DbJob> = executor
