@@ -24,7 +24,7 @@ tokio-postgres = { version = "0.7.17", optional = true, default-features = false
   "with-chrono-0_4",
   "with-serde_json-1",
 ] }
-tokio-stream = { version = "0.1.17", optional = true, features = ["sync"] }
+tokio-stream = { version = "0.1.18", optional = true, features = ["sync"] }
 
 [features]
 default = ["driver-sqlx"]
