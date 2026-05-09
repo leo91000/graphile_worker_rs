@@ -8,8 +8,8 @@ homepage = "https://docs.rs/graphile_worker"
 documentation = "https://docs.rs/graphile_worker"
 repository = "https://github.com/leo91000/graphile_worker_rs"
 readme = "README.md"
-keywords = []
-categories = []
+keywords = ["jobs", "queue", "postgres", "worker"]
+categories = ["asynchronous", "database"]
 
 [workspace]
 members = ["crates/*"]
@@ -40,6 +40,7 @@ syn = "2.0.117"
 quote = "1.0.45"
 indoc = "2.0.7"
 derive_builder = "0.20.2"
+url = "2.5.4"
 
 [features]
 default = ["runtime-tokio", "tls-rustls", "driver-sqlx"]
@@ -91,6 +92,7 @@ driver-sqlx = [
   "sqlx",
 ]
 driver-tokio-postgres = [
+  "runtime-tokio",
   "graphile_worker_database/driver-tokio-postgres",
   "graphile_worker_crontab_runner/driver-tokio-postgres",
   "graphile_worker_migrations/driver-tokio-postgres",
@@ -148,6 +150,7 @@ tokio = { version = "1.52.3", features = ["io-util", "macros", "net", "rt-multi-
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 uuid = { version = "1.23.1", features = ["v7"] }
 criterion = { version = "0.8.2", features = ["async_tokio"] }
+url.workspace = true
 
 [[bench]]
 name = "job_operations"
@@ -164,3 +167,39 @@ harness = false
 [[bench]]
 name = "failure"
 harness = false
+
+[[example]]
+name = "app_state"
+required-features = ["driver-sqlx"]
+
+[[example]]
+name = "batch_add_jobs"
+required-features = ["driver-sqlx"]
+
+[[example]]
+name = "context_helpers"
+required-features = ["driver-sqlx"]
+
+[[example]]
+name = "crontab"
+required-features = ["driver-sqlx"]
+
+[[example]]
+name = "hooks"
+required-features = ["driver-sqlx"]
+
+[[example]]
+name = "local_queue"
+required-features = ["driver-sqlx"]
+
+[[example]]
+name = "run_once"
+required-features = ["driver-sqlx"]
+
+[[example]]
+name = "sendable_worker"
+required-features = ["driver-sqlx"]
+
+[[example]]
+name = "simple"
+required-features = ["driver-sqlx"]

@@ -47,6 +47,7 @@ getset = { workspace = true }
 tracing = { workspace = true }
 once_cell = { workspace = true }
 futures = { workspace = true }
+indoc = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "sync"] }

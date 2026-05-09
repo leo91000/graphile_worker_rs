@@ -2,13 +2,13 @@
 name = "graphile_worker_database"
 version = "0.1.0"
 edition = "2021"
-license-file = "LICENSE.md"
+license = "MIT"
 description = "Database driver abstraction for graphile_worker"
 homepage = "https://docs.rs/graphile_worker"
 documentation = "https://docs.rs/graphile_worker"
 repository = "https://github.com/leo91000/graphile_worker_rs"
-keywords = []
-categories = []
+keywords = ["jobs", "queue", "postgres", "worker"]
+categories = ["asynchronous", "database"]
 readme = "README.md"
 
 [dependencies]
@@ -18,7 +18,7 @@ futures.workspace = true
 serde_json.workspace = true
 sqlx = { workspace = true, optional = true }
 thiserror.workspace = true
-tokio = { workspace = true, optional = true, features = ["rt"] }
+tokio = { workspace = true, optional = true, features = ["rt", "sync"] }
 tokio-postgres = { version = "0.7.17", optional = true, default-features = false, features = [
   "array-impls",
   "with-chrono-0_4",
@@ -32,7 +32,7 @@ driver-sqlx = ["sqlx"]
 driver-tokio-postgres = [
   "deadpool-postgres",
   "tokio",
-  "tokio-postgres",
+  "tokio-postgres/runtime",
   "tokio-stream",
 ]
 runtime-tokio = [

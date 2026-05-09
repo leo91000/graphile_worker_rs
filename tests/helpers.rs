@@ -325,18 +325,12 @@ fn known_crontab_from_sqlx_row(row: PgRow) -> KnownCrontab {
 }
 
 fn test_database_url(db_url: &str, db_name: &str) -> String {
-    let (base_url, query_string) = db_url
-        .split_once('?')
-        .map(|(base_url, query_string)| (base_url, Some(query_string)))
-        .unwrap_or((db_url, None));
-    let Some((server_url, _database_name)) = base_url.rsplit_once('/') else {
+    let Ok(mut url) = url::Url::parse(db_url) else {
         return db_url.to_string();
     };
 
-    match query_string {
-        Some(query_string) => format!("{server_url}/{db_name}?{query_string}"),
-        None => format!("{server_url}/{db_name}"),
-    }
+    url.set_path(db_name);
+    url.to_string()
 }
 
 fn create_graphile_database(test_pool: PgPool, test_database_url: &str) -> Database {
@@ -355,6 +349,12 @@ fn create_graphile_database(test_pool: PgPool, test_database_url: &str) -> Datab
     {
         let _ = test_database_url;
         test_pool.into()
+    }
+
+    #[cfg(all(not(feature = "driver-tokio-postgres"), not(feature = "driver-sqlx")))]
+    {
+        let _ = (test_pool, test_database_url);
+        compile_error!("create_graphile_database requires a PostgreSQL driver feature");
     }
 }
 

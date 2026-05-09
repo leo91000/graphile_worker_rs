@@ -232,8 +232,8 @@ pub trait DbExecutor: Send + Sync {
         params: DbParams,
     ) -> BoxFuture<'a, Result<Option<DbRow>, DbError>> {
         Box::pin(async move {
-            let mut rows = self.fetch_all(sql, params).await?;
-            Ok(rows.pop())
+            let rows = self.fetch_all(sql, params).await?;
+            Ok(rows.into_iter().next())
         })
     }
 

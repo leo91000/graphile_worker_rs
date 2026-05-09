@@ -388,21 +388,28 @@ impl WorkerOptions {
         self
     }
 
-    /// Sets an existing PostgreSQL connection pool for the worker to use.
+    /// Sets an existing PostgreSQL database connection for the worker to use.
     ///
-    /// Allows reusing an existing connection pool or configuring
-    /// the pool with custom settings before passing it to the worker.
+    /// Allows reusing an existing driver-specific pool or configuring the
+    /// database connection with custom settings before passing it to the worker.
     ///
     /// # Arguments
-    /// * `value` - The PostgreSQL connection pool
+    /// * `value` - The PostgreSQL database connection
     ///
     /// # Note
-    /// If both `pg_pool` and `database_url` are provided, `pg_pool` takes precedence.
+    /// If both `database` and `database_url` are provided, `database` takes precedence.
     pub fn database(mut self, value: impl Into<Database>) -> Self {
         self.database = Some(value.into());
         self
     }
 
+    /// Sets an existing SQLx PostgreSQL pool for the worker to use.
+    ///
+    /// This is a SQLx-only convenience wrapper over [`Self::database`]. Prefer
+    /// [`Self::database`] when passing a driver-agnostic database connection.
+    ///
+    /// # Note
+    /// If both `pg_pool` and `database_url` are provided, `pg_pool` takes precedence.
     #[cfg(feature = "driver-sqlx")]
     pub fn pg_pool(mut self, value: sqlx::PgPool) -> Self {
         self.database = Some(value.into());
@@ -418,7 +425,7 @@ impl WorkerOptions {
     /// * `value` - The PostgreSQL connection URL (e.g., "postgres://user:password@localhost/mydb")
     ///
     /// # Note
-    /// Either `pg_pool` or `database_url` must be provided before calling `init()`.
+    /// Either `database`, `pg_pool`, or `database_url` must be provided before calling `init()`.
     pub fn database_url(mut self, value: &str) -> Self {
         self.database_url = Some(value.into());
         self
