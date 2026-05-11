@@ -26,6 +26,7 @@ use graphile_worker_lifecycle_hooks::{
 };
 use graphile_worker_runtime as runtime;
 use graphile_worker_shutdown_signal::ShutdownSignal;
+use graphile_worker_task_handler::TaskHandlerOutcome;
 use thiserror::Error;
 use tracing::{debug, error, info, trace, warn, Instrument, Span};
 
@@ -37,8 +38,7 @@ use crate::{sql::fail_job::fail_job, streams::StreamSource};
 /// Type alias for task handler functions.
 ///
 /// A task handler is a closure that takes a `WorkerContext` and returns a future
-/// that resolves to a `Result<(), String>`. The string in the error case represents
-/// the error message if the task fails.
+/// that resolves to a `TaskHandlerOutcome`.
 pub type WorkerFn = graphile_worker_task_handler::TaskHandlerFn;
 
 /// The main worker struct that processes jobs from the queue.
@@ -853,9 +853,36 @@ enum RunJobError {
     /// The task handler returned an error string
     #[error("Task returned the following error : {0}")]
     TaskError(String),
+    /// The batch task handler returned partial failures with a replacement payload
+    #[error("Task returned the following error : {message}")]
+    TaskErrorWithReplacement {
+        message: String,
+        replacement_payload: serde_json::Value,
+    },
     /// The task was aborted due to a shutdown signal
     #[error("Task was aborted by shutdown signal")]
     TaskAborted,
+}
+
+impl RunJobError {
+    fn persisted_error(&self) -> String {
+        match self {
+            RunJobError::TaskErrorWithReplacement { message, .. } => {
+                format!("TaskError({message:?})")
+            }
+            _ => format!("{self:?}"),
+        }
+    }
+
+    fn replacement_payload(&self) -> Option<&serde_json::Value> {
+        match self {
+            RunJobError::TaskErrorWithReplacement {
+                replacement_payload,
+                ..
+            } => Some(replacement_payload),
+            _ => None,
+        }
+    }
 }
 
 fn panic_payload_to_string(payload: Box<dyn std::any::Any + Send>) -> String {
@@ -992,8 +1019,18 @@ async fn run_job(
     futures::select_biased! {
         res = job_task => {
             match res {
-                Ok(Err(e)) => Err(RunJobError::TaskError(e)),
-                Ok(Ok(())) => Ok(()),
+                Ok(TaskHandlerOutcome::Complete) => Ok(()),
+                Ok(TaskHandlerOutcome::Failed {
+                    error,
+                    replacement_payload: Some(replacement_payload),
+                }) => Err(RunJobError::TaskErrorWithReplacement {
+                    message: error,
+                    replacement_payload,
+                }),
+                Ok(TaskHandlerOutcome::Failed {
+                    error,
+                    replacement_payload: None,
+                }) => Err(RunJobError::TaskError(error)),
                 Err(e) => Err(RunJobError::TaskPanic(panic_payload_to_string(e))),
             }
         }
@@ -1099,10 +1136,54 @@ async fn release_job(
             }
         }
         Err(e) => {
-            let error_str = format!("{e:?}");
+            let error_str = e.persisted_error();
             let will_retry = job.attempts() < job.max_attempts();
+            let replacement_payload = e.replacement_payload().cloned();
 
             if let Some(batcher) = &worker.failure_batcher {
+                if let Some(replacement_payload) = replacement_payload.clone() {
+                    if let Err(e) = fail_job(
+                        &worker.database,
+                        &job,
+                        &worker.escaped_schema,
+                        &worker.worker_id,
+                        &error_str,
+                        Some(replacement_payload),
+                    )
+                    .await
+                    {
+                        error!(error = ?e, job_id = job.id(), "Failed to persist failed job");
+                        return Err(ReleaseJobError {
+                            job_id: *job.id(),
+                            source: e,
+                        });
+                    }
+
+                    if !worker.hooks.is_empty() {
+                        if will_retry {
+                            worker
+                                .hooks
+                                .emit(JobFailContext {
+                                    job,
+                                    worker_id: worker.worker_id.clone(),
+                                    error: error_str,
+                                    will_retry,
+                                })
+                                .await;
+                        } else {
+                            worker
+                                .hooks
+                                .emit(JobPermanentlyFailContext {
+                                    job,
+                                    worker_id: worker.worker_id.clone(),
+                                    error: error_str,
+                                })
+                                .await;
+                        }
+                    }
+                    return Ok(());
+                }
+
                 if !will_retry {
                     error!(
                         error = ?e,
@@ -1153,7 +1234,7 @@ async fn release_job(
                     &worker.escaped_schema,
                     &worker.worker_id,
                     &error_str,
-                    None,
+                    replacement_payload,
                 )
                 .await
                 {

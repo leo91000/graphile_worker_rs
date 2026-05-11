@@ -25,7 +25,6 @@ Key highlights:
 This port is mostly compatible with the original Graphile Worker, meaning you can run it side by side with the Node.js version.
 The key differences are:
 
-- No support for batch job processing yet (processing array payloads within a single job). Note: batch job *scheduling* (adding multiple jobs at once) is supported - see "Batch job scheduling" section.
 - In the Node.js version, each process has its own worker_id. In the Rust version, there is only one worker_id, and jobs are processed in your async runtime thread
 
 ## Installation
@@ -251,6 +250,58 @@ utils.add_raw_jobs(&[
         spec: JobSpec::default(),
     },
 ]).await?;
+```
+
+#### Option D: Batch job processing
+
+Batch jobs store a JSON array in a single job. Batch handlers can return
+per-item results, allowing the worker to remove successful items and retry only
+the failed items.
+
+```rust,ignore
+use graphile_worker::{
+    BatchTaskHandler, IntoBatchTaskHandlerResult, JobKeyMode, JobSpecBuilder, WorkerContext,
+};
+use serde::{Deserialize, Serialize};
+
+#[derive(Deserialize, Serialize)]
+struct PendingNotification {
+    user_id: String,
+    message_id: String,
+}
+
+impl BatchTaskHandler for PendingNotification {
+    const IDENTIFIER: &'static str = "send_notifications";
+
+    async fn run_batch(
+        items: Vec<Self>,
+        _ctx: WorkerContext,
+    ) -> impl IntoBatchTaskHandlerResult {
+        futures::future::join_all(items.into_iter().map(|item| async move {
+            send_notification(item).await.map_err(|error| error.to_string())
+        }))
+        .await
+    }
+}
+
+let worker = WorkerOptions::default()
+    .define_batch_job::<PendingNotification>()
+    // ... other configuration
+    .init()
+    .await?;
+
+worker.create_utils()
+    .add_batch_job(
+        vec![
+            PendingNotification { user_id: "1".into(), message_id: "a".into() },
+            PendingNotification { user_id: "1".into(), message_id: "b".into() },
+        ],
+        JobSpecBuilder::new()
+            .job_key("notifications:1")
+            .job_key_mode(JobKeyMode::PreserveRunAt)
+            .build(),
+    )
+    .await?;
 ```
 
 ## Advanced Features
@@ -596,6 +647,7 @@ utils.cleanup(&[
   - Job prioritization
   - Crontab-like recurring tasks
   - Task deduplication via `job_key`
+  - Batch job processing with partial retry support
 - **Lifecycle hooks**: Observe and intercept job events for logging, metrics, and validation
 - **Type safety**: End-to-end type checking of job payloads
 - **Minimal overhead**: Direct serialization of task payloads
