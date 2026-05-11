@@ -1,0 +1,94 @@
+name: Release binaries
+permissions:
+  contents: write
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to upload binaries to
+        required: true
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+jobs:
+  build:
+    name: Build ${{ matrix.asset_name }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - asset_name: graphile-worker-x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: graphile-worker
+            archive: tar.gz
+          - asset_name: graphile-worker-aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            binary: graphile-worker
+            archive: tar.gz
+          - asset_name: graphile-worker-x86_64-apple-darwin
+            os: macos-13
+            target: x86_64-apple-darwin
+            binary: graphile-worker
+            archive: tar.gz
+          - asset_name: graphile-worker-aarch64-apple-darwin
+            os: macos-14
+            target: aarch64-apple-darwin
+            binary: graphile-worker
+            archive: tar.gz
+          - asset_name: graphile-worker-x86_64-pc-windows-msvc
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: graphile-worker.exe
+            archive: zip
+    runs-on: ${{ matrix.os }}
+    env:
+      CARGO_INCREMENTAL: 0
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-binaries-${{ matrix.target }}
+      - name: Build binary
+        run: cargo build --release --package graphile_worker_cli --bin graphile-worker --target ${{ matrix.target }}
+      - name: Package Unix binary
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "dist/${{ matrix.asset_name }}"
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" "dist/${{ matrix.asset_name }}/"
+          cp LICENSE.md "dist/${{ matrix.asset_name }}/"
+          tar -C dist -czf "${{ matrix.asset_name }}.tar.gz" "${{ matrix.asset_name }}"
+      - name: Package Windows binary
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "dist/${{ matrix.asset_name }}" | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.binary }}" "dist/${{ matrix.asset_name }}/"
+          Copy-Item "LICENSE.md" "dist/${{ matrix.asset_name }}/"
+          Compress-Archive -Path "dist/${{ matrix.asset_name }}/*" -DestinationPath "${{ matrix.asset_name }}.zip"
+      - name: Upload binary to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.archive }}" == "zip" ]]; then
+            gh release upload "$RELEASE_TAG" "${{ matrix.asset_name }}.zip" --clobber
+          else
+            gh release upload "$RELEASE_TAG" "${{ matrix.asset_name }}.tar.gz" --clobber
+          fi
