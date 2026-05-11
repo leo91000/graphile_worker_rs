@@ -1194,28 +1194,14 @@ async fn release_job(
                     .await
                     {
                         error!(error = ?e, job_id = job.id(), "Failed to persist failed job");
-                        return Err(ReleaseJobError {
-                            job_id: *job.id(),
-                            source: e,
-                        });
+                        let job_id = *job.id();
+                        return Err(ReleaseJobError { job_id, source: e });
                     }
 
                     if !will_retry {
-                        error!(
-                            error = ?e,
-                            task_id = job.task_id(),
-                            payload = ?job.payload(),
-                            job_id = job.id(),
-                            "Job max attempts reached"
-                        );
+                        error!(error = ?e, task_id = job.task_id(), payload = ?job.payload(), job_id = job.id(), "Job max attempts reached");
                     } else {
-                        warn!(
-                            error = ?e,
-                            task_id = job.task_id(),
-                            payload = ?job.payload(),
-                            job_id = job.id(),
-                            "Failed task"
-                        );
+                        warn!(error = ?e, task_id = job.task_id(), payload = ?job.payload(), job_id = job.id(), "Failed task");
                     }
 
                     if !worker.hooks.is_empty() {
