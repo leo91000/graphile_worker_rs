@@ -947,6 +947,8 @@ mod tests {
 
         assert!(debug.contains("[redacted]"));
         assert!(!debug.contains("token"));
+        assert_eq!(format!("{}", Redacted::new(payload.clone())), "[redacted]");
+        assert_eq!(error.persisted_error(), "TaskError(\"failed\")");
         assert_eq!(error.replacement_payload(), Some(&payload));
     }
 
