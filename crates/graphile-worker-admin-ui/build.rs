@@ -4,6 +4,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+const ADMIN_UI_BUILD_HINT: &str = "Admin UI asset builds require npm, wasm-bindgen, and the wasm32-unknown-unknown Rust target. Install the Rust tooling with `rustup target add wasm32-unknown-unknown` and `cargo install wasm-bindgen-cli --version 0.2.121 --locked`.";
+
 fn main() {
     let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
@@ -131,13 +133,17 @@ fn build_wasm_client(client_dir: &Path, out_dir: &Path) {
         .arg(&target_dir);
     clear_clippy_env(&mut cargo);
 
-    run(&mut cargo, "build admin UI Leptos WASM client");
+    run_with_hint(
+        &mut cargo,
+        "build admin UI Leptos WASM client",
+        Some(ADMIN_UI_BUILD_HINT),
+    );
 
     let wasm = target_dir
         .join("wasm32-unknown-unknown")
         .join("release")
         .join("graphile_worker_admin_ui_client.wasm");
-    run(
+    run_with_hint(
         Command::new("wasm-bindgen")
             .arg(&wasm)
             .arg("--target")
@@ -147,6 +153,7 @@ fn build_wasm_client(client_dir: &Path, out_dir: &Path) {
             .arg("--out-name")
             .arg("admin_ui"),
         "run wasm-bindgen for admin UI client",
+        Some(ADMIN_UI_BUILD_HINT),
     );
 
     let _ = fs::remove_file(out_dir.join("admin_ui.d.ts"));
@@ -195,23 +202,28 @@ fn npm_bin(npm_dir: &Path, bin: &str) -> PathBuf {
 }
 
 fn run(command: &mut Command, description: &str) {
+    run_with_hint(command, description, None);
+}
+
+fn run_with_hint(command: &mut Command, description: &str, hint: Option<&str>) {
     let program = command.get_program().to_owned();
     let args = command
         .get_args()
         .map(OsStr::to_string_lossy)
         .collect::<Vec<_>>()
         .join(" ");
+    let hint = hint.map(|hint| format!("\n{hint}")).unwrap_or_default();
 
     let status = command.status().unwrap_or_else(|error| {
         panic!(
-            "failed to {description}: could not run `{}`: {error}",
+            "failed to {description}: could not run `{}`: {error}{hint}",
             program.to_string_lossy()
         )
     });
 
     if !status.success() {
         panic!(
-            "failed to {description}: `{}` exited with status {status}",
+            "failed to {description}: `{}` exited with status {status}{hint}",
             format!("{} {args}", program.to_string_lossy()).trim()
         );
     }
