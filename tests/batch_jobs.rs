@@ -1,11 +1,51 @@
 use graphile_worker::{
-    BatchTaskHandler, IntoBatchTaskHandlerResult, JobSpec, WorkerContext, WorkerOptions,
+    BatchTaskHandler, HookRegistry, IntoBatchTaskHandlerResult, JobFail, JobPermanentlyFail,
+    JobSpec, Plugin, WorkerContext, WorkerOptions,
 };
 use helpers::{with_test_db, StaticCounter};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 
 mod helpers;
+
+#[derive(Clone, Default)]
+struct BatchFailureHookPlugin {
+    fail_count: Arc<AtomicU32>,
+    permanent_count: Arc<AtomicU32>,
+}
+
+impl BatchFailureHookPlugin {
+    fn fail_count(&self) -> u32 {
+        self.fail_count.load(Ordering::SeqCst)
+    }
+
+    fn permanent_count(&self) -> u32 {
+        self.permanent_count.load(Ordering::SeqCst)
+    }
+}
+
+impl Plugin for BatchFailureHookPlugin {
+    fn register(self, hooks: &mut HookRegistry) {
+        let fail_count = self.fail_count.clone();
+        hooks.on(JobFail, move |_ctx| {
+            let fail_count = fail_count.clone();
+            async move {
+                fail_count.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+
+        let permanent_count = self.permanent_count.clone();
+        hooks.on(JobPermanentlyFail, move |_ctx| {
+            let permanent_count = permanent_count.clone();
+            async move {
+                permanent_count.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+    }
+}
 
 #[tokio::test]
 async fn runs_typed_batch_job_to_completion() {
@@ -169,6 +209,82 @@ async fn partial_batch_failure_retries_only_failed_items() {
             .is_some_and(|error| error.contains("2 batch item(s) failed")));
         assert_eq!(jobs[0].locked_at, None);
         assert_eq!(jobs[0].locked_by, None);
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn partial_batch_failure_preserves_payload_with_failure_batcher() {
+    #[derive(Serialize, Deserialize)]
+    struct BatchItem {
+        id: i32,
+        fail: bool,
+    }
+
+    impl BatchTaskHandler for BatchItem {
+        const IDENTIFIER: &'static str = "batched_partial_failure_batcher_item";
+
+        async fn run_batch(
+            items: Vec<Self>,
+            _ctx: WorkerContext,
+        ) -> impl IntoBatchTaskHandlerResult {
+            items
+                .into_iter()
+                .map(|item| {
+                    if item.fail {
+                        Err(format!("failed {}", item.id))
+                    } else {
+                        Ok(())
+                    }
+                })
+                .collect::<Vec<_>>()
+        }
+    }
+
+    with_test_db(|test_db| async move {
+        let plugin = BatchFailureHookPlugin::default();
+        let hook_counts = plugin.clone();
+        let worker = test_db
+            .create_worker_options()
+            .fail_job_batch_delay(Duration::from_millis(10))
+            .add_plugin(plugin)
+            .define_batch_job::<BatchItem>()
+            .init()
+            .await
+            .expect("Failed to create worker");
+
+        worker
+            .create_utils()
+            .add_batch_job(
+                vec![
+                    BatchItem { id: 1, fail: false },
+                    BatchItem { id: 2, fail: true },
+                ],
+                JobSpec::default(),
+            )
+            .await
+            .expect("Failed to add retryable batch job");
+        worker
+            .create_utils()
+            .add_batch_job(
+                vec![BatchItem { id: 3, fail: true }],
+                JobSpec::builder().max_attempts(1).build(),
+            )
+            .await
+            .expect("Failed to add permanent batch job");
+
+        worker.run_once().await.expect("Failed to run worker");
+
+        assert_eq!(hook_counts.fail_count(), 1);
+        assert_eq!(hook_counts.permanent_count(), 1);
+
+        let jobs = test_db.get_jobs().await;
+        assert!(jobs.iter().any(|job| {
+            job.payload
+                == json!([
+                    { "id": 2, "fail": true }
+                ])
+        }));
     })
     .await;
 }
