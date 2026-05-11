@@ -761,7 +761,11 @@ fn ensure_write_allowed(state: &AppState) -> Result<(), ApiError> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-#[derive(Debug)]
+type Result<T, E = ApiError> = core::result::Result<T, E>;
+
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug, thiserror::Error)]
+#[error("{message}")]
 struct ApiError {
     status: StatusCode,
     message: String,
@@ -791,9 +795,10 @@ impl ApiError {
     }
 
     fn internal(error: impl fmt::Display) -> Self {
+        tracing::error!(error = %error, "admin UI request failed");
         Self {
             status: StatusCode::INTERNAL_SERVER_ERROR,
-            message: error.to_string(),
+            message: "internal server error".to_string(),
         }
     }
 }
@@ -1818,6 +1823,14 @@ mod tests {
 
         assert_eq!(error.status, StatusCode::NOT_FOUND);
         assert!(error.message.contains("42"));
+    }
+
+    #[test]
+    fn internal_errors_hide_error_details_from_clients() {
+        let error = ApiError::internal("database password leaked");
+
+        assert_eq!(error.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(error.message, "internal server error");
     }
 
     #[test]

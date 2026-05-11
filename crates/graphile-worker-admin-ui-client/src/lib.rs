@@ -1893,7 +1893,10 @@ mod wasm {
         NaiveDateTime::parse_from_str(value, format)
             .ok()
             .map(|datetime| {
-                let offset_minutes = js_sys::Date::new_0().get_timezone_offset() as i64;
+                let js_local = js_sys::Date::new(&JsValue::from_str(
+                    &datetime.format("%Y-%m-%dT%H:%M:%S").to_string(),
+                ));
+                let offset_minutes = js_local.get_timezone_offset() as i64;
                 DateTime::<Utc>::from_naive_utc_and_offset(
                     datetime + Duration::minutes(offset_minutes),
                     Utc,
