@@ -783,6 +783,13 @@ impl ApiError {
         }
     }
 
+    fn not_found(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::NOT_FOUND,
+            message: message.into(),
+        }
+    }
+
     fn internal(error: impl fmt::Display) -> Self {
         Self {
             status: StatusCode::INTERNAL_SERVER_ERROR,
@@ -1196,7 +1203,15 @@ async fn get_job(pool: &PgPool, escaped_schema: &str, id: i64) -> Result<ListedJ
         .build_query_as()
         .fetch_one(pool)
         .await
-        .map_err(Into::into)
+        .map_err(|error| job_lookup_error(id, error))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn job_lookup_error(id: i64, error: sqlx::Error) -> ApiError {
+    match error {
+        sqlx::Error::RowNotFound => ApiError::not_found(format!("job {id} not found")),
+        error => error.into(),
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1211,8 +1226,13 @@ fn apply_job_filters<'a>(query: &mut QueryBuilder<'a, Postgres>, args: &'a ListJ
         query.push_bind(queue);
     }
 
-    if let Some(search) = args.search.as_ref().filter(|value| !value.is_empty()) {
-        let pattern = format!("%{}%", search.trim());
+    if let Some(search) = args
+        .search
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let pattern = format!("%{search}%");
         query.push(" and (jobs.id::text ilike ");
         query.push_bind(pattern.clone());
         query.push(" or tasks.identifier ilike ");
@@ -1790,5 +1810,30 @@ mod tests {
 
         assert_eq!(error.status, StatusCode::BAD_REQUEST);
         assert!(error.message.contains("key"));
+    }
+
+    #[test]
+    fn job_lookup_error_maps_missing_job_to_not_found() {
+        let error = job_lookup_error(42, sqlx::Error::RowNotFound);
+
+        assert_eq!(error.status, StatusCode::NOT_FOUND);
+        assert!(error.message.contains("42"));
+    }
+
+    #[test]
+    fn job_filters_ignore_whitespace_only_search() {
+        let args = ListJobsParams {
+            state: JobState::All,
+            identifier: None,
+            queue: None,
+            search: Some("   ".to_string()),
+            limit: default_limit(),
+            offset: 0,
+        };
+        let mut query = QueryBuilder::<Postgres>::new("where true");
+
+        apply_job_filters(&mut query, &args);
+
+        assert_eq!(query.sql(), "where true");
     }
 }
