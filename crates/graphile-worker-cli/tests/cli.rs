@@ -50,6 +50,15 @@ fn assert_success(output: Output) -> String {
     String::from_utf8(output.stdout).expect("stdout should be UTF-8")
 }
 
+#[test]
+fn job_key_mode_requires_key() {
+    let output = command_output(&["add", "send_email", "--job-key-mode", "replace"]);
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be UTF-8");
+    assert!(stderr.contains("--key"), "stderr was:\n{stderr}");
+}
+
 #[tokio::test]
 async fn cli_manages_job_lifecycle_with_database_url_flag() {
     let Ok(source_url) = std::env::var("DATABASE_URL") else {

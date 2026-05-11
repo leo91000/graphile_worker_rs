@@ -24,6 +24,7 @@ graphile_worker = { path = "../..", version = "0.12.0", default-features = false
   "runtime-tokio",
   "tls-rustls",
 ] }
+indoc.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx = { workspace = true, features = ["runtime-tokio", "tls-rustls"] }

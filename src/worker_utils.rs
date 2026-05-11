@@ -569,11 +569,25 @@ impl WorkerUtils {
     /// identifier with [`WorkerOptions::define_batch_job`](crate::WorkerOptions::define_batch_job)
     /// so the worker can run the batch and retry only failed items after partial
     /// success.
+    #[tracing::instrument(
+        "add_batch_job",
+        skip_all,
+        fields(
+            messaging.system = "graphile-worker",
+            messaging.operation.name = "add_batch_job",
+            messaging.batch.message_count = tracing::field::Empty,
+            messaging.destination.name = tracing::field::Empty,
+            otel.name = tracing::field::Empty
+        )
+    )]
     pub async fn add_batch_job<T: BatchTaskHandler>(
         &self,
         payloads: Vec<T>,
         spec: JobSpec,
     ) -> Result<Job, GraphileWorkerError> {
+        let span = Span::current();
+        span.record("messaging.batch.message_count", payloads.len());
+
         if payloads.is_empty() {
             return Err(GraphileWorkerError::JobScheduleFailed(
                 "batch job payload must contain at least one item".to_string(),
@@ -581,6 +595,9 @@ impl WorkerUtils {
         }
 
         let identifier = T::IDENTIFIER;
+        span.record("otel.name", identifier);
+        span.record("messaging.destination.name", identifier);
+
         let mut payload = serde_json::to_value(payloads)?;
         if let Some(items) = payload.as_array_mut() {
             for item in items {

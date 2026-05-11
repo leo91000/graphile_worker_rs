@@ -32,7 +32,7 @@ jobs:
             binary: graphile-worker
             archive: tar.gz
           - asset_name: graphile-worker-x86_64-apple-darwin
-            os: macos-13
+            os: macos-15-intel
             target: x86_64-apple-darwin
             binary: graphile-worker
             archive: tar.gz
