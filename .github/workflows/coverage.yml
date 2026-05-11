@@ -38,7 +38,7 @@ jobs:
     env:
       CARGO_INCREMENTAL: 0
       DATABASE_URL: postgres://testuser:testpassword@localhost:5432/testdb
-      COVERAGE_IGNORE_REGEX: "crates/graphile-worker-admin-ui/src/lib\\.rs|crates/graphile-worker-cli/src/main\\.rs"
+      COVERAGE_IGNORE_REGEX: "crates/graphile-worker-admin-ui/src/(lib\\.rs|native/.*\\.rs)|crates/graphile-worker-cli/src/main\\.rs"
     services:
       postgres:
         image: postgres:18
