@@ -292,7 +292,13 @@ async fn test_before_job_run_skip() {
         )
         .await;
 
-        sleep(Duration::from_millis(200)).await;
+        let c = counters.clone();
+        wait_for_condition(
+            || c.job_complete.load(Ordering::SeqCst) >= 1,
+            5,
+            "Skipped job should have completed",
+        )
+        .await;
 
         assert_eq!(counters.before_job_run.load(Ordering::SeqCst), 1);
         assert_eq!(counters.skipped.load(Ordering::SeqCst), 1);
@@ -351,7 +357,13 @@ async fn test_before_job_run_fail() {
         )
         .await;
 
-        sleep(Duration::from_millis(200)).await;
+        let c = counters.clone();
+        wait_for_condition(
+            || c.job_fail.load(Ordering::SeqCst) >= 1,
+            5,
+            "Job fail hook should have been called",
+        )
+        .await;
 
         assert_eq!(counters.before_job_run.load(Ordering::SeqCst), 1);
         assert_eq!(counters.failed_by_hook.load(Ordering::SeqCst), 1);
