@@ -5,13 +5,22 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const ADMIN_UI_BUILD_HINT: &str = "Admin UI asset builds require npm, wasm-bindgen, and the wasm32-unknown-unknown Rust target. Install the Rust tooling with `rustup target add wasm32-unknown-unknown` and `cargo install wasm-bindgen-cli --version 0.2.121 --locked`.";
+const REBUILD_ASSETS_ENV: &str = "GRAPHILE_WORKER_ADMIN_UI_REBUILD";
+const UPDATE_PREBUILT_ASSETS_ENV: &str = "GRAPHILE_WORKER_ADMIN_UI_UPDATE_PREBUILT";
+const PREBUILT_ASSETS: &[&str] = &["admin.css", "admin.js", "admin_ui.js", "admin_ui_bg.wasm"];
 const CLIENT_MANIFEST_DIR: &str = graphile_worker_admin_ui_client::manifest_dir();
 
 fn main() {
     let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     let client_dir = PathBuf::from(CLIENT_MANIFEST_DIR);
+    let prebuilt_dir = manifest_dir.join("prebuilt");
 
+    rerun_if_env_changed(REBUILD_ASSETS_ENV);
+    rerun_if_env_changed(UPDATE_PREBUILT_ASSETS_ENV);
+    for asset in PREBUILT_ASSETS {
+        rerun_if_changed(&prebuilt_dir.join(asset));
+    }
     rerun_if_changed(&manifest_dir.join("assets/tailwind.css"));
     rerun_if_changed(&manifest_dir.join("tailwind.config.cjs"));
     rerun_if_changed(&manifest_dir.join("package.json"));
@@ -19,13 +28,67 @@ fn main() {
     rerun_if_changed(&client_dir.join("Cargo.toml"));
     rerun_if_changed(&client_dir.join("src/lib.rs"));
 
-    build_tailwind(&manifest_dir, &out_dir, &client_dir);
-    build_wasm_client(&client_dir, &out_dir);
-    write_bootstrap(&out_dir);
+    if should_rebuild_assets(&prebuilt_dir) {
+        build_tailwind(&manifest_dir, &out_dir, &client_dir);
+        build_wasm_client(&client_dir, &out_dir);
+        write_bootstrap(&out_dir);
+
+        if env_flag(UPDATE_PREBUILT_ASSETS_ENV) {
+            copy_assets(&out_dir, &prebuilt_dir, "update prebuilt admin UI asset");
+        }
+        return;
+    }
+
+    copy_assets(&prebuilt_dir, &out_dir, "copy prebuilt admin UI asset");
 }
 
 fn rerun_if_changed(path: &Path) {
     println!("cargo:rerun-if-changed={}", path.display());
+}
+
+fn rerun_if_env_changed(name: &str) {
+    println!("cargo:rerun-if-env-changed={name}");
+}
+
+fn should_rebuild_assets(prebuilt_dir: &Path) -> bool {
+    env_flag(REBUILD_ASSETS_ENV)
+        || env_flag(UPDATE_PREBUILT_ASSETS_ENV)
+        || !prebuilt_assets_available(prebuilt_dir)
+}
+
+fn env_flag(name: &str) -> bool {
+    env::var(name)
+        .map(|value| {
+            matches!(
+                value.as_str(),
+                "1" | "true" | "TRUE" | "yes" | "YES" | "on" | "ON"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn prebuilt_assets_available(prebuilt_dir: &Path) -> bool {
+    PREBUILT_ASSETS
+        .iter()
+        .all(|asset| prebuilt_dir.join(asset).is_file())
+}
+
+fn copy_assets(from_dir: &Path, to_dir: &Path, description: &str) {
+    fs::create_dir_all(to_dir).unwrap_or_else(|error| {
+        panic!(
+            "failed to create admin UI asset directory `{}`: {error}",
+            to_dir.display()
+        )
+    });
+
+    for asset in PREBUILT_ASSETS {
+        fs::copy(from_dir.join(asset), to_dir.join(asset)).unwrap_or_else(|error| {
+            panic!(
+                "failed to {description} `{}`: {error}",
+                from_dir.join(asset).display()
+            )
+        });
+    }
 }
 
 fn build_tailwind(manifest_dir: &Path, out_dir: &Path, client_dir: &Path) {

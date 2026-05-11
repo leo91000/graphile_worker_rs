@@ -56,12 +56,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
-          targets: wasm32-unknown-unknown
       - uses: taiki-e/install-action@cargo-llvm-cov
       - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
-      - name: Install wasm-bindgen CLI
-        run: cargo install wasm-bindgen-cli --version 0.2.121 --locked --debug
       - name: Run coverage
         run: |
           cargo llvm-cov nextest --ignore-filename-regex "${COVERAGE_IGNORE_REGEX}" --cobertura --output-path "${{ matrix.output }}" ${{ matrix.cargo_args }} ${{ matrix.nextest_args }}

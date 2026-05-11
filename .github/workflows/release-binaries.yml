@@ -58,12 +58,10 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}, wasm32-unknown-unknown
+          targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-binaries-${{ matrix.target }}
-      - name: Install wasm-bindgen CLI
-        run: cargo install wasm-bindgen-cli --version 0.2.121 --locked --debug
       - name: Build binary
         run: cargo build --release --package graphile_worker_cli --bin graphile-worker --target ${{ matrix.target }}
       - name: Package Unix binary

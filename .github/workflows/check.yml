@@ -24,10 +24,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - name: Install wasm-bindgen CLI
-        run: cargo install wasm-bindgen-cli --version 0.2.121 --locked --debug
       - name: Rustfmt
         run: cargo fmt --all -- --check
       - name: Check OpenTelemetry 0.30 feature
