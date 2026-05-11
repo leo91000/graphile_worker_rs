@@ -585,21 +585,37 @@ async fn local_queue_returns_jobs_on_ttl_expiry() {
             let _ = worker_for_run.run().await;
         });
 
-        sleep(Duration::from_millis(200)).await;
+        let start_time = Instant::now();
+        let locked_jobs_count = loop {
+            let jobs_during_processing = test_db.get_jobs().await;
+            let locked_jobs_count = jobs_during_processing
+                .iter()
+                .filter(|j| j.locked_by.is_some())
+                .count();
 
-        let jobs_during_processing = test_db.get_jobs().await;
-        let locked_jobs: Vec<_> = jobs_during_processing
-            .iter()
-            .filter(|j| j.locked_by.is_some())
-            .collect();
+            if locked_jobs_count > 0 || start_time.elapsed() > Duration::from_secs(5) {
+                break locked_jobs_count;
+            }
+
+            sleep(Duration::from_millis(100)).await;
+        };
+
         assert!(
-            !locked_jobs.is_empty(),
+            locked_jobs_count > 0,
             "At least one job should be locked by worker"
         );
 
-        sleep(Duration::from_millis(800)).await;
+        let start_time = Instant::now();
+        let jobs_after_ttl = loop {
+            let jobs = test_db.get_jobs().await;
+            let unlocked_jobs_count = jobs.iter().filter(|j| j.locked_by.is_none()).count();
 
-        let jobs_after_ttl = test_db.get_jobs().await;
+            if unlocked_jobs_count >= 8 || start_time.elapsed() > Duration::from_secs(5) {
+                break jobs;
+            }
+
+            sleep(Duration::from_millis(100)).await;
+        };
         let unlocked_jobs: Vec<_> = jobs_after_ttl
             .iter()
             .filter(|j| j.locked_by.is_none())
