@@ -15,6 +15,7 @@ include = [
   "/build.rs",
   "/package-lock.json",
   "/package.json",
+  "/prebuilt/**",
   "/src/**",
   "/tailwind.config.cjs",
 ]
