@@ -1,5 +1,6 @@
 .env
 target
+node_modules
 run_example.log
 issue_answer.md
 Cargo.lock

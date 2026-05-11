@@ -59,6 +59,17 @@ fn job_key_mode_requires_key() {
     assert!(stderr.contains("--key"), "stderr was:\n{stderr}");
 }
 
+#[test]
+fn admin_help_documents_embedded_ui_options() {
+    let output = command_output(&["admin", "--help"]);
+    let stdout = assert_success(output);
+
+    assert!(stdout.contains("Serve the embedded Leptos admin UI"));
+    assert!(stdout.contains("--auth"));
+    assert!(stdout.contains("--read-only"));
+    assert!(stdout.contains("GRAPHILE_WORKER_ADMIN_PASSWORD"));
+}
+
 #[tokio::test]
 async fn cli_manages_job_lifecycle_with_database_url_flag() {
     let Ok(source_url) = std::env::var("DATABASE_URL") else {

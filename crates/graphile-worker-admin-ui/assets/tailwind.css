@@ -1,0 +1,227 @@
+@import "tailwindcss";
+@config "../tailwind.config.cjs";
+
+@layer base {
+  :root {
+    --surface: 248 250 252;
+    --surface-elevated: 255 255 255;
+    --surface-muted: 241 245 249;
+    --border: 203 213 225;
+    --text: 15 23 42;
+    --text-muted: 71 85 105;
+    --accent: 14 116 144;
+    --accent-strong: 8 145 178;
+    --danger: 190 18 60;
+    --warning: 180 83 9;
+    --success: 22 101 52;
+  }
+
+  .dark {
+    --surface: 9 12 20;
+    --surface-elevated: 16 24 39;
+    --surface-muted: 30 41 59;
+    --border: 51 65 85;
+    --text: 226 232 240;
+    --text-muted: 148 163 184;
+    --accent: 34 211 238;
+    --accent-strong: 103 232 249;
+    --danger: 251 113 133;
+    --warning: 251 191 36;
+    --success: 74 222 128;
+  }
+
+  .theme-emerald {
+    --accent: 5 150 105;
+    --accent-strong: 16 185 129;
+  }
+
+  .theme-violet {
+    --accent: 109 40 217;
+    --accent-strong: 139 92 246;
+  }
+
+  .theme-amber {
+    --accent: 180 83 9;
+    --accent-strong: 245 158 11;
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply min-h-screen overflow-hidden font-sans antialiased;
+    background: rgb(var(--surface));
+    color: rgb(var(--text));
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .gw-shell {
+    @apply grid h-screen grid-cols-[280px_minmax(0,1fr)];
+  }
+
+  .gw-sidebar {
+    @apply flex min-h-0 flex-col border-r px-4 py-4;
+    background: rgb(var(--surface-elevated));
+    border-color: rgb(var(--border));
+  }
+
+  .gw-main {
+    @apply flex min-h-0 flex-col;
+  }
+
+  .gw-topbar {
+    @apply flex min-h-16 items-center justify-between gap-3 border-b px-5;
+    background: rgb(var(--surface-elevated));
+    border-color: rgb(var(--border));
+  }
+
+  .gw-scroll {
+    @apply min-h-0 flex-1 overflow-auto p-5;
+  }
+
+  .gw-panel {
+    @apply rounded-lg border;
+    background: rgb(var(--surface-elevated));
+    border-color: rgb(var(--border));
+  }
+
+  .gw-btn {
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium transition disabled:pointer-events-none disabled:opacity-40;
+    border-color: rgb(var(--border));
+    background: rgb(var(--surface-elevated));
+    color: rgb(var(--text));
+  }
+
+  .gw-btn:hover {
+    background: rgb(var(--surface-muted));
+  }
+
+  .gw-btn-primary {
+    @apply border-transparent text-white;
+    background: rgb(var(--accent));
+  }
+
+  .gw-btn-primary:hover {
+    background: rgb(var(--accent-strong));
+  }
+
+  .gw-btn-danger {
+    @apply border-transparent text-white;
+    background: rgb(var(--danger));
+  }
+
+  .gw-input {
+    @apply h-9 rounded-md border px-3 text-sm outline-none transition;
+    background: rgb(var(--surface-elevated));
+    border-color: rgb(var(--border));
+    color: rgb(var(--text));
+  }
+
+  .gw-input:focus {
+    @apply ring-2;
+    border-color: rgb(var(--accent));
+    --tw-ring-color: rgb(var(--accent) / 0.22);
+  }
+
+  .gw-textarea {
+    @apply min-h-28 w-full resize-y rounded-md border p-3 text-sm outline-none transition;
+    background: rgb(var(--surface-elevated));
+    border-color: rgb(var(--border));
+    color: rgb(var(--text));
+  }
+
+  .gw-muted {
+    color: rgb(var(--text-muted));
+  }
+
+  .gw-tab {
+    @apply inline-flex h-8 items-center gap-2 rounded-md px-3 text-sm font-medium transition;
+    color: rgb(var(--text-muted));
+  }
+
+  .gw-tab[aria-selected="true"] {
+    background: rgb(var(--accent) / 0.12);
+    color: rgb(var(--accent));
+  }
+
+  .gw-table {
+    @apply min-w-full border-separate border-spacing-0 text-left text-sm;
+  }
+
+  .gw-table th {
+    @apply sticky top-0 z-10 border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide;
+    background: rgb(var(--surface-elevated));
+    border-color: rgb(var(--border));
+    color: rgb(var(--text-muted));
+  }
+
+  .gw-table td {
+    @apply border-b px-3 py-2 align-top;
+    border-color: rgb(var(--border));
+  }
+
+  .gw-table tbody tr:hover {
+    background: rgb(var(--surface-muted) / 0.58);
+  }
+
+  .gw-pill {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium;
+    background: rgb(var(--surface-muted));
+    color: rgb(var(--text-muted));
+  }
+
+  .gw-modal {
+    @apply fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm;
+  }
+
+  .gw-modal[data-open="true"] {
+    @apply flex;
+  }
+
+  .gw-dialog {
+    @apply max-h-[90vh] w-full max-w-3xl overflow-auto rounded-lg border p-5 shadow-xl;
+    background: rgb(var(--surface-elevated));
+    border-color: rgb(var(--border));
+  }
+
+  .gw-toast {
+    @apply pointer-events-none fixed bottom-4 right-4 z-50 rounded-md px-3 py-2 text-sm font-medium opacity-0 shadow-lg transition;
+    background: rgb(var(--text));
+    color: rgb(var(--surface-elevated));
+  }
+
+  .gw-toast[data-open="true"] {
+    @apply opacity-100;
+  }
+
+  .gw-compact .gw-table td {
+    @apply py-1.5;
+  }
+
+  .gw-compact .gw-scroll {
+    @apply p-3;
+  }
+}
+
+@media (max-width: 900px) {
+  .gw-shell {
+    @apply grid-cols-1;
+  }
+
+  .gw-sidebar {
+    @apply hidden;
+  }
+}
