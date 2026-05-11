@@ -45,7 +45,7 @@ async fn worker_options_initializes_from_database_url() {
             .max_pg_conn(1)
             .listen_os_shutdown_signals(false)
             .with_cron(Cron::every_minute::<BuilderJob>())
-            .with_crontab("* * * * * builder_job")
+            .with_cron("* * * * * builder_job")
             .expect("Failed to add second crontab")
             .use_local_time(true)
             .on(JobStart, |_ctx| async {})
@@ -73,4 +73,23 @@ async fn worker_options_requires_database_url_or_pool() {
         Err(error) => panic!("Expected missing database URL error, got {error:?}"),
         Ok(_) => panic!("Expected worker initialization to fail"),
     }
+}
+
+#[test]
+fn worker_options_with_cron_accepts_crontab_text() {
+    let _ = WorkerOptions::default()
+        .with_cron("* * * * * builder_job")
+        .expect("Failed to parse crontab string literal");
+
+    let _ = WorkerOptions::default()
+        .with_cron(String::from("* * * * * builder_job"))
+        .expect("Failed to parse owned crontab string");
+}
+
+#[test]
+#[allow(deprecated)]
+fn worker_options_deprecated_with_crontab_still_parses_text() {
+    let _ = WorkerOptions::default()
+        .with_crontab("* * * * * builder_job")
+        .expect("Failed to parse deprecated crontab string");
 }

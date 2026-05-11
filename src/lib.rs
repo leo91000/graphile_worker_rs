@@ -76,7 +76,7 @@ pub use graphile_worker_job::*;
 pub use graphile_worker_lifecycle_hooks::*;
 pub use graphile_worker_task_handler::*;
 
-pub use builder::{WorkerBuildError, WorkerOptions};
+pub use builder::{CronInput, WorkerBuildError, WorkerOptions};
 pub use context_ext::WorkerContextExt;
 pub use local_queue::{
     LocalQueue, LocalQueueConfig, LocalQueueError, LocalQueueMode, RefetchDelayConfig,

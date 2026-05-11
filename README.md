@@ -357,11 +357,13 @@ Crontab text is still supported when you need Graphile Worker's file-style synta
 ```rust,ignore
 let worker = WorkerOptions::default()
     .define_job::<SendDailyReport>()
-    .with_crontab("0 8 * * * send_daily_report")?
+    .with_cron("0 8 * * * send_daily_report")?
     // ... other configuration
     .init()
     .await?;
 ```
+
+`with_crontab(...)` remains available as a deprecated compatibility alias.
 
 ### Local Queue
 

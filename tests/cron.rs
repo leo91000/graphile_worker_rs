@@ -59,7 +59,7 @@ async fn register_identifiers() {
                 .database(database)
                 .concurrency(3)
                 .define_job::<Job3>()
-                .with_crontab(
+                .with_cron(
                     r#"
                         0 */4 * * * do_it ?fill=1d
                     "#,
@@ -135,7 +135,7 @@ async fn backfills_if_identifier_already_registered_5h_ago() {
             Worker::options()
                 .database(database)
                 .concurrency(3)
-                .with_crontab(
+                .with_cron(
                     r#"
                         0 */4 * * * do_it ?fill=1d
                     "#,
@@ -235,7 +235,7 @@ async fn backfills_if_identifier_already_registered_25h_ago() {
             Worker::options()
                 .database(database)
                 .concurrency(3)
-                .with_crontab(
+                .with_cron(
                     r#"
                         0 */4 * * * do_it ?fill=1d
                     "#,

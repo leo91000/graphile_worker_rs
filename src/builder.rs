@@ -1,4 +1,5 @@
 use crate::batcher::{CompletionBatcher, FailureBatcher};
+use crate::cron::CronBuilder;
 use crate::local_queue::LocalQueueConfig;
 use crate::runner::WorkerFn;
 use crate::sql::task_identifiers::{get_tasks_details, SharedTaskDetails};
@@ -21,6 +22,60 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
+
+/// Input accepted by [`WorkerOptions::with_cron`].
+///
+/// Typed cron builders and raw [`Crontab`] values are infallible and return
+/// `WorkerOptions` directly. Crontab text is parsed and returns
+/// `Result<WorkerOptions, CrontabParseError>`.
+pub trait CronInput {
+    type Output;
+
+    fn append_to(self, options: WorkerOptions) -> Self::Output;
+}
+
+impl CronInput for Crontab {
+    type Output = WorkerOptions;
+
+    fn append_to(self, mut options: WorkerOptions) -> Self::Output {
+        options.append_crontabs(vec![self]);
+        options
+    }
+}
+
+impl<T: TaskHandler> CronInput for CronBuilder<T> {
+    type Output = WorkerOptions;
+
+    fn append_to(self, options: WorkerOptions) -> Self::Output {
+        self.build().append_to(options)
+    }
+}
+
+impl CronInput for &str {
+    type Output = Result<WorkerOptions, CrontabParseError>;
+
+    fn append_to(self, mut options: WorkerOptions) -> Self::Output {
+        let crontabs = parse_crontab(self)?;
+        options.append_crontabs(crontabs);
+        Ok(options)
+    }
+}
+
+impl CronInput for String {
+    type Output = Result<WorkerOptions, CrontabParseError>;
+
+    fn append_to(self, options: WorkerOptions) -> Self::Output {
+        self.as_str().append_to(options)
+    }
+}
+
+impl CronInput for &String {
+    type Output = Result<WorkerOptions, CrontabParseError>;
+
+    fn append_to(self, options: WorkerOptions) -> Self::Output {
+        self.as_str().append_to(options)
+    }
+}
 
 /// Creates a shutdown signal that can be triggered manually via the returned notifier.
 fn manual_shutdown_signal_pair() -> (ShutdownSignal, Arc<Notify>) {
@@ -517,13 +572,13 @@ impl WorkerOptions {
         self
     }
 
-    /// Adds a typed cron entry for a scheduled job.
+    /// Adds cron entries for scheduled jobs.
     ///
-    /// Prefer this over [`Self::with_crontab`] when schedules are defined in
-    /// Rust code. It avoids crontab strings and can use task handler types for
-    /// the job identifier.
+    /// This accepts typed cron builders, raw [`Crontab`] values, and crontab
+    /// text. Typed inputs return `WorkerOptions` directly; text input returns
+    /// `Result<WorkerOptions, CrontabParseError>`.
     ///
-    /// # Example
+    /// # Typed example
     /// ```
     /// # use graphile_worker::{Cron, CrontabFill, WorkerOptions};
     /// # use graphile_worker::{IntoTaskHandlerResult, TaskHandler, WorkerContext};
@@ -545,9 +600,19 @@ impl WorkerOptions {
     ///             .fill(CrontabFill::hours(1)),
     ///     );
     /// ```
-    pub fn with_cron(mut self, crontab: impl Into<Crontab>) -> Self {
-        self.append_crontabs(vec![crontab.into()]);
-        self
+    ///
+    /// # Crontab text example
+    /// ```
+    /// # use graphile_worker::WorkerOptions;
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let options = WorkerOptions::default()
+    ///     .with_cron("0 8 * * * send_digest")?;
+    /// # let _ = options;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn with_cron<C: CronInput>(self, cron: C) -> C::Output {
+        cron.append_to(self)
     }
 
     /// Adds typed cron entries for scheduled jobs.
@@ -560,11 +625,9 @@ impl WorkerOptions {
         self
     }
 
-    /// Adds crontab entries for scheduled jobs.
+    /// Adds crontab text entries for scheduled jobs.
     ///
-    /// Crontab entries define jobs that run on a schedule, similar
-    /// to Unix cron jobs. The syntax is compatible with Graphile Worker's
-    /// crontab format.
+    /// Use [`Self::with_cron`] with a string instead.
     ///
     /// # Arguments
     /// * `input` - A string containing crontab entries
@@ -577,16 +640,15 @@ impl WorkerOptions {
     /// # use graphile_worker::WorkerOptions;
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     ///
-    /// // Run the "send_digest" job at 8:00 AM every day
+    /// // Run the "send_digest" job at 8:00 AM every day.
     /// let options = WorkerOptions::default()
-    ///     .with_crontab("0 8 * * * send_digest")?;
+    ///     .with_cron("0 8 * * * send_digest")?;
     /// # Ok(())
     /// # }
     /// ```
-    pub fn with_crontab(mut self, input: &str) -> Result<Self, CrontabParseError> {
-        let crontabs = parse_crontab(input)?;
-        self.append_crontabs(crontabs);
-        Ok(self)
+    #[deprecated(note = "use WorkerOptions::with_cron(...) instead")]
+    pub fn with_crontab(self, input: &str) -> Result<Self, CrontabParseError> {
+        self.with_cron(input)
     }
 
     /// Sets whether to use local application time or database time for timestamps.
