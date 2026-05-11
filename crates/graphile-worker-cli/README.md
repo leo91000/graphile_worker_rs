@@ -30,6 +30,7 @@ Available commands:
 - `remove`
 - `cleanup`
 - `force-unlock`
+- `admin`
 - `stats`
 - `queues`
 - `workers`

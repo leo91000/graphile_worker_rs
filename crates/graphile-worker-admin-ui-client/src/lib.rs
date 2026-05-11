@@ -7,7 +7,7 @@ mod wasm {
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    use chrono::{DateTime, NaiveDateTime, Utc};
+    use chrono::{DateTime, Duration, NaiveDateTime, Utc};
     use gloo_net::http::{Request, RequestBuilder};
     use gloo_timers::callback::{Interval, Timeout};
     use leptos::mount::mount_to;
@@ -1881,7 +1881,13 @@ mod wasm {
         };
         NaiveDateTime::parse_from_str(value, format)
             .ok()
-            .map(|datetime| datetime.and_utc())
+            .map(|datetime| {
+                let offset_minutes = js_sys::Date::new_0().get_timezone_offset() as i64;
+                DateTime::<Utc>::from_naive_utc_and_offset(
+                    datetime + Duration::minutes(offset_minutes),
+                    Utc,
+                )
+            })
     }
 
     fn modal_title(modal: &Option<Modal>) -> &'static str {
