@@ -1,5 +1,6 @@
 name: Check
-permissions: "write-all"
+permissions:
+  contents: read
 on:
   push:
     branches:
@@ -7,19 +8,23 @@ on:
   pull_request:
     branches:
       - main
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 jobs:
   check:
     timeout-minutes: 10
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
+    env:
+      CARGO_INCREMENTAL: 0
     steps:
       - name: Checkout
         uses: actions/checkout@v6
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
-          toolchain: stable
           components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
       - name: Rustfmt
         run: cargo fmt --all -- --check
       - name: Check OpenTelemetry 0.30 feature
@@ -27,6 +32,4 @@ jobs:
       - name: Check OpenTelemetry 0.31 feature
         run: cargo check --all-targets --features opentelemetry_0_31
       - name: Clippy
-        uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+        run: cargo clippy --all --all-targets -- -D warnings
