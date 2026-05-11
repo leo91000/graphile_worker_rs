@@ -5,11 +5,12 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const ADMIN_UI_BUILD_HINT: &str = "Admin UI asset builds require npm, wasm-bindgen, and the wasm32-unknown-unknown Rust target. Install the Rust tooling with `rustup target add wasm32-unknown-unknown` and `cargo install wasm-bindgen-cli --version 0.2.121 --locked`.";
+const CLIENT_MANIFEST_DIR: &str = graphile_worker_admin_ui_client::manifest_dir();
 
 fn main() {
     let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
-    let client_dir = PathBuf::from(graphile_worker_admin_ui_client::manifest_dir());
+    let client_dir = PathBuf::from(CLIENT_MANIFEST_DIR);
 
     rerun_if_changed(&manifest_dir.join("assets/tailwind.css"));
     rerun_if_changed(&manifest_dir.join("tailwind.config.cjs"));
