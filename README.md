@@ -335,13 +335,29 @@ utils.add_job(SendEmail { /* ... */ }, spec2).await?;
 
 ### Cron Jobs
 
-You can schedule recurring jobs using crontab syntax:
+You can schedule recurring jobs with the typed cron API:
 
 ```rust,ignore
-// Run a task daily at 8:00 AM
+use graphile_worker::{Cron, CrontabFill, WorkerOptions};
+
+// Run a task daily at 8:00 AM UTC, with one hour of backfill.
 let worker = WorkerOptions::default()
-    .with_crontab("0 8 * * * send_daily_report")?
     .define_job::<SendDailyReport>()
+    .with_cron(
+        Cron::daily_at::<SendDailyReport>(8, 0)?
+            .fill(CrontabFill::hours(1)),
+    )
+    // ... other configuration
+    .init()
+    .await?;
+```
+
+Crontab text is still supported when you need Graphile Worker's file-style syntax:
+
+```rust,ignore
+let worker = WorkerOptions::default()
+    .define_job::<SendDailyReport>()
+    .with_crontab("0 8 * * * send_daily_report")?
     // ... other configuration
     .init()
     .await?;

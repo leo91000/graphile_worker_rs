@@ -58,12 +58,18 @@ pub mod streams;
 pub mod utils;
 
 pub mod context_ext;
+pub mod cron;
 mod tracing;
 /// Utility functions for job management
 pub mod worker_utils;
 
 pub use crate::job_spec::*;
+pub use cron::{Cron, CronBuilder};
 pub use graphile_worker_crontab_parser::parse_crontab;
+pub use graphile_worker_crontab_types::JobKeyMode as CronJobKeyMode;
+pub use graphile_worker_crontab_types::{
+    Crontab, CrontabField, CrontabFill, CrontabTimer, CrontabTimerError, CrontabValue,
+};
 pub use graphile_worker_ctx::*;
 pub use graphile_worker_database::*;
 pub use graphile_worker_job::*;

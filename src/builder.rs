@@ -196,6 +196,15 @@ pub enum WorkerBuildError {
 }
 
 impl WorkerOptions {
+    fn append_crontabs(&mut self, mut crontabs: Vec<Crontab>) {
+        match self.crontabs.as_mut() {
+            Some(existing) => existing.append(&mut crontabs),
+            None => {
+                self.crontabs = Some(crontabs);
+            }
+        }
+    }
+
     /// Initializes a worker with the configured options.
     ///
     /// Process:
@@ -508,6 +517,49 @@ impl WorkerOptions {
         self
     }
 
+    /// Adds a typed cron entry for a scheduled job.
+    ///
+    /// Prefer this over [`Self::with_crontab`] when schedules are defined in
+    /// Rust code. It avoids crontab strings and can use task handler types for
+    /// the job identifier.
+    ///
+    /// # Example
+    /// ```
+    /// # use graphile_worker::{Cron, CrontabFill, WorkerOptions};
+    /// # use graphile_worker::{IntoTaskHandlerResult, TaskHandler, WorkerContext};
+    /// # use serde::{Deserialize, Serialize};
+    /// #
+    /// # #[derive(Deserialize, Serialize)]
+    /// # struct SendDigest;
+    /// #
+    /// # impl TaskHandler for SendDigest {
+    /// #     const IDENTIFIER: &'static str = "send_digest";
+    /// #     async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {}
+    /// # }
+    ///
+    /// let options = WorkerOptions::default()
+    ///     .define_job::<SendDigest>()
+    ///     .with_cron(
+    ///         Cron::daily_at::<SendDigest>(8, 0)
+    ///             .expect("valid cron schedule")
+    ///             .fill(CrontabFill::hours(1)),
+    ///     );
+    /// ```
+    pub fn with_cron(mut self, crontab: impl Into<Crontab>) -> Self {
+        self.append_crontabs(vec![crontab.into()]);
+        self
+    }
+
+    /// Adds typed cron entries for scheduled jobs.
+    pub fn with_crons<I, C>(mut self, crontabs: I) -> Self
+    where
+        I: IntoIterator<Item = C>,
+        C: Into<Crontab>,
+    {
+        self.append_crontabs(crontabs.into_iter().map(Into::into).collect());
+        self
+    }
+
     /// Adds crontab entries for scheduled jobs.
     ///
     /// Crontab entries define jobs that run on a schedule, similar
@@ -532,13 +584,8 @@ impl WorkerOptions {
     /// # }
     /// ```
     pub fn with_crontab(mut self, input: &str) -> Result<Self, CrontabParseError> {
-        let mut crontabs = parse_crontab(input)?;
-        match self.crontabs.as_mut() {
-            Some(c) => c.append(&mut crontabs),
-            None => {
-                self.crontabs = Some(crontabs);
-            }
-        }
+        let crontabs = parse_crontab(input)?;
+        self.append_crontabs(crontabs);
         Ok(self)
     }
 

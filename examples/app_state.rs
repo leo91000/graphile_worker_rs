@@ -1,3 +1,5 @@
+use graphile_worker::Cron;
+use graphile_worker::CrontabFill;
 use graphile_worker::IntoTaskHandlerResult;
 use graphile_worker::WorkerContext;
 use graphile_worker::WorkerOptions;
@@ -72,12 +74,7 @@ async fn main() {
         .define_job::<ShowRunCount>()
         .pg_pool(pg_pool)
         .add_extension(AppState::new())
-        .with_crontab(
-            r#"
-                * * * * * show_run_count ?fill=1h
-            "#,
-        )
-        .expect("Failed to parse crontab")
+        .with_cron(Cron::every_minute::<ShowRunCount>().fill(CrontabFill::hours(1)))
         .init()
         .await
         .unwrap();
