@@ -21,17 +21,17 @@ jobs:
       matrix:
         include:
           - name: SQLx
-            cargo_args: --workspace
+            cargo_args: --workspace --exclude graphile_worker_admin_ui_client
             nextest_args: --test-threads=16
             output: cobertura-sqlx.xml
             codecov_flags: sqlx
           - name: tokio-postgres
-            cargo_args: --workspace --no-default-features --features driver-tokio-postgres
+            cargo_args: --workspace --exclude graphile_worker_admin_ui_client --no-default-features --features driver-tokio-postgres
             nextest_args: --test-threads=16
             output: cobertura-tokio-postgres.xml
             codecov_flags: tokio-postgres
           - name: combined drivers
-            cargo_args: --workspace --features driver-tokio-postgres
+            cargo_args: --workspace --exclude graphile_worker_admin_ui_client --features driver-tokio-postgres
             nextest_args: --test-threads=16
             output: cobertura-combined.xml
             codecov_flags: ""
