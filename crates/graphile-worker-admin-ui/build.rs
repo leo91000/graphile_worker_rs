@@ -97,8 +97,13 @@ module.exports = {{
     let tailwind_input = out_dir.join("tailwind.css");
     let css = fs::read_to_string(manifest_dir.join("assets/tailwind.css"))
         .expect("failed to read admin UI Tailwind input");
+    let marker = "@config \"../tailwind.config.cjs\";";
+    assert!(
+        css.contains(marker),
+        "admin UI tailwind.css is missing the expected `{marker}` directive",
+    );
     let css = css.replace(
-        "@config \"../tailwind.config.cjs\";",
+        marker,
         &format!("@config \"{}\";", js_path(&tailwind_config)),
     );
     fs::write(&tailwind_input, css)
