@@ -1,11 +1,11 @@
 use graphile_worker::{
-    BatchTaskHandler, BatchTaskResult, HookRegistry, IntoBatchTaskHandlerResult,
-    IntoTaskHandlerResult, JobFail, JobPermanentlyFail, JobSpec, Plugin, TaskHandler,
-    WorkerContext, WorkerContextExt, WorkerOptions,
+    BatchTaskHandler, BatchTaskResult, BeforeJobSchedule, HookRegistry, IntoBatchTaskHandlerResult,
+    IntoTaskHandlerResult, JobFail, JobPermanentlyFail, JobScheduleResult, JobSpec, Plugin,
+    TaskHandler, WorkerContext, WorkerContextExt,
 };
 use helpers::{with_test_db, StaticCounter};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -44,6 +44,20 @@ impl Plugin for BatchFailureHookPlugin {
             async move {
                 permanent_count.fetch_add(1, Ordering::SeqCst);
             }
+        });
+    }
+}
+
+struct BatchPayloadOverridePlugin {
+    payload: Value,
+}
+
+impl Plugin for BatchPayloadOverridePlugin {
+    fn register(self, hooks: &mut HookRegistry) {
+        let payload = self.payload;
+        hooks.on(BeforeJobSchedule, move |_ctx| {
+            let payload = payload.clone();
+            async move { JobScheduleResult::Continue(payload) }
         });
     }
 }
@@ -138,6 +152,86 @@ async fn rejects_empty_typed_batch_payloads() {
         assert!(result
             .err()
             .is_some_and(|error| error.to_string().contains("at least one item")));
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn rejects_batch_payload_rewritten_to_object_by_hook() {
+    #[derive(Serialize, Deserialize)]
+    struct BatchItem {
+        id: i32,
+    }
+
+    impl BatchTaskHandler for BatchItem {
+        const IDENTIFIER: &'static str = "batch_hook_object_item";
+
+        async fn run_batch(
+            _items: Vec<Self>,
+            _ctx: WorkerContext,
+        ) -> impl IntoBatchTaskHandlerResult {
+        }
+    }
+
+    with_test_db(|test_db| async move {
+        let worker = test_db
+            .create_worker_options()
+            .add_plugin(BatchPayloadOverridePlugin {
+                payload: json!({ "id": 1 }),
+            })
+            .define_batch_job::<BatchItem>()
+            .init()
+            .await
+            .expect("Failed to create worker");
+
+        let result = worker
+            .create_utils()
+            .add_batch_job(vec![BatchItem { id: 1 }], JobSpec::default())
+            .await;
+
+        assert!(result
+            .err()
+            .is_some_and(|error| error.to_string().contains("JSON array")));
+        assert!(test_db.get_jobs().await.is_empty());
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn rejects_batch_payload_rewritten_to_empty_array_by_hook() {
+    #[derive(Serialize, Deserialize)]
+    struct BatchItem {
+        id: i32,
+    }
+
+    impl BatchTaskHandler for BatchItem {
+        const IDENTIFIER: &'static str = "batch_hook_empty_array_item";
+
+        async fn run_batch(
+            _items: Vec<Self>,
+            _ctx: WorkerContext,
+        ) -> impl IntoBatchTaskHandlerResult {
+        }
+    }
+
+    with_test_db(|test_db| async move {
+        let worker = test_db
+            .create_worker_options()
+            .add_plugin(BatchPayloadOverridePlugin { payload: json!([]) })
+            .define_batch_job::<BatchItem>()
+            .init()
+            .await
+            .expect("Failed to create worker");
+
+        let result = worker
+            .create_utils()
+            .add_batch_job(vec![BatchItem { id: 1 }], JobSpec::default())
+            .await;
+
+        assert!(result
+            .err()
+            .is_some_and(|error| error.to_string().contains("at least one item")));
+        assert!(test_db.get_jobs().await.is_empty());
     })
     .await;
 }
@@ -615,9 +709,8 @@ async fn whole_batch_failure_retries_original_payload() {
     }
 
     with_test_db(|test_db| async move {
-        let worker = WorkerOptions::default()
-            .database(test_db.database.clone())
-            .schema("graphile_worker")
+        let worker = test_db
+            .create_worker_options()
             .define_batch_job::<BatchItem>()
             .init()
             .await

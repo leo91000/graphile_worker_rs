@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{self, Debug, Display};
 use std::sync::Arc;
 use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
@@ -857,11 +857,35 @@ enum RunJobError {
     #[error("Task returned the following error : {message}")]
     TaskErrorWithReplacement {
         message: String,
-        replacement_payload: serde_json::Value,
+        replacement_payload: Redacted<serde_json::Value>,
     },
     /// The task was aborted due to a shutdown signal
     #[error("Task was aborted by shutdown signal")]
     TaskAborted,
+}
+
+struct Redacted<T>(T);
+
+impl<T> Redacted<T> {
+    fn new(value: T) -> Self {
+        Self(value)
+    }
+
+    fn get(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T> Debug for Redacted<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("[redacted]")
+    }
+}
+
+impl<T> Display for Redacted<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("[redacted]")
+    }
 }
 
 impl RunJobError {
@@ -879,7 +903,7 @@ impl RunJobError {
             RunJobError::TaskErrorWithReplacement {
                 replacement_payload,
                 ..
-            } => Some(replacement_payload),
+            } => Some(replacement_payload.get()),
             _ => None,
         }
     }
@@ -901,7 +925,7 @@ fn panic_payload_to_string(payload: Box<dyn std::any::Any + Send>) -> String {
 mod tests {
     use crate::streams::StreamSource;
 
-    use super::panic_payload_to_string;
+    use super::{panic_payload_to_string, Redacted, RunJobError};
 
     #[test]
     fn panic_payload_to_string_handles_static_str() {
@@ -909,6 +933,21 @@ mod tests {
             panic_payload_to_string(Box::new("static panic")),
             "static panic"
         );
+    }
+
+    #[test]
+    fn run_job_error_debug_redacts_replacement_payload() {
+        let payload = serde_json::json!({ "secret": "token" });
+        let error = RunJobError::TaskErrorWithReplacement {
+            message: "failed".to_string(),
+            replacement_payload: Redacted::new(payload.clone()),
+        };
+
+        let debug = format!("{error:?}");
+
+        assert!(debug.contains("[redacted]"));
+        assert!(!debug.contains("token"));
+        assert_eq!(error.replacement_payload(), Some(&payload));
     }
 
     #[test]
@@ -1025,7 +1064,7 @@ async fn run_job(
                     replacement_payload: Some(replacement_payload),
                 }) => Err(RunJobError::TaskErrorWithReplacement {
                     message: error,
-                    replacement_payload,
+                    replacement_payload: Redacted::new(replacement_payload),
                 }),
                 Ok(TaskHandlerOutcome::Failed {
                     error,

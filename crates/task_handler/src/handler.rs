@@ -12,7 +12,7 @@ pub type TaskHandlerFn = Arc<
     dyn Fn(WorkerContext) -> Pin<Box<dyn Future<Output = TaskHandlerOutcome> + Send>> + Send + Sync,
 >;
 
-/// Internal outcome returned by type-erased task handlers.
+/// Outcome returned by type-erased task handlers.
 ///
 /// Normal task handlers only produce complete/failed outcomes. Batch handlers
 /// may also include a replacement payload so only failed batch items are retried.
