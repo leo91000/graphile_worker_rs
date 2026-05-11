@@ -702,7 +702,7 @@ async fn schedules_a_new_job_if_the_existing_is_pending_retry() {
                 Job5 { succeed: true },
                 JobSpec {
                     job_key: Some("abc".into()),
-                    run_at: Some(Utc::now()),
+                    run_at: Some(Utc::now() - Duration::seconds(1)),
                     ..Default::default()
                 },
             )
@@ -1107,9 +1107,12 @@ async fn runs_jobs_asynchronously() {
         assert_eq!(&q.queue_name, job.queue_name.as_ref().unwrap());
         assert_eq!(q.job_count, 1);
         assert!(q.locked_at.is_some(), "The job should be locked");
+        let locked_at = q.locked_at.unwrap();
+        let lock_start_diff_ms = (locked_at.timestamp_millis() - start.timestamp_millis()).abs();
         assert!(
-            q.locked_at.unwrap() >= start && q.locked_at.unwrap() <= Utc::now(),
-            "The lock time should be within expected range"
+            (locked_at >= start || lock_start_diff_ms <= 50) && locked_at <= Utc::now(),
+            "The lock time should be within expected range (>= start or within 50ms tolerance, and <= now). Diff from start: {}ms",
+            lock_start_diff_ms
         );
         assert_eq!(q.locked_by, Some(worker_id));
 

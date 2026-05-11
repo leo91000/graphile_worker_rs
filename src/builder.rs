@@ -8,14 +8,13 @@ use crate::Worker;
 use futures::FutureExt;
 use graphile_worker_crontab_parser::{parse_crontab, CrontabParseError};
 use graphile_worker_crontab_types::Crontab;
-use graphile_worker_ctx::WorkerContext;
 use graphile_worker_database::{Database, DbError};
 use graphile_worker_extensions::Extensions;
 use graphile_worker_lifecycle_hooks::{Event, HookRegistry, Plugin};
 use graphile_worker_migrations::migrate;
 use graphile_worker_runtime::Notify;
 use graphile_worker_shutdown_signal::{shutdown_signal, ShutdownSignal};
-use graphile_worker_task_handler::{run_task_from_worker_ctx, TaskHandler};
+use graphile_worker_task_handler::{JobDefinition, TaskHandler};
 use rand::Rng;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -537,16 +536,50 @@ impl WorkerOptions {
     /// let options = WorkerOptions::default()
     ///     .define_job::<SendEmail>();
     /// ```
-    pub fn define_job<T: TaskHandler>(mut self) -> Self {
-        let identifier = T::IDENTIFIER;
+    pub fn define_job<T: TaskHandler>(self) -> Self {
+        self.define_jobs([T::definition()])
+    }
 
-        let worker_fn = move |ctx: WorkerContext| {
-            let ctx = ctx.clone();
-            run_task_from_worker_ctx::<T>(ctx).boxed()
-        };
+    /// Registers task handler definitions with the worker.
+    ///
+    /// This is useful when a module or crate exposes the jobs it can process as
+    /// reusable values.
+    ///
+    /// # Arguments
+    /// * `jobs` - Job definitions created with [`TaskHandler::definition`] or
+    ///   [`JobDefinition::of`]
+    ///
+    /// # Example
+    /// ```
+    /// # use graphile_worker::{
+    /// #     IntoTaskHandlerResult, JobDefinition, TaskHandler, WorkerContext, WorkerOptions,
+    /// # };
+    /// # use serde::{Deserialize, Serialize};
+    /// #
+    /// # #[derive(Deserialize, Serialize)]
+    /// # struct SendEmail;
+    /// #
+    /// # impl TaskHandler for SendEmail {
+    /// #     const IDENTIFIER: &'static str = "send_email";
+    /// #     async fn run(self, _ctx: WorkerContext) -> impl IntoTaskHandlerResult {}
+    /// # }
+    /// #
+    /// fn jobs() -> [JobDefinition; 1] {
+    ///     [SendEmail::definition()]
+    /// }
+    ///
+    /// let options = WorkerOptions::default()
+    ///     .define_jobs(jobs());
+    /// ```
+    pub fn define_jobs<I>(mut self, jobs: I) -> Self
+    where
+        I: IntoIterator<Item = JobDefinition>,
+    {
+        for job in jobs {
+            let (identifier, worker_fn) = job.into_parts();
+            self.jobs.insert(identifier.to_string(), worker_fn);
+        }
 
-        self.jobs
-            .insert(identifier.to_string(), Arc::new(worker_fn));
         self
     }
 

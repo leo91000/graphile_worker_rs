@@ -1261,12 +1261,13 @@ async fn local_queue_release_waits_for_run_loop() {
             let _ = worker_for_run.run().await;
         });
 
-        sleep(Duration::from_millis(500)).await;
-
-        assert!(
-            RELEASE_WAITS_CALL_COUNT.get().await > 0,
-            "At least one job should have started"
-        );
+        let start = Instant::now();
+        while RELEASE_WAITS_CALL_COUNT.get().await == 0 {
+            if start.elapsed() > Duration::from_secs(5) {
+                panic!("At least one job should have started");
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
 
         worker.request_shutdown();
 

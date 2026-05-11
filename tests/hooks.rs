@@ -1636,7 +1636,13 @@ async fn test_local_queue_set_mode_hook() {
             }
         });
 
-        sleep(Duration::from_millis(200)).await;
+        let c = counters.clone();
+        wait_for_condition(
+            || c.set_mode.load(Ordering::SeqCst) >= 1,
+            5,
+            "LocalQueue set_mode hook should be called at least once (starting -> polling)",
+        )
+        .await;
 
         assert!(
             counters.set_mode.load(Ordering::SeqCst) >= 1,
