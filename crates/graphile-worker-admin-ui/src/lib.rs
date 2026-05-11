@@ -436,6 +436,19 @@ async fn add_job(
     Json(request): Json<AddJobRequest>,
 ) -> Result<Json<JobActionResponse>, ApiError> {
     ensure_write_allowed(&state)?;
+    if request.job_key_mode.is_some()
+        && request
+            .key
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("")
+            .is_empty()
+    {
+        return Err(ApiError::bad_request(
+            "key is required when job_key_mode is set",
+        ));
+    }
+
     let spec = JobSpec {
         queue_name: request.queue,
         run_at: request.run_at,
@@ -1740,5 +1753,42 @@ mod tests {
         let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body = String::from_utf8(bytes.to_vec()).unwrap();
         assert!(body.contains("unauthorized"));
+    }
+
+    #[tokio::test]
+    async fn add_job_rejects_job_key_mode_without_key() {
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://postgres:postgres@localhost/postgres")
+            .unwrap();
+        let database: graphile_worker::Database = pool.clone().into();
+        let state = Arc::new(AppState {
+            pool,
+            utils: WorkerUtils::new(database, "graphile_worker".to_string()),
+            escaped_schema: "graphile_worker".to_string(),
+            schema: "graphile_worker".to_string(),
+            auth: AdminAuthConfig::None,
+            csrf_token: "csrf".to_string(),
+            read_only: false,
+        });
+
+        let error = add_job(
+            State(state),
+            Json(AddJobRequest {
+                identifier: "send_email".to_string(),
+                payload: serde_json::json!({}),
+                queue: None,
+                run_at: None,
+                max_attempts: None,
+                key: None,
+                job_key_mode: Some(JobKeyModeRequest::Replace),
+                priority: None,
+                flags: None,
+            }),
+        )
+        .await
+        .expect_err("request should be rejected before reaching the database");
+
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert!(error.message.contains("key"));
     }
 }
