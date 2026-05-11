@@ -1,17 +1,20 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
-use futures::StreamExt;
 use serde_json::Value;
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc::UnboundedSender, oneshot, Mutex};
 use tokio_postgres::types::{ToSql, Type};
-use tokio_postgres::{AsyncMessage, NoTls, Row};
+use tokio_postgres::{AsyncMessage, Client, NoTls, Row};
 
 use crate::{
     Database, DatabaseDriver, DbCell, DbError, DbExecutor, DbParams, DbRow, DbTransaction, DbValue,
-    NotificationStream, TransactionDriver,
+    Notification, NotificationStream, TransactionDriver,
 };
+
+const INITIAL_LISTENER_RECONNECT_DELAY: Duration = Duration::from_millis(50);
+const MAX_LISTENER_RECONNECT_DELAY: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Debug)]
 pub struct TokioPostgresDatabase {
@@ -172,6 +175,92 @@ fn quote_identifier(identifier: &str) -> String {
     format!("\"{}\"", identifier.replace('"', "\"\""))
 }
 
+fn next_listener_reconnect_delay(delay: Duration) -> Duration {
+    let doubled = delay.checked_mul(2).unwrap_or(MAX_LISTENER_RECONNECT_DELAY);
+
+    if doubled > MAX_LISTENER_RECONNECT_DELAY {
+        MAX_LISTENER_RECONNECT_DELAY
+    } else {
+        doubled
+    }
+}
+
+async fn connect_tokio_postgres_listener(
+    config: &tokio_postgres::Config,
+    listen_sql: &str,
+    tx: &UnboundedSender<Result<Notification, DbError>>,
+) -> Result<(Client, oneshot::Receiver<()>), DbError> {
+    let (client, connection) = config.connect(NoTls).await?;
+    let (closed_tx, closed_rx) = oneshot::channel();
+    let tx = tx.clone();
+
+    drop(tokio::spawn(async move {
+        let mut connection = Box::pin(connection);
+
+        while let Some(message) =
+            std::future::poll_fn(|cx| connection.as_mut().poll_message(cx)).await
+        {
+            let item = match message {
+                Ok(AsyncMessage::Notification(notification)) => Ok(Notification {
+                    channel: notification.channel().to_string(),
+                    payload: notification.payload().to_string(),
+                }),
+                Ok(AsyncMessage::Notice(_)) => continue,
+                Ok(_) => continue,
+                Err(_) => break,
+            };
+
+            if tx.send(item).is_err() {
+                break;
+            }
+        }
+
+        let _ = closed_tx.send(());
+    }));
+
+    client.batch_execute(listen_sql).await?;
+
+    Ok((client, closed_rx))
+}
+
+async fn run_reconnecting_tokio_postgres_listener(
+    config: tokio_postgres::Config,
+    listen_sql: String,
+    tx: UnboundedSender<Result<Notification, DbError>>,
+    mut client: Client,
+    mut closed_rx: oneshot::Receiver<()>,
+) {
+    let mut reconnect_delay = INITIAL_LISTENER_RECONNECT_DELAY;
+
+    loop {
+        tokio::select! {
+            _ = tx.closed() => return,
+            _ = &mut closed_rx => {}
+        }
+
+        drop(client);
+
+        loop {
+            tokio::select! {
+                _ = tx.closed() => return,
+                _ = tokio::time::sleep(reconnect_delay) => {}
+            }
+
+            match connect_tokio_postgres_listener(&config, &listen_sql, &tx).await {
+                Ok((new_client, new_closed_rx)) => {
+                    client = new_client;
+                    closed_rx = new_closed_rx;
+                    reconnect_delay = INITIAL_LISTENER_RECONNECT_DELAY;
+                    break;
+                }
+                Err(_) => {
+                    reconnect_delay = next_listener_reconnect_delay(reconnect_delay);
+                }
+            }
+        }
+    }
+}
+
 impl DbExecutor for TokioPostgresDatabase {
     fn execute<'a>(
         &'a self,
@@ -225,38 +314,15 @@ impl DatabaseDriver for TokioPostgresDatabase {
                 return Ok(None);
             };
 
-            let (client, connection) = config.connect(NoTls).await?;
             let sql = format!("LISTEN {}", quote_identifier(channel));
             let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-            drop(tokio::spawn(async move {
-                let mut connection = Box::pin(connection);
+            let (client, closed_rx) = connect_tokio_postgres_listener(&config, &sql, &tx).await?;
 
-                while let Some(message) =
-                    std::future::poll_fn(|cx| connection.as_mut().poll_message(cx)).await
-                {
-                    let item = match message {
-                        Ok(AsyncMessage::Notification(notification)) => Ok(crate::Notification {
-                            channel: notification.channel().to_string(),
-                            payload: notification.payload().to_string(),
-                        }),
-                        Ok(AsyncMessage::Notice(_)) => continue,
-                        Ok(_) => continue,
-                        Err(error) => Err(error.into()),
-                    };
+            drop(tokio::spawn(run_reconnecting_tokio_postgres_listener(
+                config, sql, tx, client, closed_rx,
+            )));
 
-                    if tx.send(item).is_err() {
-                        break;
-                    }
-                }
-            }));
-
-            client.batch_execute(&sql).await?;
-
-            let stream =
-                tokio_stream::wrappers::UnboundedReceiverStream::new(rx).map(move |item| {
-                    let _client = &client;
-                    item
-                });
+            let stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
 
             Ok(Some(Box::pin(stream) as NotificationStream))
         })
