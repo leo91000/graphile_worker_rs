@@ -1,7 +1,9 @@
 use graphile_worker::IntoTaskHandlerResult;
 use std::str::FromStr;
 
-use graphile_worker::{TaskHandler, WorkerContext, WorkerOptions};
+use graphile_worker::{
+    Cron, CronJobKeyMode, CrontabFill, TaskHandler, WorkerContext, WorkerOptions,
+};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgConnectOptions;
 use tracing_subscriber::{prelude::*, EnvFilter};
@@ -66,12 +68,17 @@ async fn main() {
         .define_job::<SayHello2>()
         .pg_pool(pg_pool)
         // Run say_hello every two minutes with a backfill of 10 minutes
-        .with_crontab(
-            r#"
-                */2 * * * * say_hello ?fill=10m&job_key=say_hello_dedupe&job_key_mode=preserve_run_at {message:"Crontab"}
-            "#,
+        .with_cron(
+            Cron::every_n_minutes::<SayHello>(2)
+                .unwrap()
+                .fill(CrontabFill::minutes(10))
+                .job_key("say_hello_dedupe")
+                .job_key_mode(CronJobKeyMode::PreserveRunAt)
+                .payload(SayHello {
+                    message: "Crontab".to_string(),
+                })
+                .unwrap(),
         )
-        .unwrap()
         .init()
         .await
         .expect("Failed to init worker")

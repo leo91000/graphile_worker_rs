@@ -1,4 +1,6 @@
-use graphile_worker::{IntoTaskHandlerResult, JobStart, TaskHandler, WorkerContext, WorkerOptions};
+use graphile_worker::{
+    Cron, IntoTaskHandlerResult, JobStart, TaskHandler, WorkerContext, WorkerOptions,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::helpers::with_test_db;
@@ -42,8 +44,7 @@ async fn worker_options_initializes_from_database_url() {
             .database_url(&database_url)
             .max_pg_conn(1)
             .listen_os_shutdown_signals(false)
-            .with_crontab("* * * * * builder_job")
-            .expect("Failed to add first crontab")
+            .with_cron(Cron::every_minute::<BuilderJob>())
             .with_crontab("* * * * * builder_job")
             .expect("Failed to add second crontab")
             .use_local_time(true)
