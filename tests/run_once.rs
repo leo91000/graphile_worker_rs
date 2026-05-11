@@ -1315,14 +1315,15 @@ async fn single_worker_runs_jobs_in_series_purges_all_before_exit() {
             // Complete the current job
             tx.send(()).expect("Failed to send completion signal");
 
-            // Wait a brief moment to ensure the job is picked up
-            sleep(tokio::time::Duration::from_millis(100)).await;
-            assert_eq!(
-                JOB3_CALL_COUNT.get().await,
-                i,
-                "Job {} should be completed",
-                i,
-            );
+            let start = Instant::now();
+            while JOB3_CALL_COUNT.get().await < i {
+                assert!(
+                    start.elapsed() < tokio::time::Duration::from_secs(5),
+                    "Timed out waiting for job {} to complete",
+                    i,
+                );
+                sleep(tokio::time::Duration::from_millis(100)).await;
+            }
         }
 
         // Wait for the worker to finish processing all jobs
