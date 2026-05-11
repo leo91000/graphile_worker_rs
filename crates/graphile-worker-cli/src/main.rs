@@ -7,6 +7,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use graphile_worker::utils::escape_identifier;
 use graphile_worker::worker_utils::{CleanupTask, RescheduleJobOptions};
 use graphile_worker::{Database, DbJob, Job, JobKeyMode, JobSpec, WorkerUtils};
+use indoc::formatdoc;
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::postgres::PgPoolOptions;
@@ -116,7 +117,7 @@ struct AddArgs {
     key: Option<String>,
 
     /// Job key behavior.
-    #[arg(long, value_enum)]
+    #[arg(long, value_enum, requires = "key")]
     job_key_mode: Option<JobKeyModeArg>,
 
     /// Job priority. Lower values run sooner.
@@ -603,7 +604,7 @@ async fn list_jobs(pool: &PgPool, escaped_schema: &str, args: &ListArgs) -> Resu
         return Err(anyhow!("--offset must be greater than or equal to 0"));
     }
 
-    let mut query = QueryBuilder::<Postgres>::new(format!(
+    let mut query = QueryBuilder::<Postgres>::new(formatdoc!(
         r#"
             select
                 jobs.id,
@@ -644,7 +645,7 @@ async fn list_jobs(pool: &PgPool, escaped_schema: &str, args: &ListArgs) -> Resu
 }
 
 async fn get_job(pool: &PgPool, escaped_schema: &str, id: i64) -> Result<ListedJob> {
-    let mut query = QueryBuilder::<Postgres>::new(format!(
+    let mut query = QueryBuilder::<Postgres>::new(formatdoc!(
         r#"
             select
                 jobs.id,
@@ -702,13 +703,13 @@ fn apply_job_filters<'a>(query: &mut QueryBuilder<'a, Postgres>, args: &'a ListA
             query.push(" and jobs.locked_at is not null");
         }
         JobState::Failed => {
-            query.push(" and jobs.attempts >= jobs.max_attempts");
+            query.push(" and jobs.locked_at is null and jobs.attempts >= jobs.max_attempts");
         }
     }
 }
 
 async fn get_stats(pool: &PgPool, escaped_schema: &str) -> Result<JobStats> {
-    let sql = format!(
+    let sql = formatdoc!(
         r#"
             select
                 count(*)::bigint as total,
@@ -723,7 +724,10 @@ async fn get_stats(pool: &PgPool, escaped_schema: &str) -> Result<JobStats> {
                     and run_at > now()
                 )::bigint as scheduled,
                 count(*) filter (where locked_at is not null)::bigint as locked,
-                count(*) filter (where attempts >= max_attempts)::bigint as failed
+                count(*) filter (
+                    where locked_at is null
+                    and attempts >= max_attempts
+                )::bigint as failed
             from {escaped_schema}._private_jobs
         "#
     );
@@ -735,7 +739,7 @@ async fn get_stats(pool: &PgPool, escaped_schema: &str) -> Result<JobStats> {
 }
 
 async fn list_queues(pool: &PgPool, escaped_schema: &str) -> Result<Vec<QueueRow>> {
-    let sql = format!(
+    let sql = formatdoc!(
         r#"
             select
                 job_queues.id,
@@ -762,7 +766,7 @@ async fn list_queues(pool: &PgPool, escaped_schema: &str) -> Result<Vec<QueueRow
 }
 
 async fn list_locked_workers(pool: &PgPool, escaped_schema: &str) -> Result<Vec<LockedWorkerRow>> {
-    let sql = format!(
+    let sql = formatdoc!(
         r#"
             select
                 worker_id,
