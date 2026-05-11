@@ -20,25 +20,22 @@ include = [
   "/tailwind.config.cjs",
 ]
 
-[dependencies]
-axum = "0.8.9"
-base64 = "0.22.1"
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+axum.workspace = true
+base64.workspace = true
 chrono.workspace = true
-graphile_worker = { path = "../..", version = "0.12.0", default-features = false, features = [
+graphile_worker = { workspace = true, features = [
   "driver-sqlx",
   "runtime-tokio",
   "tls-rustls",
 ] }
-hex = "0.4.3"
+hex.workspace = true
 indoc.workspace = true
-leptos = { version = "0.8.19", features = ["ssr"] }
-rand = "0.10.1"
+leptos = { workspace = true, features = ["ssr"] }
+rand.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx = { workspace = true, features = ["runtime-tokio", "tls-rustls"] }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["net"] }
 tracing.workspace = true
-
-[build-dependencies]
-graphile_worker_admin_ui_client = { path = "../graphile-worker-admin-ui-client", version = "0.1.0" }

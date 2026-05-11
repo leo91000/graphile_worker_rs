@@ -14,7 +14,7 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-graphile_worker_ctx = { path = "../graphile-worker-ctx", version = "0.5.0", default-features = false }
+graphile_worker_ctx.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

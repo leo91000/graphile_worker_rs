@@ -8,12 +8,14 @@ const ADMIN_UI_BUILD_HINT: &str = "Admin UI asset builds require npm, wasm-bindg
 const REBUILD_ASSETS_ENV: &str = "GRAPHILE_WORKER_ADMIN_UI_REBUILD";
 const UPDATE_PREBUILT_ASSETS_ENV: &str = "GRAPHILE_WORKER_ADMIN_UI_UPDATE_PREBUILT";
 const PREBUILT_ASSETS: &[&str] = &["admin.css", "admin.js", "admin_ui.js", "admin_ui_bg.wasm"];
-const CLIENT_MANIFEST_DIR: &str = graphile_worker_admin_ui_client::manifest_dir();
 
 fn main() {
     let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
-    let client_dir = PathBuf::from(CLIENT_MANIFEST_DIR);
+    let client_dir = manifest_dir
+        .parent()
+        .map(|crates_dir| crates_dir.join("graphile-worker-admin-ui-client"))
+        .unwrap_or_else(|| manifest_dir.join("../graphile-worker-admin-ui-client"));
     let prebuilt_dir = manifest_dir.join("prebuilt");
 
     rerun_if_env_changed(REBUILD_ASSETS_ENV);

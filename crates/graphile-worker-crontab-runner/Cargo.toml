@@ -33,11 +33,11 @@ driver-sqlx = ["graphile_worker_database/driver-sqlx", "sqlx"]
 driver-tokio-postgres = ["graphile_worker_database/driver-tokio-postgres"]
 
 [dependencies]
-graphile_worker_crontab_types = { path = "../graphile-worker-crontab-types", version = "0.5.15" }
-graphile_worker_lifecycle_hooks = { path = "../graphile-worker-lifecycle-hooks", version = "0.3.0", default-features = false }
-graphile_worker_shutdown_signal = { path = "../graphile-worker-shutdown-signal", version = "0.3.12", default-features = false }
-graphile_worker_runtime = { path = "../graphile-worker-runtime", version = "0.1.1", default-features = false }
-graphile_worker_database = { path = "../graphile-worker-database", version = "0.1.1", default-features = false }
+graphile_worker_crontab_types.workspace = true
+graphile_worker_lifecycle_hooks.workspace = true
+graphile_worker_shutdown_signal.workspace = true
+graphile_worker_runtime.workspace = true
+graphile_worker_database.workspace = true
 chrono = { workspace = true }
 sqlx = { workspace = true, optional = true }
 thiserror = { workspace = true }
