@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.15](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.14...graphile_worker_migrations-v0.4.15) - 2026-05-11
+
+### Added
+
+- support multiple postgres drivers
+- add async runtime support
+
+### Fixed
+
+- address postgres driver review feedback
+- address throughput PR review comments
+
+### Other
+
+- increase project coverage
+
 ## [0.4.14](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.13...graphile_worker_migrations-v0.4.14) - 2026-02-25
 
 ### Fixed

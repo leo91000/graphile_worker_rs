@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.19](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_parser-v0.5.18...graphile_worker_crontab_parser-v0.5.19) - 2026-05-11
+
+### Fixed
+
+- address throughput PR review comments
+
+### Other
+
+- increase project coverage
+
 ## [0.5.18](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_parser-v0.5.17...graphile_worker_crontab_parser-v0.5.18) - 2026-02-25
 
 ### Fixed

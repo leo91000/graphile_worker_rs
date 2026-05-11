@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.5](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.7.4...graphile_worker_crontab_runner-v0.7.5) - 2026-05-11
+
+### Added
+
+- support multiple postgres drivers
+- add async runtime support
+
+### Fixed
+
+- address postgres driver review feedback
+- address runtime review follow-ups
+
 ## [0.7.4](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.7.3...graphile_worker_crontab_runner-v0.7.4) - 2026-02-25
 
 ### Fixed

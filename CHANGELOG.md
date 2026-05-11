@@ -1,5 +1,72 @@
 # Changelog
 
+## [0.12.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.11.4...graphile_worker-v0.12.0) - 2026-05-11
+
+### Added
+
+- add reusable job definitions
+- accept crontab text in with_cron
+- add typed cron API
+- support multiple postgres drivers
+- add async runtime support
+
+### Fixed
+
+- reconnect tokio-postgres listener
+- drain jobs across local queues
+- address postgres driver review feedback
+- keep OpenTelemetry dependencies compatible
+- address local queue review comments
+- address follow-up review comments
+- address throughput PR review comments
+- address remaining review feedback
+- address runtime review follow-ups
+- reject zero runtime intervals
+- preserve notify broadcast semantics
+- preserve runtime task semantics
+- remove blocking notify mutex
+- make runtime fallback explicit
+- address async runtime review feedback
+- update rand trait imports for 0.10
+
+### Other
+
+- deflake hook terminal assertions
+- reduce workflow runtime
+- address cron api review comments
+- *(deps)* update all non-major dependencies ([#407](https://github.com/leo91000/graphile_worker_rs/pull/407))
+- upload combined coverage report
+- restore coverage above 90 percent
+- *(deps)* update all non-major dependencies ([#406](https://github.com/leo91000/graphile_worker_rs/pull/406))
+- clarify local queue throughput tuning
+- support concurrent local queues
+- increase project coverage
+- improve perf PR coverage
+- reuse batcher timeout futures
+- dispatch jobs through worker loops
+- run task handlers inline
+- improve worker throughput
+- *(deps)* update all non-major dependencies ([#403](https://github.com/leo91000/graphile_worker_rs/pull/403))
+- remove cfg-if dependency
+- *(deps)* update rust crate tokio to 1.52.2 ([#401](https://github.com/leo91000/graphile_worker_rs/pull/401))
+- *(deps)* update rust crate tokio to 1.52.1 ([#400](https://github.com/leo91000/graphile_worker_rs/pull/400))
+- *(deps)* update rust crate uuid to 1.23.1 ([#399](https://github.com/leo91000/graphile_worker_rs/pull/399))
+- *(deps)* update rust crate tokio to 1.52.0 ([#398](https://github.com/leo91000/graphile_worker_rs/pull/398))
+- *(deps)* update rust crate rand to 0.10.1 ([#397](https://github.com/leo91000/graphile_worker_rs/pull/397))
+- *(deps)* update rust crate tokio to 1.51.1 ([#396](https://github.com/leo91000/graphile_worker_rs/pull/396))
+- *(deps)* update rust crate serde_qs to 1.1.1 ([#395](https://github.com/leo91000/graphile_worker_rs/pull/395))
+- *(deps)* update codecov/codecov-action action to v6
+- *(deps)* update rust crate tokio to 1.51.0 ([#394](https://github.com/leo91000/graphile_worker_rs/pull/394))
+- *(deps)* update rust crate uuid to 1.23.0 ([#392](https://github.com/leo91000/graphile_worker_rs/pull/392))
+- *(deps)* update rust crate serde_qs to 1.1.0 ([#391](https://github.com/leo91000/graphile_worker_rs/pull/391))
+- *(deps)* update rust crate tracing-subscriber to 0.3.23 ([#390](https://github.com/leo91000/graphile_worker_rs/pull/390))
+- *(deps)* update rust crate once_cell to 1.21.4 ([#389](https://github.com/leo91000/graphile_worker_rs/pull/389))
+- *(deps)* update rust crate uuid to 1.22.0 ([#388](https://github.com/leo91000/graphile_worker_rs/pull/388))
+- *(deps)* update rust crate quote to 1.0.45 ([#387](https://github.com/leo91000/graphile_worker_rs/pull/387))
+- *(deps)* update rust crate tokio to 1.50.0 ([#386](https://github.com/leo91000/graphile_worker_rs/pull/386))
+- *(deps)* update all non-major dependencies
+- Update LICENSE.md
+
 ## [0.11.4](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.11.3...graphile_worker-v0.11.4) - 2026-02-25
 
 ### Fixed

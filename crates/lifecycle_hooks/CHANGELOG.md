@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_lifecycle_hooks-v0.2.5...graphile_worker_lifecycle_hooks-v0.3.0) - 2026-05-11
+
+### Added
+
+- support multiple postgres drivers
+- add async runtime support
+
+### Other
+
+- increase project coverage
+- improve perf PR coverage
+- improve worker throughput
+
 ## [0.2.5](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_lifecycle_hooks-v0.2.4...graphile_worker_lifecycle_hooks-v0.2.5) - 2026-02-25
 
 ### Fixed
