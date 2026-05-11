@@ -15,6 +15,8 @@ coverage:
 ignore:
   - "tests"
   - "benches"
+  - "crates/graphile-worker-admin-ui/src/lib.rs"
+  - "crates/graphile-worker-cli/src/main.rs"
 # Make comments less noisy
 comment:
   layout: "files"
