@@ -1,3 +1,4 @@
 # Task Handler
 
-This package provide the `TaskHandler` & `TaskDefinition` traits for the `archimedes` package
+This package provides `TaskHandler` and reusable `JobDefinition` values for
+`graphile_worker`.

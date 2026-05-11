@@ -3,6 +3,13 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::fmt::Debug;
 use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+
+/// Type-erased function used by workers to run a task from a [`WorkerContext`].
+pub type TaskHandlerFn = Arc<
+    dyn Fn(WorkerContext) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> + Send + Sync,
+>;
 
 /// Trait for converting task handler return types into a standardized Result.
 ///
@@ -20,6 +27,47 @@ pub trait IntoTaskHandlerResult {
     /// - Ok(()) represents successful task execution
     /// - Err(e) represents task failure with a debug-printable error
     fn into_task_handler_result(self) -> Result<(), impl Debug>;
+}
+
+/// Reusable registration value for a [`TaskHandler`].
+///
+/// `JobDefinition` lets crates and modules expose the jobs they provide as
+/// values, so applications can register a collection of jobs in one call.
+#[derive(Clone)]
+pub struct JobDefinition {
+    identifier: &'static str,
+    handler: TaskHandlerFn,
+}
+
+impl JobDefinition {
+    /// Creates a job definition for a task handler type.
+    pub fn of<T: TaskHandler>() -> Self {
+        let handler = move |ctx: WorkerContext| {
+            let ctx = ctx.clone();
+            Box::pin(run_task_from_worker_ctx::<T>(ctx))
+                as Pin<Box<dyn Future<Output = Result<(), String>> + Send>>
+        };
+
+        Self {
+            identifier: T::IDENTIFIER,
+            handler: Arc::new(handler),
+        }
+    }
+
+    /// The identifier handled by this definition.
+    pub fn identifier(&self) -> &'static str {
+        self.identifier
+    }
+
+    /// The type-erased task handler function.
+    pub fn handler(&self) -> TaskHandlerFn {
+        self.handler.clone()
+    }
+
+    /// Splits this definition into the identifier and handler function.
+    pub fn into_parts(self) -> (&'static str, TaskHandlerFn) {
+        (self.identifier, self.handler)
+    }
 }
 
 /// Implementation for the unit type, allowing tasks to simply return `()`.
@@ -83,6 +131,17 @@ pub trait TaskHandler: Serialize + for<'de> Deserialize<'de> + Send + Sync + 'st
     /// - Make names descriptive but concise
     /// - Ensure they are globally unique across your application
     const IDENTIFIER: &'static str;
+
+    /// Returns a reusable registration value for this task handler.
+    ///
+    /// This is equivalent to [`JobDefinition::of`] and is useful when
+    /// a module wants to expose all of its jobs as a collection.
+    fn definition() -> JobDefinition
+    where
+        Self: Sized,
+    {
+        JobDefinition::of::<Self>()
+    }
 
     /// Execute the task logic.
     ///

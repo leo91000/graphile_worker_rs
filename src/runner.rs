@@ -1,6 +1,4 @@
 use std::fmt::Debug;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
@@ -41,9 +39,7 @@ use crate::{sql::fail_job::fail_job, streams::StreamSource};
 /// A task handler is a closure that takes a `WorkerContext` and returns a future
 /// that resolves to a `Result<(), String>`. The string in the error case represents
 /// the error message if the task fails.
-pub type WorkerFn = Arc<
-    dyn Fn(WorkerContext) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> + Send + Sync,
->;
+pub type WorkerFn = graphile_worker_task_handler::TaskHandlerFn;
 
 /// The main worker struct that processes jobs from the queue.
 ///

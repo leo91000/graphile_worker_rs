@@ -129,6 +129,26 @@ async fn run_worker() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+For larger applications, modules can expose their jobs as reusable definitions
+and register them together:
+
+```rust,ignore
+use graphile_worker::{JobDefinition, TaskHandler};
+
+pub fn jobs() -> [JobDefinition; 2] {
+    [
+        SendEmail::definition(),
+        SendDailyReport::definition(),
+    ]
+}
+
+graphile_worker::WorkerOptions::default()
+    .define_jobs(jobs())
+    // ... other configuration
+    .init()
+    .await?;
+```
+
 #### Custom shutdown handling
 
 Graphile Worker installs OS-level signal handlers (like `SIGINT`/`SIGTERM`) so

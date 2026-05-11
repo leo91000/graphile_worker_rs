@@ -574,31 +574,65 @@ async fn test_permanent_failure_unlocks_job_and_queue() {
             sleep(Duration::from_millis(50)).await;
         }
 
-        sleep(Duration::from_millis(200)).await;
+        let start = Instant::now();
+        let (job, queue) = loop {
+            let job: Option<(i64, Option<String>, Option<chrono::DateTime<chrono::Utc>>)> =
+                sqlx::query_as(
+                    "SELECT id, locked_by, locked_at FROM graphile_worker._private_jobs LIMIT 1",
+                )
+                .fetch_optional(&test_db.test_pool)
+                .await
+                .expect("Failed to query job");
 
-        let job: Option<(i64, Option<String>, Option<chrono::DateTime<chrono::Utc>>)> = sqlx::query_as(
-            "SELECT id, locked_by, locked_at FROM graphile_worker._private_jobs LIMIT 1",
-        )
-        .fetch_optional(&test_db.test_pool)
-        .await
-        .expect("Failed to query job");
+            let queue: Option<(i32, Option<String>, Option<chrono::DateTime<chrono::Utc>>)> =
+                sqlx::query_as(
+                    "SELECT id, locked_by, locked_at FROM graphile_worker._private_job_queues WHERE queue_name = 'test_queue' LIMIT 1",
+                )
+                .fetch_optional(&test_db.test_pool)
+                .await
+                .expect("Failed to query queue");
 
-        assert!(job.is_some(), "Job should still exist (permanently failed)");
-        let (_, locked_by, locked_at) = job.unwrap();
-        assert!(locked_by.is_none(), "Job locked_by should be NULL after permanent failure");
-        assert!(locked_at.is_none(), "Job locked_at should be NULL after permanent failure");
+            let job_unlocked = job
+                .as_ref()
+                .is_some_and(|(_, locked_by, locked_at)| locked_by.is_none() && locked_at.is_none());
+            let queue_unlocked = queue.as_ref().is_some_and(
+                |(_, queue_locked_by, queue_locked_at)| {
+                    queue_locked_by.is_none() && queue_locked_at.is_none()
+                },
+            );
 
-        let queue: Option<(i32, Option<String>, Option<chrono::DateTime<chrono::Utc>>)> = sqlx::query_as(
-            "SELECT id, locked_by, locked_at FROM graphile_worker._private_job_queues WHERE queue_name = 'test_queue' LIMIT 1",
-        )
-        .fetch_optional(&test_db.test_pool)
-        .await
-        .expect("Failed to query queue");
+            if job_unlocked && queue_unlocked {
+                break (job.unwrap(), queue.unwrap());
+            }
 
-        assert!(queue.is_some(), "Queue should exist");
-        let (_, queue_locked_by, queue_locked_at) = queue.unwrap();
-        assert!(queue_locked_by.is_none(), "Queue locked_by should be NULL after permanent failure");
-        assert!(queue_locked_at.is_none(), "Queue locked_at should be NULL after permanent failure");
+            if start.elapsed() > Duration::from_secs(5) {
+                panic!(
+                    "Job and queue should have been unlocked after permanent failure. job={job:?}, queue={queue:?}"
+                );
+            }
+
+            sleep(Duration::from_millis(50)).await;
+        };
+
+        let (_, locked_by, locked_at) = job;
+        assert!(
+            locked_by.is_none(),
+            "Job locked_by should be NULL after permanent failure"
+        );
+        assert!(
+            locked_at.is_none(),
+            "Job locked_at should be NULL after permanent failure"
+        );
+
+        let (_, queue_locked_by, queue_locked_at) = queue;
+        assert!(
+            queue_locked_by.is_none(),
+            "Queue locked_by should be NULL after permanent failure"
+        );
+        assert!(
+            queue_locked_at.is_none(),
+            "Queue locked_at should be NULL after permanent failure"
+        );
 
         worker.request_shutdown();
         let _ = worker_handle.await;
