@@ -7,7 +7,7 @@ use axum::Router;
 use super::assets::{css, favicon, js, wasm, wasm_bindgen_js};
 use super::auth::AdminAuthConfig;
 use super::error::AdminUiError;
-use super::middleware::{require_api_auth, require_basic_page_auth, security_headers};
+use super::middleware::{require_api_auth, require_page_auth, security_headers};
 use super::routes::{
     add_job, index, job, job_action, jobs, maintenance, overview, remove_job_by_key, session,
 };
@@ -43,10 +43,7 @@ pub fn build_router(config: AdminServerConfig) -> Result<Router, AdminUiError> {
         .layer(middleware::from_fn(security_headers));
 
     if matches!(state.auth, AdminAuthConfig::Basic { .. }) {
-        Ok(app.layer(middleware::from_fn_with_state(
-            state,
-            require_basic_page_auth,
-        )))
+        Ok(app.layer(middleware::from_fn_with_state(state, require_page_auth)))
     } else {
         Ok(app)
     }

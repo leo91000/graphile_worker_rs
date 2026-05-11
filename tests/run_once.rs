@@ -1315,10 +1315,10 @@ async fn single_worker_runs_jobs_in_series_purges_all_before_exit() {
             // Complete the current job
             tx.send(()).expect("Failed to send completion signal");
 
-            let start = Instant::now();
+            let start_time = Instant::now();
             while JOB3_CALL_COUNT.get().await < i {
                 assert!(
-                    start.elapsed() < tokio::time::Duration::from_secs(5),
+                    start_time.elapsed() < tokio::time::Duration::from_secs(5),
                     "Timed out waiting for job {} to complete",
                     i,
                 );

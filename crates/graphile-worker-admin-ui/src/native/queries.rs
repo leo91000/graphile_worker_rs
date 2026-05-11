@@ -1,3 +1,5 @@
+use std::collections::{BTreeSet, HashMap};
+
 use indoc::formatdoc;
 use sqlx::{PgPool, Postgres, QueryBuilder};
 
@@ -106,6 +108,37 @@ pub(crate) fn job_lookup_error(id: i64, error: sqlx::Error) -> ApiError {
         sqlx::Error::RowNotFound => ApiError::not_found(format!("job {id} not found")),
         error => error.into(),
     }
+}
+
+pub(crate) async fn task_identifiers_by_id(
+    pool: &PgPool,
+    escaped_schema: &str,
+    task_ids: impl IntoIterator<Item = i32>,
+) -> Result<HashMap<i32, String>, ApiError> {
+    let task_ids = task_ids.into_iter().collect::<BTreeSet<_>>();
+    if task_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let mut query = QueryBuilder::<Postgres>::new(formatdoc!(
+        r#"
+            select id, identifier
+            from {escaped_schema}._private_tasks
+            where id in (
+        "#
+    ));
+    let mut separated = query.separated(", ");
+    for task_id in task_ids {
+        separated.push_bind(task_id);
+    }
+    separated.push_unseparated(")");
+
+    Ok(query
+        .build_query_as::<(i32, String)>()
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .collect())
 }
 
 pub(crate) fn apply_job_filters<'a>(

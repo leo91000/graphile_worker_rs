@@ -630,17 +630,16 @@ async fn run_command(
         Command::Admin(args) => {
             let auth = build_admin_auth(args)?;
             print_admin_startup(args, &auth);
-            graphile_worker_admin_ui::serve(AdminServerConfig {
-                pool: pool.clone(),
-                utils: utils.clone(),
-                escaped_schema: escaped_schema.to_string(),
-                schema: cli.schema.clone(),
-                listen_addr: args.listen,
-                auth,
-                read_only: args.read_only,
-            })
-            .await
-            .context("admin UI server stopped with an error")?;
+            let config = AdminServerConfig::builder(pool.clone(), utils.clone())
+                .escaped_schema(escaped_schema)
+                .schema(cli.schema.clone())
+                .listen_addr(args.listen)
+                .auth(auth)
+                .read_only(args.read_only)
+                .build()?;
+            graphile_worker_admin_ui::serve(config)
+                .await
+                .context("admin UI server stopped with an error")?;
         }
     }
 

@@ -251,9 +251,9 @@ fn clear_clippy_env(command: &mut Command) {
 fn write_bootstrap(out_dir: &Path) {
     fs::write(
         out_dir.join("admin.js"),
-        r#"import init from "/assets/admin_ui.js";
+        r#"import init from "./admin_ui.js";
 
-const wasmUrl = new URL("/assets/admin_ui_bg.wasm", `${location.protocol}//${location.host}`);
+const wasmUrl = new URL("./admin_ui_bg.wasm", import.meta.url);
 
 init({ module_or_path: wasmUrl }).catch((error) => {
   console.error("Failed to initialize Graphile Worker Admin UI", error);

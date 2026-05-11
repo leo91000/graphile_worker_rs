@@ -36,11 +36,14 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
     let modal = RwSignal::new(None::<Modal>);
     let toast = RwSignal::new(None::<String>);
     let token = RwSignal::new(storage_get("gw-admin-token").unwrap_or_default());
+    let refreshing = RwSignal::new(false);
+    let refresh_pending = RwSignal::new(false);
     let theme =
         RwSignal::new(storage_get("gw-admin-theme").unwrap_or_else(|| "system".to_string()));
     let accent =
         RwSignal::new(storage_get("gw-admin-accent").unwrap_or_else(|| "cyan".to_string()));
     let compact = RwSignal::new(storage_get("gw-admin-density").as_deref() == Some("compact"));
+    let auto_refresh_enabled = RwSignal::new(false);
     let auto_refresh_timer = Rc::new(RefCell::new(None::<Interval>));
 
     let filtered_jobs = Memo::new(move |_| {
@@ -75,7 +78,7 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
         let selected = selected_jobs.get();
         !visible.is_empty() && visible.iter().all(|job| selected.contains(&job.id))
     });
-    let show_token_login = config.auth_mode == "bearer" || config.auth_mode == "header";
+    let show_token_login = config.auth_mode.requires_token();
 
     Effect::new(move |_| {
         apply_theme(&theme.get(), &accent.get(), compact.get());
@@ -89,6 +92,8 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
         jobs,
         selected_jobs,
         toast,
+        refreshing,
+        refresh_pending,
     );
 
     let refresh_click = {
@@ -102,6 +107,8 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
                 jobs,
                 selected_jobs,
                 toast,
+                refreshing,
+                refresh_pending,
             );
         }
     };
@@ -143,7 +150,7 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
 
             <div class="mt-auto grid gap-3 rounded-lg border p-3 text-xs" style="border-color: rgb(var(--border));">
                 <div class="flex items-center justify-between"><span class="gw-muted">"Schema"</span><span class="font-mono">{config.schema.clone()}</span></div>
-                <div class="flex items-center justify-between"><span class="gw-muted">"Auth"</span><span class="gw-pill">{config.auth_mode.clone()}</span></div>
+                <div class="flex items-center justify-between"><span class="gw-muted">"Auth"</span><span class="gw-pill">{config.auth_mode.as_str()}</span></div>
                 <div class="flex items-center justify-between"><span class="gw-muted">"Writes"</span><span class="gw-pill">{if config.read_only { "read only" } else { "enabled" }}</span></div>
             </div>
         </aside>
@@ -206,11 +213,16 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
                             name="auto_refresh"
                             class="h-4 w-4"
                             type="checkbox"
+                            prop:checked=move || auto_refresh_enabled.get()
                             on:change={
                                 let config = config.clone();
                                 let auto_refresh_timer = auto_refresh_timer.clone();
                                 move |event| {
                                     if event_target_checked(&event) {
+                                        auto_refresh_enabled.set(true);
+                                        if auto_refresh_timer.borrow().is_some() {
+                                            return;
+                                        }
                                         let config = config.clone();
                                         let handle = Interval::new(5000, move || {
                                             refresh_data(
@@ -221,10 +233,13 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
                                                 jobs,
                                                 selected_jobs,
                                                 toast,
+                                                refreshing,
+                                                refresh_pending,
                                             );
                                         });
                                         *auto_refresh_timer.borrow_mut() = Some(handle);
                                     } else {
+                                        auto_refresh_enabled.set(false);
                                         *auto_refresh_timer.borrow_mut() = None;
                                     }
                                 }
@@ -268,6 +283,8 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
                                         jobs,
                                         selected_jobs,
                                         toast,
+                                        refreshing,
+                                        refresh_pending,
                                     );
                                 }
                             }
@@ -329,6 +346,8 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
                                         jobs,
                                         selected_jobs,
                                         toast,
+                                        refreshing,
+                                        refresh_pending,
                                     );
                                 }
                             }
@@ -360,7 +379,10 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
                                 jobs,
                                 selected_jobs,
                                 limit,
+                                None,
                                 toast,
+                                refreshing,
+                                refresh_pending,
                             )
                         }>
                             <span class="i-lucide-check h-4 w-4"></span>"Complete"
@@ -383,7 +405,10 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
                                 jobs,
                                 selected_jobs,
                                 limit,
+                                None,
                                 toast,
+                                refreshing,
+                                refresh_pending,
                             )
                         }>
                             <span class="i-lucide-play h-4 w-4"></span>"Run now"
@@ -465,6 +490,8 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
                         selected_workers=selected_workers
                         limit=limit
                         toast=toast
+                        refreshing=refreshing
+                        refresh_pending=refresh_pending
                     />
                 </section>
 
@@ -490,6 +517,8 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
                                     selected_jobs,
                                     limit,
                                     toast,
+                                    refreshing,
+                                    refresh_pending,
                                 )
                             }>
                                 <span class="i-lucide-database-zap h-4 w-4"></span>"Migrate"
@@ -513,6 +542,8 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
                                     selected_jobs,
                                     limit,
                                     toast,
+                                    refreshing,
+                                    refresh_pending,
                                 )
                             }>
                                 <span class="i-lucide-sparkles h-4 w-4"></span>"Cleanup"
@@ -532,6 +563,8 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
             selected_jobs=selected_jobs
             limit=limit
             toast=toast
+            refreshing=refreshing
+            refresh_pending=refresh_pending
         />
         <div class="gw-toast" data-open=move || toast.get().is_some().to_string()>{move || toast.get().unwrap_or_default()}</div>
     }

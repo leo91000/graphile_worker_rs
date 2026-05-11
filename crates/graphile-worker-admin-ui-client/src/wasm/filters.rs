@@ -128,7 +128,9 @@ pub(super) fn selected_csv(rows: &[ListedJob]) -> String {
             .join(","),
         );
     }
-    output.join("\n")
+    let mut csv = output.join("\r\n");
+    csv.push_str("\r\n");
+    csv
 }
 
 pub(super) fn csv_escape(value: String) -> String {
@@ -203,15 +205,18 @@ pub(super) fn datetime_local_to_utc(value: &str) -> Option<DateTime<Utc>> {
     };
     NaiveDateTime::parse_from_str(value, format)
         .ok()
-        .map(|datetime| {
+        .and_then(|datetime| {
             let js_local = js_sys::Date::new(&JsValue::from_str(
                 &datetime.format("%Y-%m-%dT%H:%M:%S").to_string(),
             ));
-            let offset_minutes = js_local.get_timezone_offset() as i64;
-            DateTime::<Utc>::from_naive_utc_and_offset(
-                datetime + Duration::minutes(offset_minutes),
+            let offset_minutes = js_local.get_timezone_offset();
+            if !offset_minutes.is_finite() {
+                return None;
+            }
+            Some(DateTime::<Utc>::from_naive_utc_and_offset(
+                datetime + Duration::minutes(offset_minutes as i64),
                 Utc,
-            )
+            ))
         })
 }
 

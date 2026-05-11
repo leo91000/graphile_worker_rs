@@ -14,7 +14,7 @@ use super::auth::{constant_time_eq, AdminAuthConfig, CSRF_HEADER};
 use super::error::json_error_response;
 use super::state::AppState;
 
-pub(crate) async fn require_basic_page_auth(
+pub(crate) async fn require_page_auth(
     State(state): State<Arc<AppState>>,
     request: Request<Body>,
     next: Next,
@@ -43,9 +43,17 @@ pub(crate) async fn require_api_auth(
 }
 
 pub(crate) async fn security_headers(request: Request<Body>, next: Next) -> Response {
+    let cache_policy = if is_static_asset(request.uri().path()) {
+        "public, max-age=3600"
+    } else {
+        "no-store"
+    };
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
-    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    headers.insert(
+        CACHE_CONTROL,
+        HeaderValue::from_str(cache_policy).expect("static cache policy is valid"),
+    );
     headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
     headers.insert(
         HeaderName::from_static("x-frame-options"),
@@ -81,4 +89,8 @@ fn csrf_matches(headers: &HeaderMap, expected_token: &str) -> bool {
 
 fn is_write_method(method: &Method) -> bool {
     !matches!(method, &Method::GET | &Method::HEAD | &Method::OPTIONS)
+}
+
+fn is_static_asset(path: &str) -> bool {
+    path.starts_with("/assets/") || path == "/favicon.ico"
 }

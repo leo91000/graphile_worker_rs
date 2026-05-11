@@ -221,6 +221,8 @@ pub(super) fn WorkersPanel(
     selected_workers: RwSignal<Vec<String>>,
     limit: RwSignal<i64>,
     toast: RwSignal<Option<String>>,
+    refreshing: RwSignal<bool>,
+    refresh_pending: RwSignal<bool>,
 ) -> impl IntoView {
     view! {
         <div id="workers" class="gw-panel">
@@ -250,6 +252,8 @@ pub(super) fn WorkersPanel(
                             selected_jobs,
                             limit,
                             toast,
+                            refreshing,
+                            refresh_pending,
                         );
                     }
                 }>

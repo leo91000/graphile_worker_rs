@@ -100,11 +100,11 @@ pub(crate) struct DbJobOutput {
 }
 
 impl DbJobOutput {
-    pub(crate) fn from_db_job(job: &DbJob) -> Self {
+    pub(crate) fn from_db_job(job: &DbJob, task_identifier: Option<String>) -> Self {
         Self {
             id: *job.id(),
             task_id: *job.task_id(),
-            task_identifier: None,
+            task_identifier,
             job_queue_id: *job.job_queue_id(),
             payload: job.payload().clone(),
             priority: *job.priority(),

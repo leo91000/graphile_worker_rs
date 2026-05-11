@@ -9,7 +9,9 @@ use graphile_worker::{DbJob, JobSpec};
 
 use super::auth::CSRF_HEADER;
 use super::error::{ApiError, Result};
-use super::queries::{get_job, get_stats, list_jobs, list_locked_workers, list_queues};
+use super::queries::{
+    get_job, get_stats, list_jobs, list_locked_workers, list_queues, task_identifiers_by_id,
+};
 use super::state::AppState;
 use super::types::{
     AddJobRequest, CleanupTaskName, DbJobOutput, JobAction, JobActionRequest, JobActionResponse,
@@ -84,19 +86,45 @@ pub(crate) async fn add_job(
         ));
     }
 
-    let spec = JobSpec {
-        queue_name: request.queue,
-        run_at: request.run_at,
-        max_attempts: request.max_attempts,
-        job_key: request.key,
-        job_key_mode: request.job_key_mode.map(Into::into),
-        priority: request.priority,
-        flags: request.flags.filter(|flags| !flags.is_empty()),
-    };
+    let AddJobRequest {
+        identifier,
+        payload,
+        queue,
+        run_at,
+        max_attempts,
+        key,
+        job_key_mode,
+        priority,
+        flags,
+    } = request;
+
+    let mut spec = JobSpec::builder();
+    if let Some(queue) = queue {
+        spec = spec.queue_name(queue);
+    }
+    if let Some(run_at) = run_at {
+        spec = spec.run_at(run_at);
+    }
+    if let Some(max_attempts) = max_attempts {
+        spec = spec.max_attempts(max_attempts);
+    }
+    if let Some(key) = key {
+        spec = spec.job_key(key);
+    }
+    if let Some(job_key_mode) = job_key_mode {
+        spec = spec.job_key_mode(job_key_mode);
+    }
+    if let Some(priority) = priority {
+        spec = spec.priority(priority);
+    }
+    if let Some(flags) = flags.filter(|flags| !flags.is_empty()) {
+        spec = spec.flags(flags);
+    }
+    let spec = spec.build();
 
     let job = state
         .utils
-        .add_raw_job(&request.identifier, request.payload, spec)
+        .add_raw_job(&identifier, payload, spec)
         .await
         .map_err(ApiError::internal)?;
 
@@ -122,7 +150,7 @@ pub(crate) async fn job_action(
                 .complete_jobs(&request.ids)
                 .await
                 .map_err(ApiError::internal)?;
-            Ok(action_response("Completed", &jobs))
+            action_response(&state, "Completed", &jobs).await
         }
         JobAction::Fail => {
             let reason = request
@@ -135,7 +163,7 @@ pub(crate) async fn job_action(
                 .permanently_fail_jobs(&request.ids, reason)
                 .await
                 .map_err(ApiError::internal)?;
-            Ok(action_response("Failed", &jobs))
+            action_response(&state, "Failed", &jobs).await
         }
         JobAction::RunNow => {
             let jobs = state
@@ -151,7 +179,7 @@ pub(crate) async fn job_action(
                 )
                 .await
                 .map_err(ApiError::internal)?;
-            Ok(action_response("Rescheduled", &jobs))
+            action_response(&state, "Run now", &jobs).await
         }
         JobAction::Reschedule => {
             if request.run_at.is_none()
@@ -177,7 +205,7 @@ pub(crate) async fn job_action(
                 )
                 .await
                 .map_err(ApiError::internal)?;
-            Ok(action_response("Rescheduled", &jobs))
+            action_response(&state, "Rescheduled", &jobs).await
         }
     }
 }
@@ -254,9 +282,23 @@ fn ensure_write_allowed(state: &AppState) -> Result<(), ApiError> {
     Ok(())
 }
 
-fn action_response(action: &str, jobs: &[DbJob]) -> Json<JobActionResponse> {
-    Json(JobActionResponse {
+async fn action_response(
+    state: &AppState,
+    action: &str,
+    jobs: &[DbJob],
+) -> Result<Json<JobActionResponse>, ApiError> {
+    let identifiers = task_identifiers_by_id(
+        &state.pool,
+        &state.escaped_schema,
+        jobs.iter().map(|job| *job.task_id()),
+    )
+    .await?;
+
+    Ok(Json(JobActionResponse {
         message: format!("{action} {} job(s)", jobs.len()),
-        jobs: jobs.iter().map(DbJobOutput::from_db_job).collect(),
-    })
+        jobs: jobs
+            .iter()
+            .map(|job| DbJobOutput::from_db_job(job, identifiers.get(job.task_id()).cloned()))
+            .collect(),
+    }))
 }
