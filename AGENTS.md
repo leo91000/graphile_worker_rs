@@ -11,6 +11,8 @@ just lint
 just test-docker
 ```
 
+Never include "codex" in branch names, commit messages, or pull request titles.
+
 ## Development Commands
 
 | Command | Description |
