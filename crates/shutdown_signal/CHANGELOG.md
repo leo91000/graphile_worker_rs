@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.12](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_shutdown_signal-v0.3.11...graphile_worker_shutdown_signal-v0.3.12) - 2026-05-11
+
+### Added
+
+- add async runtime support
+
+### Fixed
+
+- address runtime review follow-ups
+- address async runtime review feedback
+
+### Other
+
+- *(deps)* update all non-major dependencies ([#403](https://github.com/leo91000/graphile_worker_rs/pull/403))
+- remove cfg-if dependency
+
 ## [0.3.11](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_shutdown_signal-v0.3.10...graphile_worker_shutdown_signal-v0.3.11) - 2026-02-25
 
 ### Fixed

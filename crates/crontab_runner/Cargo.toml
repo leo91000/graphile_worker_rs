@@ -1,6 +1,6 @@
 [package]
 name = "graphile_worker_crontab_runner"
-version = "0.7.4"
+version = "0.7.5"
 edition = "2021"
 license-file = "LICENSE.md"
 description = "Crontab runner package for graphile worker, a high performance Rust/PostgreSQL job queue"
@@ -33,11 +33,11 @@ driver-sqlx = ["graphile_worker_database/driver-sqlx", "sqlx"]
 driver-tokio-postgres = ["graphile_worker_database/driver-tokio-postgres"]
 
 [dependencies]
-graphile_worker_crontab_types = { path = "../crontab_types", version = "0.5.14" }
-graphile_worker_lifecycle_hooks = { path = "../lifecycle_hooks", version = "0.2.5", default-features = false }
-graphile_worker_shutdown_signal = { path = "../shutdown_signal", version = "0.3.11", default-features = false }
-graphile_worker_runtime = { path = "../runtime", version = "0.1.0", default-features = false }
-graphile_worker_database = { path = "../database", version = "0.1.0", default-features = false }
+graphile_worker_crontab_types = { path = "../crontab_types", version = "0.5.15" }
+graphile_worker_lifecycle_hooks = { path = "../lifecycle_hooks", version = "0.3.0", default-features = false }
+graphile_worker_shutdown_signal = { path = "../shutdown_signal", version = "0.3.12", default-features = false }
+graphile_worker_runtime = { path = "../runtime", version = "0.1.1", default-features = false }
+graphile_worker_database = { path = "../database", version = "0.1.1", default-features = false }
 chrono = { workspace = true }
 sqlx = { workspace = true, optional = true }
 thiserror = { workspace = true }

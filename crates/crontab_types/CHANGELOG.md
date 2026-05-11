@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.15](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_types-v0.5.14...graphile_worker_crontab_types-v0.5.15) - 2026-05-11
+
+### Added
+
+- add typed cron API
+
+### Other
+
+- address cron api review comments
+
 ## [0.5.14](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_types-v0.5.13...graphile_worker_crontab_types-v0.5.14) - 2026-02-25
 
 ### Fixed
