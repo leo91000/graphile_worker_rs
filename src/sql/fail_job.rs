@@ -94,10 +94,8 @@ pub async fn fail_job(
     escaped_schema: &str,
     worker_id: &str,
     message: &str,
-    replacement_payload: Option<Vec<String>>,
+    replacement_payload: Option<serde_json::Value>,
 ) -> Result<()> {
-    let replacement_payload = replacement_payload.map(|value| serde_json::json!(value));
-
     if job.job_queue_id().is_some() {
         let sql = formatdoc!(
             r#"

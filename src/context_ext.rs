@@ -4,6 +4,7 @@ use crate::worker_utils::{CleanupTask, RescheduleJobOptions, WorkerUtils};
 use crate::{DbJob, Job, JobSpec, TaskHandler};
 use graphile_worker_ctx::WorkerContext;
 use graphile_worker_migrations::MigrateError;
+use graphile_worker_task_handler::BatchTaskHandler;
 use serde::Serialize;
 
 /// Convenience helpers available from task handlers via `WorkerContext`.
@@ -41,6 +42,13 @@ pub trait WorkerContextExt {
         &self,
         jobs: &[RawJobSpec],
     ) -> impl core::future::Future<Output = Result<Vec<Job>, GraphileWorkerError>> + Send;
+
+    /// Add a batch job from within a task handler.
+    fn add_batch_job<T: BatchTaskHandler + 'static>(
+        &self,
+        payloads: Vec<T>,
+        spec: JobSpec,
+    ) -> impl core::future::Future<Output = Result<Job, GraphileWorkerError>> + Send;
 
     /// Remove a job by job key.
     fn remove_job(
@@ -117,6 +125,14 @@ impl WorkerContextExt for WorkerContext {
 
     async fn add_raw_jobs(&self, jobs: &[RawJobSpec]) -> Result<Vec<Job>, GraphileWorkerError> {
         self.utils().add_raw_jobs(jobs).await
+    }
+
+    async fn add_batch_job<T: BatchTaskHandler + 'static>(
+        &self,
+        payloads: Vec<T>,
+        spec: JobSpec,
+    ) -> Result<Job, GraphileWorkerError> {
+        self.utils().add_batch_job(payloads, spec).await
     }
 
     async fn remove_job(&self, job_key: &str) -> Result<(), GraphileWorkerError> {

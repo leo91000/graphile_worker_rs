@@ -7,7 +7,7 @@ use crate::{errors::GraphileWorkerError, DbJob, Job, JobSpec};
 use graphile_worker_database::{Database, DbExecutor, DbValue};
 use graphile_worker_lifecycle_hooks::{BeforeJobScheduleContext, HookRegistry, JobScheduleResult};
 use graphile_worker_migrations::{migrate, MigrateError};
-use graphile_worker_task_handler::TaskHandler;
+use graphile_worker_task_handler::{BatchTaskHandler, TaskHandler};
 use indoc::formatdoc;
 use serde::Serialize;
 use std::collections::HashSet;
@@ -561,6 +561,45 @@ impl WorkerUtils {
         self.analyze_jobs_after_large_batch(jobs.len()).await;
 
         Ok(added_jobs)
+    }
+
+    /// Adds a batch job to the queue with type safety.
+    ///
+    /// The database payload is a JSON array of `T` items. Register the same
+    /// identifier with [`WorkerOptions::define_batch_job`](crate::WorkerOptions::define_batch_job)
+    /// so the worker can run the batch and retry only failed items after partial
+    /// success.
+    pub async fn add_batch_job<T: BatchTaskHandler>(
+        &self,
+        payloads: Vec<T>,
+        spec: JobSpec,
+    ) -> Result<Job, GraphileWorkerError> {
+        if payloads.is_empty() {
+            return Err(GraphileWorkerError::JobScheduleFailed(
+                "batch job payload must contain at least one item".to_string(),
+            ));
+        }
+
+        let identifier = T::IDENTIFIER;
+        let mut payload = serde_json::to_value(payloads)?;
+        if let Some(items) = payload.as_array_mut() {
+            for item in items {
+                add_tracing_info(item);
+            }
+        }
+
+        let payload = self
+            .invoke_before_job_schedule(identifier, payload, &spec)
+            .await?;
+        add_job(
+            &self.database,
+            &self.escaped_schema,
+            identifier,
+            payload,
+            spec,
+            self.use_local_time,
+        )
+        .await
     }
 
     /// Removes a job from the queue by its job key.

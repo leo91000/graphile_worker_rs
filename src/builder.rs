@@ -14,7 +14,7 @@ use graphile_worker_lifecycle_hooks::{Event, HookRegistry, Plugin};
 use graphile_worker_migrations::migrate;
 use graphile_worker_runtime::Notify;
 use graphile_worker_shutdown_signal::{shutdown_signal, ShutdownSignal};
-use graphile_worker_task_handler::{JobDefinition, TaskHandler};
+use graphile_worker_task_handler::{BatchTaskHandler, JobDefinition, TaskHandler};
 use rand::Rng;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -537,6 +537,15 @@ impl WorkerOptions {
     ///     .define_job::<SendEmail>();
     /// ```
     pub fn define_job<T: TaskHandler>(self) -> Self {
+        self.define_jobs([T::definition()])
+    }
+
+    /// Registers a batch task handler type with the worker.
+    ///
+    /// Batch handlers receive a vector of item payloads from a single JSON-array
+    /// job payload and may return per-item results so successful items are not
+    /// retried after partial failure.
+    pub fn define_batch_job<T: BatchTaskHandler>(self) -> Self {
         self.define_jobs([T::definition()])
     }
 
