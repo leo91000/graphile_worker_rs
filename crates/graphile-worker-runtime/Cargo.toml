@@ -17,10 +17,10 @@ runtime-tokio = ["dep:tokio"]
 runtime-async-std = ["dep:async-std"]
 
 [dependencies]
-async-channel = "2.5.0"
-async-lock = "3.4.2"
-async-std = { version = "1.13.2", optional = true }
-event-listener = "5.4.1"
+async-channel.workspace = true
+async-lock.workspace = true
+async-std = { workspace = true, optional = true }
+event-listener.workspace = true
 futures.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "time"], optional = true }
