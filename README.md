@@ -261,6 +261,7 @@ the failed items.
 ```rust,ignore
 use graphile_worker::{
     BatchTaskHandler, IntoBatchTaskHandlerResult, JobKeyMode, JobSpecBuilder, WorkerContext,
+    WorkerOptions,
 };
 use serde::{Deserialize, Serialize};
 

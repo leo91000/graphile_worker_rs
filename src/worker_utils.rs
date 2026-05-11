@@ -591,11 +591,24 @@ impl WorkerUtils {
         let payload = self
             .invoke_before_job_schedule(identifier, payload, &spec)
             .await?;
+
+        let serde_json::Value::Array(payloads) = payload else {
+            return Err(GraphileWorkerError::JobScheduleFailed(
+                "before_job_schedule must return a JSON array for batch jobs".to_string(),
+            ));
+        };
+
+        if payloads.is_empty() {
+            return Err(GraphileWorkerError::JobScheduleFailed(
+                "batch job payload must contain at least one item".to_string(),
+            ));
+        }
+
         add_job(
             &self.database,
             &self.escaped_schema,
             identifier,
-            payload,
+            serde_json::Value::Array(payloads),
             spec,
             self.use_local_time,
         )
