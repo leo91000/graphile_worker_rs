@@ -1,4 +1,5 @@
 use std::fs;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Context, Result};
@@ -7,6 +8,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use graphile_worker::utils::escape_identifier;
 use graphile_worker::worker_utils::{CleanupTask, RescheduleJobOptions};
 use graphile_worker::{Database, DbJob, Job, JobKeyMode, JobSpec, WorkerUtils};
+use graphile_worker_admin_ui::{AdminAuthConfig, AdminServerConfig};
 use indoc::formatdoc;
 use serde::Serialize;
 use serde_json::Value;
@@ -85,6 +87,9 @@ enum Command {
 
     /// List worker ids that currently hold locks.
     Workers,
+
+    /// Serve the embedded Leptos admin UI and JSON management API.
+    Admin(AdminArgs),
 }
 
 #[derive(Args, Debug)]
@@ -221,6 +226,49 @@ struct ForceUnlockArgs {
     /// Worker ids to unlock.
     #[arg(required = true)]
     worker_ids: Vec<String>,
+}
+
+#[derive(Args, Debug)]
+struct AdminArgs {
+    /// Address for the admin HTTP server.
+    #[arg(long, default_value = "127.0.0.1:5678")]
+    listen: SocketAddr,
+
+    /// Authentication mode for the admin UI.
+    #[arg(long, value_enum, default_value_t = AdminAuthModeArg::Basic)]
+    auth: AdminAuthModeArg,
+
+    /// HTTP Basic username.
+    #[arg(long, default_value = "admin")]
+    username: String,
+
+    /// HTTP Basic password. Generated randomly when omitted.
+    #[arg(long, env = "GRAPHILE_WORKER_ADMIN_PASSWORD")]
+    password: Option<String>,
+
+    /// Bearer token. Generated randomly when --auth bearer and omitted.
+    #[arg(long, env = "GRAPHILE_WORKER_ADMIN_BEARER_TOKEN")]
+    bearer_token: Option<String>,
+
+    /// Header token. Generated randomly when --auth header and omitted.
+    #[arg(long, env = "GRAPHILE_WORKER_ADMIN_HEADER_TOKEN")]
+    header_token: Option<String>,
+
+    /// Header name for --auth header.
+    #[arg(long, default_value = "x-graphile-worker-admin-token")]
+    header_name: String,
+
+    /// Disable all mutating admin actions.
+    #[arg(long)]
+    read_only: bool,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum AdminAuthModeArg {
+    Basic,
+    Bearer,
+    Header,
+    None,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -579,9 +627,112 @@ async fn run_command(
                 print_workers_table(&workers);
             }
         }
+        Command::Admin(args) => {
+            let auth = build_admin_auth(args)?;
+            print_admin_startup(args, &auth);
+            graphile_worker_admin_ui::serve(AdminServerConfig {
+                pool: pool.clone(),
+                utils: utils.clone(),
+                escaped_schema: escaped_schema.to_string(),
+                schema: cli.schema.clone(),
+                listen_addr: args.listen,
+                auth,
+                read_only: args.read_only,
+            })
+            .await
+            .context("admin UI server stopped with an error")?;
+        }
     }
 
     Ok(())
+}
+
+fn build_admin_auth(args: &AdminArgs) -> Result<AdminAuthConfig> {
+    match args.auth {
+        AdminAuthModeArg::Basic => Ok(match &args.password {
+            Some(password) => AdminAuthConfig::basic(&args.username, password),
+            None => AdminAuthConfig::basic_with_random_password(&args.username),
+        }),
+        AdminAuthModeArg::Bearer => {
+            let (token, generated) = match &args.bearer_token {
+                Some(token) => (token.clone(), false),
+                None => (graphile_worker_admin_ui::generate_secret(), true),
+            };
+            Ok(AdminAuthConfig::bearer(token, generated))
+        }
+        AdminAuthModeArg::Header => {
+            let (token, generated) = match &args.header_token {
+                Some(token) => (token.clone(), false),
+                None => (graphile_worker_admin_ui::generate_secret(), true),
+            };
+            AdminAuthConfig::header(&args.header_name, token, generated)
+                .context("invalid admin header auth configuration")
+        }
+        AdminAuthModeArg::None => {
+            if !args.listen.ip().is_loopback() {
+                return Err(anyhow!(
+                    "--auth none is only allowed when --listen uses a loopback address"
+                ));
+            }
+            Ok(AdminAuthConfig::None)
+        }
+    }
+}
+
+fn print_admin_startup(args: &AdminArgs, auth: &AdminAuthConfig) {
+    println!("Graphile Worker admin UI: http://{}", args.listen);
+    println!(
+        "Read-only mode: {}",
+        if args.read_only { "on" } else { "off" }
+    );
+
+    match auth {
+        AdminAuthConfig::Basic {
+            username,
+            generated_password,
+            ..
+        } => {
+            println!("Auth: HTTP Basic");
+            println!("Username: {username}");
+            if *generated_password {
+                if let Some(password) = auth.secret_for_display() {
+                    println!("Generated password: {password}");
+                }
+            } else {
+                println!("Password: configured");
+            }
+        }
+        AdminAuthConfig::Bearer {
+            generated_token, ..
+        } => {
+            println!("Auth: bearer token");
+            if *generated_token {
+                if let Some(token) = auth.secret_for_display() {
+                    println!("Generated bearer token: {token}");
+                }
+            } else {
+                println!("Bearer token: configured");
+            }
+        }
+        AdminAuthConfig::Header {
+            header_name,
+            generated_token,
+            ..
+        } => {
+            println!("Auth: header token");
+            println!("Header: {}", header_name.as_str());
+            if *generated_token {
+                if let Some(token) = auth.secret_for_display() {
+                    println!("Generated header token: {token}");
+                }
+            } else {
+                println!("Header token: configured");
+            }
+        }
+        AdminAuthConfig::None => {
+            println!("Auth: none (loopback only)");
+        }
+    }
 }
 
 fn read_payload(args: &AddArgs) -> Result<Value> {
