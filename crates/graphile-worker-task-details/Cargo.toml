@@ -10,7 +10,7 @@ repository = "https://github.com/leo91000/graphile_worker_rs"
 readme = "README.md"
 
 [dependencies]
-graphile_worker_runtime = { path = "../runtime", version = "0.1.1", default-features = false }
+graphile_worker_runtime = { path = "../graphile-worker-runtime", version = "0.1.1", default-features = false }
 tracing.workspace = true
 
 [features]

@@ -106,20 +106,20 @@ opentelemetry_0_31 = [
     "tracing-opentelemetry",
 ]
 [dependencies]
-graphile_worker_crontab_runner = { path = "./crates/crontab_runner", version = "0.7.5", default-features = false }
-graphile_worker_crontab_types = { path = "./crates/crontab_types", version = "0.5.15" }
-graphile_worker_crontab_parser = { path = "./crates/crontab_parser", version = "0.5.19" }
-graphile_worker_job = { path = "./crates/job", version = "0.1.13", default-features = false }
-graphile_worker_ctx = { path = "./crates/ctx", version = "0.5.0", default-features = false }
-graphile_worker_migrations = { path = "./crates/migrations", version = "0.4.15", default-features = false }
-graphile_worker_task_handler = { path = "./crates/task_handler", version = "0.5.15", default-features = false }
-graphile_worker_shutdown_signal = { path = "./crates/shutdown_signal", version = "0.3.12", default-features = false }
-graphile_worker_extensions = { path = "./crates/extensions", version = "0.1.7" }
-graphile_worker_lifecycle_hooks = { path = "./crates/lifecycle_hooks", version = "0.3.0", default-features = false }
-graphile_worker_job_spec = { path = "./crates/job_spec", version = "0.1.3" }
-graphile_worker_task_details = { path = "./crates/task_details", version = "0.1.3", default-features = false }
-graphile_worker_runtime = { path = "./crates/runtime", version = "0.1.1", default-features = false }
-graphile_worker_database = { path = "./crates/database", version = "0.1.1", default-features = false }
+graphile_worker_crontab_runner = { path = "./crates/graphile-worker-crontab-runner", version = "0.7.5", default-features = false }
+graphile_worker_crontab_types = { path = "./crates/graphile-worker-crontab-types", version = "0.5.15" }
+graphile_worker_crontab_parser = { path = "./crates/graphile-worker-crontab-parser", version = "0.5.19" }
+graphile_worker_job = { path = "./crates/graphile-worker-job", version = "0.1.13", default-features = false }
+graphile_worker_ctx = { path = "./crates/graphile-worker-ctx", version = "0.5.0", default-features = false }
+graphile_worker_migrations = { path = "./crates/graphile-worker-migrations", version = "0.4.15", default-features = false }
+graphile_worker_task_handler = { path = "./crates/graphile-worker-task-handler", version = "0.5.15", default-features = false }
+graphile_worker_shutdown_signal = { path = "./crates/graphile-worker-shutdown-signal", version = "0.3.12", default-features = false }
+graphile_worker_extensions = { path = "./crates/graphile-worker-extensions", version = "0.1.7" }
+graphile_worker_lifecycle_hooks = { path = "./crates/graphile-worker-lifecycle-hooks", version = "0.3.0", default-features = false }
+graphile_worker_job_spec = { path = "./crates/graphile-worker-job-spec", version = "0.1.3" }
+graphile_worker_task_details = { path = "./crates/graphile-worker-task-details", version = "0.1.3", default-features = false }
+graphile_worker_runtime = { path = "./crates/graphile-worker-runtime", version = "0.1.1", default-features = false }
+graphile_worker_database = { path = "./crates/graphile-worker-database", version = "0.1.1", default-features = false }
 chrono = { version = "0.4.44", features = ["serde"] }
 futures = "0.3.32"
 getset = "0.1.6"

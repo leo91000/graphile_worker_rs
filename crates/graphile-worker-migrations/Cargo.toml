@@ -21,7 +21,7 @@ driver-sqlx = ["graphile_worker_database/driver-sqlx", "sqlx"]
 driver-tokio-postgres = ["graphile_worker_database/driver-tokio-postgres"]
 
 [dependencies]
-graphile_worker_database = { path = "../database", version = "0.1.1", default-features = false }
+graphile_worker_database = { path = "../graphile-worker-database", version = "0.1.1", default-features = false }
 sqlx = { workspace = true, optional = true }
 tracing.workspace = true
 indoc.workspace = true

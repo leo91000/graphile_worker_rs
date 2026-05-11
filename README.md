@@ -630,6 +630,26 @@ utils.cleanup(&[
 ]).await?;
 ```
 
+## CLI
+
+The workspace includes a dedicated `graphile_worker_cli` crate with a
+`graphile-worker` binary for managing jobs from a terminal.
+
+```bash
+graphile-worker --database-url postgres://postgres:postgres@localhost/postgres migrate
+DATABASE_URL=postgres://postgres:postgres@localhost/postgres graphile-worker add send_email --payload '{"to":"user@example.com"}'
+graphile-worker list --state ready
+graphile-worker complete 123 124
+graphile-worker fail 125 --reason "invalid payload"
+graphile-worker reschedule 126 --run-at 2026-01-02T03:04:05Z
+graphile-worker remove cli-job-key
+graphile-worker cleanup
+graphile-worker force-unlock graphile_worker_deadbeef
+```
+
+Use `--schema` or `GRAPHILE_WORKER_SCHEMA` for non-default schemas, and
+`--json` when machine-readable output is preferred.
+
 ## Feature List
 
 - **Flexible deployment**: Run standalone or embedded in your application

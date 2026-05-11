@@ -12,10 +12,10 @@ categories = []
 readme = "README.md"
 
 [dependencies]
-graphile_worker_job = { path = "../job", version = "0.1.13", default-features = false }
-graphile_worker_extensions = { path = "../extensions", version = "0.1.7" }
-graphile_worker_task_details = { path = "../task_details", version = "0.1.3", default-features = false }
-graphile_worker_database = { path = "../database", version = "0.1.1", default-features = false }
+graphile_worker_job = { path = "../graphile-worker-job", version = "0.1.13", default-features = false }
+graphile_worker_extensions = { path = "../graphile-worker-extensions", version = "0.1.7" }
+graphile_worker_task_details = { path = "../graphile-worker-task-details", version = "0.1.3", default-features = false }
+graphile_worker_database = { path = "../graphile-worker-database", version = "0.1.1", default-features = false }
 derive_builder.workspace = true
 getset.workspace = true
 serde_json.workspace = true

@@ -12,7 +12,7 @@ categories = []
 readme = "README.md"
 
 [dependencies]
-graphile_worker_crontab_types = { path = "../crontab_types", version = "0.5.15" }
+graphile_worker_crontab_types = { path = "../graphile-worker-crontab-types", version = "0.5.15" }
 json5 = { workspace = true }
 nom = { workspace = true }
 serde = { workspace = true }
