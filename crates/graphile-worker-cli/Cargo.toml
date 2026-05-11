@@ -1,0 +1,30 @@
+[package]
+name = "graphile_worker_cli"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Command-line job management utility for graphile_worker"
+homepage = "https://docs.rs/graphile_worker"
+documentation = "https://docs.rs/graphile_worker"
+repository = "https://github.com/leo91000/graphile_worker_rs"
+keywords = ["jobs", "queue", "postgres", "worker", "cli"]
+categories = ["command-line-utilities", "database"]
+readme = "README.md"
+
+[[bin]]
+name = "graphile-worker"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+clap = { version = "4.5.54", features = ["derive", "env"] }
+graphile_worker = { path = "../..", version = "0.12.0", default-features = false, features = [
+  "driver-sqlx",
+  "runtime-tokio",
+  "tls-rustls",
+] }
+serde.workspace = true
+serde_json.workspace = true
+sqlx = { workspace = true, features = ["runtime-tokio", "tls-rustls"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
