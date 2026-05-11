@@ -58,11 +58,21 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ matrix.target }}, wasm32-unknown-unknown
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: crates/graphile-worker-admin-ui/package-lock.json
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-binaries-${{ matrix.target }}
+      - name: Install wasm-bindgen CLI
+        run: cargo install wasm-bindgen-cli --version 0.2.121 --locked
       - name: Build binary
+        env:
+          GRAPHILE_WORKER_ADMIN_UI_REBUILD: "1"
         run: cargo build --release --package graphile_worker_cli --bin graphile-worker --target ${{ matrix.target }}
       - name: Package Unix binary
         if: matrix.archive == 'tar.gz'

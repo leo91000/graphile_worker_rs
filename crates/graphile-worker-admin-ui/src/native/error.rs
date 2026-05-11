@@ -71,7 +71,10 @@ impl ApiError {
 
 impl From<sqlx::Error> for ApiError {
     fn from(value: sqlx::Error) -> Self {
-        Self::internal(value)
+        match value {
+            sqlx::Error::RowNotFound => Self::not_found("resource not found"),
+            error => Self::internal(error),
+        }
     }
 }
 

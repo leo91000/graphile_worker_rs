@@ -22,6 +22,8 @@ pub(super) fn ModalView(
     selected_jobs: RwSignal<Vec<i64>>,
     limit: RwSignal<i64>,
     toast: RwSignal<Option<String>>,
+    refreshing: RwSignal<bool>,
+    refresh_pending: RwSignal<bool>,
 ) -> impl IntoView {
     view! {
         <div class="gw-modal" data-open=move || modal.get().is_some().to_string() role="dialog" aria-modal="true">
@@ -43,6 +45,8 @@ pub(super) fn ModalView(
                             limit=limit
                             modal=modal
                             toast=toast
+                            refreshing=refreshing
+                            refresh_pending=refresh_pending
                         />
                     }.into_any(),
                     Some(Modal::FailJobs) => view! {
@@ -55,6 +59,8 @@ pub(super) fn ModalView(
                             limit=limit
                             modal=modal
                             toast=toast
+                            refreshing=refreshing
+                            refresh_pending=refresh_pending
                         />
                     }.into_any(),
                     Some(Modal::Reschedule) => view! {
@@ -67,6 +73,8 @@ pub(super) fn ModalView(
                             limit=limit
                             modal=modal
                             toast=toast
+                            refreshing=refreshing
+                            refresh_pending=refresh_pending
                         />
                     }.into_any(),
                     Some(Modal::RemoveKey) => view! {
@@ -79,6 +87,8 @@ pub(super) fn ModalView(
                             limit=limit
                             modal=modal
                             toast=toast
+                            refreshing=refreshing
+                            refresh_pending=refresh_pending
                         />
                     }.into_any(),
                     Some(Modal::JobDetails(job)) => view! { <JobDetailsModal job=job toast=toast /> }.into_any(),
@@ -99,6 +109,8 @@ pub(super) fn AddJobModal(
     limit: RwSignal<i64>,
     modal: RwSignal<Option<Modal>>,
     toast: RwSignal<Option<String>>,
+    refreshing: RwSignal<bool>,
+    refresh_pending: RwSignal<bool>,
 ) -> impl IntoView {
     let identifier = RwSignal::new(String::new());
     let queue = RwSignal::new(String::new());
@@ -136,7 +148,19 @@ pub(super) fn AddJobModal(
                 priority: optional_i16(priority.get_untracked()),
                 flags: optional_csv(flags.get_untracked()),
             };
-            post_add_job(config.clone(), token, request, overview, jobs, selected_jobs, limit, modal, toast);
+            post_add_job(
+                config.clone(),
+                token,
+                request,
+                overview,
+                jobs,
+                selected_jobs,
+                limit,
+                modal,
+                toast,
+                refreshing,
+                refresh_pending,
+            );
         }>
             <div class="grid gap-3 md:grid-cols-2">
                 <TextInput label="Task identifier" value=identifier required=true />
@@ -173,6 +197,8 @@ pub(super) fn FailJobsModal(
     limit: RwSignal<i64>,
     modal: RwSignal<Option<Modal>>,
     toast: RwSignal<Option<String>>,
+    refreshing: RwSignal<bool>,
+    refresh_pending: RwSignal<bool>,
 ) -> impl IntoView {
     let reason = RwSignal::new("Marked failed from Graphile Worker admin UI".to_string());
     view! {
@@ -194,9 +220,11 @@ pub(super) fn FailJobsModal(
                 jobs,
                 selected_jobs,
                 limit,
+                Some(modal),
                 toast,
+                refreshing,
+                refresh_pending,
             );
-            modal.set(None);
         }>
             <p class="gw-muted text-sm">{move || format!("This permanently fails {} selected job(s).", selected_jobs.get().len())}</p>
             <label class="grid gap-1 text-sm" for="fail-reason">"Reason"
@@ -217,6 +245,8 @@ pub(super) fn RescheduleModal(
     limit: RwSignal<i64>,
     modal: RwSignal<Option<Modal>>,
     toast: RwSignal<Option<String>>,
+    refreshing: RwSignal<bool>,
+    refresh_pending: RwSignal<bool>,
 ) -> impl IntoView {
     let run_at = RwSignal::new(String::new());
     let priority = RwSignal::new(String::new());
@@ -241,9 +271,11 @@ pub(super) fn RescheduleModal(
                 jobs,
                 selected_jobs,
                 limit,
+                Some(modal),
                 toast,
+                refreshing,
+                refresh_pending,
             );
-            modal.set(None);
         }>
             <div class="grid gap-3 md:grid-cols-2">
                 <TextInput label="Run at" value=run_at input_type="datetime-local" required=false />
@@ -266,6 +298,8 @@ pub(super) fn RemoveKeyModal(
     limit: RwSignal<i64>,
     modal: RwSignal<Option<Modal>>,
     toast: RwSignal<Option<String>>,
+    refreshing: RwSignal<bool>,
+    refresh_pending: RwSignal<bool>,
 ) -> impl IntoView {
     let key = RwSignal::new(String::new());
     view! {
@@ -281,6 +315,8 @@ pub(super) fn RemoveKeyModal(
                 limit,
                 modal,
                 toast,
+                refreshing,
+                refresh_pending,
             );
         }>
             <TextInput label="Job key" value=key required=true />

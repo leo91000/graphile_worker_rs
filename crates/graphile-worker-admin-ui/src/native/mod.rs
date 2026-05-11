@@ -12,11 +12,12 @@ mod view;
 pub use auth::{generate_secret, AdminAuthConfig, AdminAuthSummary, PublicAuthMode};
 pub use error::AdminUiError;
 pub use server::{build_router, serve};
-pub use state::AdminServerConfig;
+pub use state::{AdminServerConfig, AdminServerConfigBuilder};
 pub use view::{render_admin_html, AdminUiRenderConfig};
 
 #[cfg(test)]
 mod tests {
+    use std::net::SocketAddr;
     use std::sync::Arc;
 
     use axum::body::{to_bytes, Body};
@@ -32,11 +33,11 @@ mod tests {
     use super::auth::{
         authorize_basic, generate_secret, AdminAuthConfig, AdminAuthSummary, PublicAuthMode,
     };
-    use super::error::ApiError;
+    use super::error::{AdminUiError, ApiError};
     use super::middleware::unauthorized_response;
     use super::queries::{apply_job_filters, job_lookup_error};
     use super::routes::add_job;
-    use super::state::AppState;
+    use super::state::{AdminServerConfig, AppState};
     use super::types::{default_limit, AddJobRequest, JobKeyModeRequest, JobState, ListJobsParams};
     use super::view::{render_admin_html, AdminUiRenderConfig};
 
@@ -99,6 +100,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn admin_server_config_builder_applies_safe_defaults() {
+        let pool = lazy_pool();
+        let database: graphile_worker::Database = pool.clone().into();
+        let utils = WorkerUtils::new(database, "graphile_worker".to_string());
+
+        let config = AdminServerConfig::builder(pool, utils).build().unwrap();
+
+        assert_eq!(config.schema, "graphile_worker");
+        assert_eq!(config.escaped_schema, "graphile_worker");
+        assert_eq!(config.listen_addr, SocketAddr::from(([127, 0, 0, 1], 4000)));
+        assert!(matches!(config.auth, AdminAuthConfig::Basic { .. }));
+        assert!(!config.read_only);
+    }
+
+    #[tokio::test]
+    async fn app_state_rejects_no_auth_on_unspecified_ipv4_addr() {
+        let config = admin_config("0.0.0.0:4000".parse().unwrap(), AdminAuthConfig::None);
+
+        let error = match AppState::from_config(config) {
+            Ok(_) => panic!("no-auth admin UI must not bind to non-loopback addresses"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, AdminUiError::InsecureNoAuth));
+    }
+
+    #[tokio::test]
+    async fn app_state_rejects_no_auth_on_unspecified_ipv6_addr() {
+        let config = admin_config("[::]:4000".parse().unwrap(), AdminAuthConfig::None);
+
+        let error = match AppState::from_config(config) {
+            Ok(_) => panic!("no-auth admin UI must not bind to non-loopback addresses"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, AdminUiError::InsecureNoAuth));
+    }
+
+    #[tokio::test]
     async fn unauthorized_basic_response_prompts_for_basic_auth() {
         let response = unauthorized_response(&AdminAuthConfig::basic("admin", "secret"));
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -111,9 +151,7 @@ mod tests {
 
     #[tokio::test]
     async fn add_job_rejects_job_key_mode_without_key() {
-        let pool = sqlx::postgres::PgPoolOptions::new()
-            .connect_lazy("postgres://postgres:postgres@localhost/postgres")
-            .unwrap();
+        let pool = lazy_pool();
         let database: graphile_worker::Database = pool.clone().into();
         let state = Arc::new(AppState {
             pool,
@@ -155,6 +193,14 @@ mod tests {
     }
 
     #[test]
+    fn sqlx_row_not_found_maps_to_not_found() {
+        let error = ApiError::from(sqlx::Error::RowNotFound);
+
+        assert_eq!(error.status, StatusCode::NOT_FOUND);
+        assert_eq!(error.message, "resource not found");
+    }
+
+    #[test]
     fn internal_errors_hide_error_details_from_clients() {
         let error = ApiError::internal("database password leaked");
 
@@ -177,5 +223,25 @@ mod tests {
         apply_job_filters(&mut query, &args);
 
         assert_eq!(query.sql(), "where true");
+    }
+
+    fn lazy_pool() -> sqlx::PgPool {
+        sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://postgres:postgres@localhost/postgres")
+            .unwrap()
+    }
+
+    fn admin_config(listen_addr: SocketAddr, auth: AdminAuthConfig) -> AdminServerConfig {
+        let pool = lazy_pool();
+        let database: graphile_worker::Database = pool.clone().into();
+        AdminServerConfig {
+            pool,
+            utils: WorkerUtils::new(database, "graphile_worker".to_string()),
+            escaped_schema: "graphile_worker".to_string(),
+            schema: "graphile_worker".to_string(),
+            listen_addr,
+            auth,
+            read_only: false,
+        }
     }
 }

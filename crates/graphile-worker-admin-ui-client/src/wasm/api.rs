@@ -7,7 +7,7 @@ use web_sys::RequestCredentials;
 
 use super::browser::show_toast;
 use super::types::{
-    AddJobRequest, AdminClientConfig, ErrorResponse, JobActionRequest, JobActionResponse,
+    AddJobRequest, AdminClientConfig, AuthMode, ErrorResponse, JobActionRequest, JobActionResponse,
     ListJobsResponse, ListedJob, MaintenanceRequest, MessageResponse, Modal, OverviewResponse,
     RemoveJobByKeyRequest,
 };
@@ -20,26 +20,37 @@ pub(super) fn refresh_data(
     jobs: RwSignal<Vec<ListedJob>>,
     selected_jobs: RwSignal<Vec<i64>>,
     toast: RwSignal<Option<String>>,
+    refreshing: RwSignal<bool>,
+    refresh_pending: RwSignal<bool>,
 ) {
+    if refreshing.get_untracked() {
+        refresh_pending.set(true);
+        return;
+    }
+    refreshing.set(true);
     spawn_local(async move {
-        let token = token.get_untracked();
-        let limit_value = limit.get_untracked();
-        let overview_result = api_get::<OverviewResponse>("/api/overview", &config, &token).await;
-        let jobs_result = api_get::<ListJobsResponse>(
-            &format!("/api/jobs?state=all&limit={limit_value}"),
-            &config,
-            &token,
-        )
-        .await;
-        match (overview_result, jobs_result) {
-            (Ok(next_overview), Ok(next_jobs)) => {
-                let next_ids = next_jobs.jobs.iter().map(|job| job.id).collect::<Vec<_>>();
-                overview.set(next_overview);
-                jobs.set(next_jobs.jobs);
-                selected_jobs.update(|selected| selected.retain(|id| next_ids.contains(id)));
+        loop {
+            refresh_pending.set(false);
+            let token = token.get_untracked();
+            let limit_value = limit.get_untracked();
+            let jobs_path = format!("/api/jobs?state=all&limit={limit_value}");
+            let overview_request = api_get::<OverviewResponse>("/api/overview", &config, &token);
+            let jobs_request = api_get::<ListJobsResponse>(&jobs_path, &config, &token);
+            let (overview_result, jobs_result) = futures::join!(overview_request, jobs_request);
+            match (overview_result, jobs_result) {
+                (Ok(next_overview), Ok(next_jobs)) => {
+                    let next_ids = next_jobs.jobs.iter().map(|job| job.id).collect::<Vec<_>>();
+                    overview.set(next_overview);
+                    jobs.set(next_jobs.jobs);
+                    selected_jobs.update(|selected| selected.retain(|id| next_ids.contains(id)));
+                }
+                (Err(error), _) | (_, Err(error)) => show_toast(toast, error),
             }
-            (Err(error), _) | (_, Err(error)) => show_toast(toast, error),
+            if !refresh_pending.get_untracked() {
+                break;
+            }
         }
+        refreshing.set(false);
     });
 }
 
@@ -53,6 +64,8 @@ pub(super) fn post_add_job(
     limit: RwSignal<i64>,
     modal: RwSignal<Option<Modal>>,
     toast: RwSignal<Option<String>>,
+    refreshing: RwSignal<bool>,
+    refresh_pending: RwSignal<bool>,
 ) {
     spawn_local(async move {
         match api_post::<_, JobActionResponse>(
@@ -66,7 +79,17 @@ pub(super) fn post_add_job(
             Ok(response) => {
                 show_toast(toast, response.message);
                 modal.set(None);
-                refresh_data(config, token, limit, overview, jobs, selected_jobs, toast);
+                refresh_data(
+                    config,
+                    token,
+                    limit,
+                    overview,
+                    jobs,
+                    selected_jobs,
+                    toast,
+                    refreshing,
+                    refresh_pending,
+                );
             }
             Err(error) => show_toast(toast, error),
         }
@@ -81,7 +104,10 @@ pub(super) fn post_job_action(
     jobs: RwSignal<Vec<ListedJob>>,
     selected_jobs: RwSignal<Vec<i64>>,
     limit: RwSignal<i64>,
+    modal: Option<RwSignal<Option<Modal>>>,
     toast: RwSignal<Option<String>>,
+    refreshing: RwSignal<bool>,
+    refresh_pending: RwSignal<bool>,
 ) {
     spawn_local(async move {
         match api_post::<_, JobActionResponse>(
@@ -94,7 +120,20 @@ pub(super) fn post_job_action(
         {
             Ok(response) => {
                 show_toast(toast, response.message);
-                refresh_data(config, token, limit, overview, jobs, selected_jobs, toast);
+                if let Some(modal) = modal {
+                    modal.set(None);
+                }
+                refresh_data(
+                    config,
+                    token,
+                    limit,
+                    overview,
+                    jobs,
+                    selected_jobs,
+                    toast,
+                    refreshing,
+                    refresh_pending,
+                );
             }
             Err(error) => show_toast(toast, error),
         }
@@ -111,6 +150,8 @@ pub(super) fn post_remove_key(
     limit: RwSignal<i64>,
     modal: RwSignal<Option<Modal>>,
     toast: RwSignal<Option<String>>,
+    refreshing: RwSignal<bool>,
+    refresh_pending: RwSignal<bool>,
 ) {
     spawn_local(async move {
         match api_post::<_, MessageResponse>(
@@ -124,7 +165,17 @@ pub(super) fn post_remove_key(
             Ok(response) => {
                 show_toast(toast, response.message);
                 modal.set(None);
-                refresh_data(config, token, limit, overview, jobs, selected_jobs, toast);
+                refresh_data(
+                    config,
+                    token,
+                    limit,
+                    overview,
+                    jobs,
+                    selected_jobs,
+                    toast,
+                    refreshing,
+                    refresh_pending,
+                );
             }
             Err(error) => show_toast(toast, error),
         }
@@ -140,6 +191,8 @@ pub(super) fn post_maintenance(
     selected_jobs: RwSignal<Vec<i64>>,
     limit: RwSignal<i64>,
     toast: RwSignal<Option<String>>,
+    refreshing: RwSignal<bool>,
+    refresh_pending: RwSignal<bool>,
 ) {
     spawn_local(async move {
         match api_post::<_, MessageResponse>(
@@ -152,7 +205,17 @@ pub(super) fn post_maintenance(
         {
             Ok(response) => {
                 show_toast(toast, response.message);
-                refresh_data(config, token, limit, overview, jobs, selected_jobs, toast);
+                refresh_data(
+                    config,
+                    token,
+                    limit,
+                    overview,
+                    jobs,
+                    selected_jobs,
+                    toast,
+                    refreshing,
+                    refresh_pending,
+                );
             }
             Err(error) => show_toast(toast, error),
         }
@@ -167,7 +230,7 @@ pub(super) async fn api_get<T>(
 where
     T: DeserializeOwned,
 {
-    let response = with_api_headers(Request::get(&same_origin(path)), config, token, false)
+    let response = with_api_headers(Request::get(path), config, token, false)
         .send()
         .await
         .map_err(|error| error.to_string())?;
@@ -184,7 +247,7 @@ where
     B: Serialize + ?Sized,
     T: DeserializeOwned,
 {
-    let request = with_api_headers(Request::post(&same_origin(path)), config, token, true)
+    let request = with_api_headers(Request::post(path), config, token, true)
         .json(body)
         .map_err(|error| error.to_string())?;
     let response = request.send().await.map_err(|error| error.to_string())?;
@@ -204,11 +267,18 @@ pub(super) fn with_api_headers(
     if writes {
         builder = builder.header(&config.csrf_header, &config.csrf);
     }
-    if config.auth_mode == "bearer" && !token.is_empty() {
-        builder = builder.header("Authorization", &format!("Bearer {token}"));
+    if token.is_empty() {
+        return builder;
     }
-    if config.auth_mode == "header" && !token.is_empty() && !config.auth_header.is_empty() {
-        builder = builder.header(&config.auth_header, token);
+
+    match config.auth_mode {
+        AuthMode::Bearer => {
+            builder = builder.header("Authorization", &format!("Bearer {token}"));
+        }
+        AuthMode::Header if !config.auth_header.is_empty() => {
+            builder = builder.header(&config.auth_header, token);
+        }
+        _ => {}
     }
     builder
 }
@@ -225,14 +295,4 @@ where
             .unwrap_or_else(|_| format!("{status}: {text}")));
     }
     serde_json::from_str(&text).map_err(|error| error.to_string())
-}
-
-pub(super) fn same_origin(path: &str) -> String {
-    let Some(window) = web_sys::window() else {
-        return path.to_string();
-    };
-    let location = window.location();
-    let protocol = location.protocol().unwrap_or_default();
-    let host = location.host().unwrap_or_default();
-    format!("{protocol}//{host}{path}")
 }

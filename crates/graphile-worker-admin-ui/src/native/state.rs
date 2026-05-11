@@ -17,6 +17,78 @@ pub struct AdminServerConfig {
     pub read_only: bool,
 }
 
+pub struct AdminServerConfigBuilder {
+    pool: PgPool,
+    utils: WorkerUtils,
+    escaped_schema: String,
+    schema: String,
+    listen_addr: SocketAddr,
+    auth: AdminAuthConfig,
+    read_only: bool,
+}
+
+impl AdminServerConfig {
+    pub fn builder(pool: PgPool, utils: WorkerUtils) -> AdminServerConfigBuilder {
+        AdminServerConfigBuilder {
+            pool,
+            utils,
+            escaped_schema: "graphile_worker".to_string(),
+            schema: "graphile_worker".to_string(),
+            listen_addr: SocketAddr::from(([127, 0, 0, 1], 4000)),
+            auth: AdminAuthConfig::basic_with_random_password("admin"),
+            read_only: false,
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), AdminUiError> {
+        if matches!(self.auth, AdminAuthConfig::None) && !self.listen_addr.ip().is_loopback() {
+            return Err(AdminUiError::InsecureNoAuth);
+        }
+        Ok(())
+    }
+}
+
+impl AdminServerConfigBuilder {
+    pub fn escaped_schema(mut self, escaped_schema: impl Into<String>) -> Self {
+        self.escaped_schema = escaped_schema.into();
+        self
+    }
+
+    pub fn schema(mut self, schema: impl Into<String>) -> Self {
+        self.schema = schema.into();
+        self
+    }
+
+    pub fn listen_addr(mut self, listen_addr: SocketAddr) -> Self {
+        self.listen_addr = listen_addr;
+        self
+    }
+
+    pub fn auth(mut self, auth: AdminAuthConfig) -> Self {
+        self.auth = auth;
+        self
+    }
+
+    pub fn read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
+    }
+
+    pub fn build(self) -> Result<AdminServerConfig, AdminUiError> {
+        let config = AdminServerConfig {
+            pool: self.pool,
+            utils: self.utils,
+            escaped_schema: self.escaped_schema,
+            schema: self.schema,
+            listen_addr: self.listen_addr,
+            auth: self.auth,
+            read_only: self.read_only,
+        };
+        config.validate()?;
+        Ok(config)
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct AppState {
     pub(crate) pool: PgPool,
@@ -30,9 +102,7 @@ pub(crate) struct AppState {
 
 impl AppState {
     pub(crate) fn from_config(config: AdminServerConfig) -> Result<Self, AdminUiError> {
-        if matches!(config.auth, AdminAuthConfig::None) && !config.listen_addr.ip().is_loopback() {
-            return Err(AdminUiError::InsecureNoAuth);
-        }
+        config.validate()?;
 
         Ok(Self {
             pool: config.pool,
