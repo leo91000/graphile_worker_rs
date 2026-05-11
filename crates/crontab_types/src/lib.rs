@@ -2,7 +2,8 @@
 
 use chrono::{prelude::*, Weekday};
 use getset::Getters;
-use std::{error::Error, fmt};
+use std::fmt;
+use thiserror::Error;
 
 /// A crontab defines a task to be executed at a specific time(s)
 #[derive(Debug, PartialEq, Eq, Clone, Getters, Default)]
@@ -47,47 +48,26 @@ impl fmt::Display for CrontabField {
 }
 
 /// Error returned when typed schedule constructors receive invalid values.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Error, Debug, PartialEq, Eq, Clone)]
 pub enum CrontabTimerError {
+    #[error("{field} value {value} is out of range; expected {min}..={max}")]
     ValueOutOfRange {
         field: CrontabField,
         value: u32,
         min: u32,
         max: u32,
     },
+    #[error("{field} range starts at {start} but ends at {end}")]
     RangeOutOfOrder {
         field: CrontabField,
         start: u32,
         end: u32,
     },
-    ZeroStep {
-        field: CrontabField,
-    },
+    #[error("{field} step must be greater than zero")]
+    ZeroStep { field: CrontabField },
 }
 
-impl fmt::Display for CrontabTimerError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CrontabTimerError::ValueOutOfRange {
-                field,
-                value,
-                min,
-                max,
-            } => write!(
-                f,
-                "{field} value {value} is out of range; expected {min}..={max}"
-            ),
-            CrontabTimerError::RangeOutOfOrder { field, start, end } => {
-                write!(f, "{field} range starts at {start} but ends at {end}")
-            }
-            CrontabTimerError::ZeroStep { field } => {
-                write!(f, "{field} step must be greater than zero")
-            }
-        }
-    }
-}
-
-impl Error for CrontabTimerError {}
+pub type Result<T> = core::result::Result<T, CrontabTimerError>;
 
 /// A crontab value can be a number, a range, a step or any value
 /// It is used to represent a crontab value for a specific field (hour, day, month, etc.)
@@ -251,7 +231,7 @@ impl CrontabTimer {
     }
 
     /// Run every `step` minutes.
-    pub fn every_n_minutes(step: u32) -> Result<Self, CrontabTimerError> {
+    pub fn every_n_minutes(step: u32) -> Result<Self> {
         Ok(Self {
             minutes: vec![CrontabValue::step(CrontabField::Minute, step)?],
             ..Default::default()
@@ -259,7 +239,7 @@ impl CrontabTimer {
     }
 
     /// Run once per hour at the given minute.
-    pub fn hourly_at(minute: u32) -> Result<Self, CrontabTimerError> {
+    pub fn hourly_at(minute: u32) -> Result<Self> {
         Ok(Self {
             minutes: vec![CrontabValue::number(CrontabField::Minute, minute)?],
             ..Default::default()
@@ -267,7 +247,7 @@ impl CrontabTimer {
     }
 
     /// Run once per day at the given UTC hour and minute.
-    pub fn daily_at(hour: u32, minute: u32) -> Result<Self, CrontabTimerError> {
+    pub fn daily_at(hour: u32, minute: u32) -> Result<Self> {
         Ok(Self {
             minutes: vec![CrontabValue::number(CrontabField::Minute, minute)?],
             hours: vec![CrontabValue::number(CrontabField::Hour, hour)?],
@@ -276,7 +256,7 @@ impl CrontabTimer {
     }
 
     /// Run once per week on the given weekday, UTC hour and minute.
-    pub fn weekly_on(weekday: Weekday, hour: u32, minute: u32) -> Result<Self, CrontabTimerError> {
+    pub fn weekly_on(weekday: Weekday, hour: u32, minute: u32) -> Result<Self> {
         Ok(Self {
             minutes: vec![CrontabValue::number(CrontabField::Minute, minute)?],
             hours: vec![CrontabValue::number(CrontabField::Hour, hour)?],
@@ -286,7 +266,7 @@ impl CrontabTimer {
     }
 
     /// Run once per month on the given day, UTC hour and minute.
-    pub fn monthly_on(day: u32, hour: u32, minute: u32) -> Result<Self, CrontabTimerError> {
+    pub fn monthly_on(day: u32, hour: u32, minute: u32) -> Result<Self> {
         Ok(Self {
             minutes: vec![CrontabValue::number(CrontabField::Minute, minute)?],
             hours: vec![CrontabValue::number(CrontabField::Hour, hour)?],
@@ -296,12 +276,7 @@ impl CrontabTimer {
     }
 
     /// Run once per year on the given month, day, UTC hour and minute.
-    pub fn yearly_on(
-        month: u32,
-        day: u32,
-        hour: u32,
-        minute: u32,
-    ) -> Result<Self, CrontabTimerError> {
+    pub fn yearly_on(month: u32, day: u32, hour: u32, minute: u32) -> Result<Self> {
         Ok(Self {
             minutes: vec![CrontabValue::number(CrontabField::Minute, minute)?],
             hours: vec![CrontabValue::number(CrontabField::Hour, hour)?],
@@ -387,7 +362,7 @@ impl Crontab {
 }
 
 impl CrontabValue {
-    fn validate(field: CrontabField, value: u32) -> Result<u32, CrontabTimerError> {
+    fn validate(field: CrontabField, value: u32) -> Result<u32> {
         let (min, max) = field.bounds();
         if value < min || value > max {
             return Err(CrontabTimerError::ValueOutOfRange {
@@ -402,12 +377,12 @@ impl CrontabValue {
     }
 
     /// Construct and validate an explicit value for a crontab field.
-    pub fn number(field: CrontabField, value: u32) -> Result<Self, CrontabTimerError> {
+    pub fn number(field: CrontabField, value: u32) -> Result<Self> {
         Ok(Self::Number(Self::validate(field, value)?))
     }
 
     /// Construct and validate an inclusive range for a crontab field.
-    pub fn range(field: CrontabField, start: u32, end: u32) -> Result<Self, CrontabTimerError> {
+    pub fn range(field: CrontabField, start: u32, end: u32) -> Result<Self> {
         let start = Self::validate(field, start)?;
         let end = Self::validate(field, end)?;
 
@@ -419,7 +394,7 @@ impl CrontabValue {
     }
 
     /// Construct and validate a step value for a crontab field.
-    pub fn step(field: CrontabField, step: u32) -> Result<Self, CrontabTimerError> {
+    pub fn step(field: CrontabField, step: u32) -> Result<Self> {
         if step == 0 {
             return Err(CrontabTimerError::ZeroStep { field });
         }
