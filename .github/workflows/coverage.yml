@@ -38,6 +38,7 @@ jobs:
     env:
       CARGO_INCREMENTAL: 0
       DATABASE_URL: postgres://testuser:testpassword@localhost:5432/testdb
+      COVERAGE_IGNORE_REGEX: "crates/graphile-worker-admin-ui/src/lib\\.rs|crates/graphile-worker-cli/src/main\\.rs"
     services:
       postgres:
         image: postgres:18
@@ -63,7 +64,7 @@ jobs:
         run: cargo install wasm-bindgen-cli --version 0.2.121 --locked --debug
       - name: Run coverage
         run: |
-          cargo llvm-cov nextest --cobertura --output-path "${{ matrix.output }}" ${{ matrix.cargo_args }} ${{ matrix.nextest_args }}
+          cargo llvm-cov nextest --ignore-filename-regex "${COVERAGE_IGNORE_REGEX}" --cobertura --output-path "${{ matrix.output }}" ${{ matrix.cargo_args }} ${{ matrix.nextest_args }}
       - name: Upload combined coverage to Codecov
         if: matrix.codecov_flags == ''
         uses: codecov/codecov-action@v6
