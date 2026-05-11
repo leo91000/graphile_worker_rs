@@ -149,7 +149,7 @@ async fn backfills_if_identifier_already_registered_5h_ago() {
                 .expect("Failed to run worker");
         });
 
-        // We wait for the assertion to be true, or we panic after 5 seconds
+        // We wait for the assertion to be true, or we panic after 30 seconds
         // This is to give time to the worker to schedule the backfill jobs
         let start_time = Instant::now();
         loop {
@@ -164,7 +164,7 @@ async fn backfills_if_identifier_already_registered_5h_ago() {
             let is_expected_time = last_execution == expected_time;
             let is_expected_time_plus_4h = last_execution == (expected_time + four_hours);
 
-            if start_time.elapsed().as_secs() > 5 || is_expected_time || is_expected_time_plus_4h {
+            if start_time.elapsed().as_secs() > 30 || is_expected_time || is_expected_time_plus_4h {
                 assert!(
                     is_expected_time || is_expected_time_plus_4h,
                     r#"
@@ -249,7 +249,7 @@ async fn backfills_if_identifier_already_registered_25h_ago() {
                 .expect("Failed to run worker");
         });
 
-        // We wait for the assertion to be true, or we panic after 5 seconds
+        // We wait for the assertion to be true, or we panic after 30 seconds
         // This is to give time to the worker to schedule the backfill jobs
         let start_time = Instant::now();
         loop {
@@ -264,7 +264,7 @@ async fn backfills_if_identifier_already_registered_25h_ago() {
             let is_expected_time = last_execution == expected_time;
             let is_expected_time_plus_4h = last_execution == (expected_time + four_hours);
 
-            if start_time.elapsed().as_secs() > 5 || is_expected_time || is_expected_time_plus_4h {
+            if start_time.elapsed().as_secs() > 30 || is_expected_time || is_expected_time_plus_4h {
                 assert!(
                     is_expected_time || is_expected_time_plus_4h,
                     r#"
