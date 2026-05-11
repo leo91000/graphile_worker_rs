@@ -989,6 +989,32 @@ mod tests {
         futures::future::pending::<()>().boxed().shared()
     }
 
+    #[tokio::test]
+    async fn failing_driver_contract_is_exercised() {
+        let driver = FailingDriver;
+
+        #[cfg(feature = "driver-sqlx")]
+        assert!(driver.try_sqlx_pool().is_none());
+        assert!(driver.as_any().is::<FailingDriver>());
+        assert!(driver
+            .execute("", DbParams::new())
+            .await
+            .expect_err("execute should fail")
+            .to_string()
+            .contains("forced failure"));
+        assert!(driver
+            .fetch_all("", DbParams::new())
+            .await
+            .expect("fetch_all should return an empty result")
+            .is_empty());
+        assert!(driver.begin().await.is_err());
+        assert!(driver
+            .listen("")
+            .await
+            .expect("listen should succeed without a stream")
+            .is_none());
+    }
+
     #[test]
     fn panic_payload_to_string_handles_static_str() {
         assert_eq!(
