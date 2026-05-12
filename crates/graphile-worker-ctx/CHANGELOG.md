@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_ctx-v0.5.0...graphile_worker_ctx-v0.5.1) - 2026-05-12
+
+### Other
+
+- organize admin UI and workspace deps
+- add CLI crate and prefix crate folders
+
 ## [0.5.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_ctx-v0.4.2...graphile_worker_ctx-v0.5.0) - 2026-05-11
 
 ### Added

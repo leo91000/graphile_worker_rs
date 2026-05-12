@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.13.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.12.0...graphile_worker-v0.13.0) - 2026-05-12
+
+### Added
+
+- add embedded admin UI
+- add batch job processing
+
+### Fixed
+
+- collapse nested else/if in streams.rs select loop
+- replace non-existent i-lucide-key-x icon
+- address admin UI review feedback
+- use prebuilt admin UI assets
+- address admin UI review edges
+- handle admin job lookup edges
+- address admin UI PR feedback
+- address PR review feedback
+- address batch API review comments
+
+### Other
+
+- Create FUNDING.yml
+- *(deps)* update all non-major dependencies
+- keep admin UI server out of coverage
+- organize admin UI and workspace deps
+- split admin UI client modules
+- exclude wasm client from coverage export
+- make run_once wait deterministic
+- cover runner failure test driver
+- fix admin UI build script link
+- fix coverage gate and PR feedback
+- fix Codecov coverage gate
+- document branch and PR naming rules
+- upload release binaries
+- add CLI crate and prefix crate folders
+- improve coverage for project gate
+- harden cron backfill wait
+- improve batch patch coverage
+- stabilize CI coverage checks
+
 ## [0.12.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.11.4...graphile_worker-v0.12.0) - 2026-05-11
 
 ### Added

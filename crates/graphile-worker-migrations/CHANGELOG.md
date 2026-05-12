@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.16](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.15...graphile_worker_migrations-v0.4.16) - 2026-05-12
+
+### Other
+
+- organize admin UI and workspace deps
+- add CLI crate and prefix crate folders
+
 ## [0.4.15](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.14...graphile_worker_migrations-v0.4.15) - 2026-05-11
 
 ### Added
