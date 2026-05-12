@@ -207,37 +207,35 @@ async fn job_signal_stream_internal(
                     },
                 }
             }
+        } else if let Some(pg_listener) = f.pg_listener.as_mut() {
+            let interval = f.interval.tick().fuse();
+            let pg_listener = pg_listener.next().fuse();
+            let shutdown = (&mut f.shutdown_signal).fuse();
+            futures::pin_mut!(interval, pg_listener, shutdown);
+
+            futures::select_biased! {
+                _ = shutdown => NextSignal::Shutdown,
+                _ = interval => NextSignal::Source(StreamSource::Polling),
+                res = pg_listener => match res {
+                    Some(Ok(_)) => NextSignal::Source(StreamSource::PgListener),
+                    Some(Err(error)) => {
+                        warn!(?error, "PostgreSQL notification listener failed; falling back to polling");
+                        NextSignal::PgListenerClosed
+                    }
+                    None => {
+                        warn!("PostgreSQL notification listener closed; falling back to polling");
+                        NextSignal::PgListenerClosed
+                    }
+                },
+            }
         } else {
-            if let Some(pg_listener) = f.pg_listener.as_mut() {
-                let interval = f.interval.tick().fuse();
-                let pg_listener = pg_listener.next().fuse();
-                let shutdown = (&mut f.shutdown_signal).fuse();
-                futures::pin_mut!(interval, pg_listener, shutdown);
+            let interval = f.interval.tick().fuse();
+            let shutdown = (&mut f.shutdown_signal).fuse();
+            futures::pin_mut!(interval, shutdown);
 
-                futures::select_biased! {
-                    _ = shutdown => NextSignal::Shutdown,
-                    _ = interval => NextSignal::Source(StreamSource::Polling),
-                    res = pg_listener => match res {
-                        Some(Ok(_)) => NextSignal::Source(StreamSource::PgListener),
-                        Some(Err(error)) => {
-                            warn!(?error, "PostgreSQL notification listener failed; falling back to polling");
-                            NextSignal::PgListenerClosed
-                        }
-                        None => {
-                            warn!("PostgreSQL notification listener closed; falling back to polling");
-                            NextSignal::PgListenerClosed
-                        }
-                    },
-                }
-            } else {
-                let interval = f.interval.tick().fuse();
-                let shutdown = (&mut f.shutdown_signal).fuse();
-                futures::pin_mut!(interval, shutdown);
-
-                futures::select_biased! {
-                    _ = shutdown => NextSignal::Shutdown,
-                    _ = interval => NextSignal::Source(StreamSource::Polling),
-                }
+            futures::select_biased! {
+                _ = shutdown => NextSignal::Shutdown,
+                _ = interval => NextSignal::Source(StreamSource::Polling),
             }
         };
 
