@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.6](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.7.5...graphile_worker_crontab_runner-v0.7.6) - 2026-05-12
+
+### Other
+
+- organize admin UI and workspace deps
+- add CLI crate and prefix crate folders
+
 ## [0.7.5](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.7.4...graphile_worker_crontab_runner-v0.7.5) - 2026-05-11
 
 ### Added

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_database-v0.1.1...graphile_worker_database-v0.1.2) - 2026-05-12
+
+### Other
+
+- organize admin UI and workspace deps
+
 ## [0.1.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_database-v0.1.0...graphile_worker_database-v0.1.1) - 2026-05-11
 
 ### Fixed
