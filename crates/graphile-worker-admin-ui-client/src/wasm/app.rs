@@ -420,7 +420,7 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
                             <span class="i-lucide-ban h-4 w-4"></span>"Fail"
                         </button>
                         <button class="gw-btn" type="button" disabled=config.read_only on:click=move |_| modal.set(Some(Modal::RemoveKey))>
-                            <span class="i-lucide-key-x h-4 w-4"></span>"Remove by key"
+                            <span class="i-tabler-key-off h-4 w-4"></span>"Remove by key"
                         </button>
                     </div>
 

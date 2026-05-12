@@ -320,7 +320,7 @@ pub(super) fn RemoveKeyModal(
             );
         }>
             <TextInput label="Job key" value=key required=true />
-            <ModalButtons modal=modal danger=true submit_label="Remove" submit_icon="i-lucide-key-x" />
+            <ModalButtons modal=modal danger=true submit_label="Remove" submit_icon="i-tabler-key-off" />
         </form>
     }
 }
