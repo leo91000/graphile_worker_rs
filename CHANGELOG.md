@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.0...graphile_worker-v0.13.1) - 2026-05-18
+
+### Other
+
+- *(deps)* lock file maintenance ([#420](https://github.com/leo91000/graphile_worker_rs/pull/420))
+- *(deps)* update dependency @iconify-json/lucide to v1.2.108 ([#419](https://github.com/leo91000/graphile_worker_rs/pull/419))
+- *(deps)* update rust crate serde_qs to 1.1.2 ([#418](https://github.com/leo91000/graphile_worker_rs/pull/418))
+
 ## [0.13.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.12.0...graphile_worker-v0.13.0) - 2026-05-12
 
 ### Added
