@@ -101,11 +101,6 @@ struct MockDriver {
 }
 
 impl DbExecutor for MockDriver {
-    #[cfg(feature = "driver-sqlx")]
-    fn try_sqlx_pool(&self) -> Option<&::sqlx::PgPool> {
-        None
-    }
-
     fn execute<'a>(
         &'a self,
         _sql: &'a str,
@@ -179,8 +174,6 @@ async fn database_wrapper_delegates_to_inner_driver() {
 
     assert!(format!("{database:?}").contains("Database"));
     assert!(cloned.downcast_ref::<MockDriver>().is_some());
-    #[cfg(feature = "driver-sqlx")]
-    assert!(database.try_sqlx_pool().is_none());
 
     assert_eq!(
         database
@@ -499,15 +492,14 @@ async fn sqlx_driver_satisfies_database_contract() {
 
     let database = Database::from(sqlx_database.clone());
     assert!(database.downcast_ref::<SqlxDatabase>().is_some());
-    assert!(database.try_sqlx_pool().is_some());
 
     exercise_database(&database).await;
     exercise_listen(&database, &unique_channel("database_driver_sqlx")).await;
 
     let from_pool = Database::from(pool.clone());
-    assert!(from_pool.try_sqlx_pool().is_some());
+    exercise_database(&from_pool).await;
     let from_pool_ref = Database::from(&pool);
-    assert!(from_pool_ref.try_sqlx_pool().is_some());
+    exercise_database(&from_pool_ref).await;
 }
 
 #[cfg(feature = "driver-tokio-postgres")]
@@ -519,8 +511,6 @@ async fn tokio_postgres_driver_satisfies_database_contract() {
 
     let database = Database::from(tokio_database.clone());
     assert!(database.downcast_ref::<TokioPostgresDatabase>().is_some());
-    #[cfg(feature = "driver-sqlx")]
-    assert!(database.try_sqlx_pool().is_none());
 
     exercise_database(&database).await;
     exercise_listen(&database, &unique_channel("database_driver_tokio")).await;

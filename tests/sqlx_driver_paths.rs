@@ -29,7 +29,7 @@ async fn count_jobs(test_db: &helpers::TestDatabase, identifier: &str) -> i64 {
 }
 
 #[tokio::test]
-async fn sqlx_pool_exercises_batch_add_jobs_fast_path() {
+async fn sqlx_pool_exercises_batch_add_jobs() {
     with_test_db(|test_db| async move {
         test_db
             .worker_utils()
@@ -107,7 +107,7 @@ async fn sqlx_pool_exercises_batch_add_jobs_fast_path() {
             true,
         )
         .await
-        .expect("SQLx add_jobs fast path should insert jobs");
+        .expect("SQLx add_jobs should insert jobs");
         assert_eq!(added.len(), 2);
 
         let large_spec = JobSpec::default();
@@ -128,7 +128,7 @@ async fn sqlx_pool_exercises_batch_add_jobs_fast_path() {
             true,
         )
         .await
-        .expect("SQLx add_jobs fast path should insert large batches");
+        .expect("SQLx add_jobs should insert large batches");
         assert_eq!(large_added.len(), 512);
     })
     .await;
@@ -259,7 +259,7 @@ async fn sqlx_connection_executor_adds_job() {
 }
 
 #[tokio::test]
-async fn sqlx_pool_exercises_get_and_fail_fast_paths() {
+async fn sqlx_pool_exercises_get_and_fail_helpers() {
     with_test_db(|test_db| async move {
         test_db
             .worker_utils()
@@ -318,7 +318,7 @@ async fn sqlx_pool_exercises_get_and_fail_fast_paths() {
             Some(now + chrono::Duration::seconds(1)),
         )
         .await
-        .expect("SQLx get_job fast path should succeed")
+        .expect("SQLx get_job should succeed")
         .expect("A job should be fetched");
         assert_eq!(first_job.task_identifier(), "sqlx_fetch_no_queue");
 
@@ -332,7 +332,7 @@ async fn sqlx_pool_exercises_get_and_fail_fast_paths() {
             "sqlx-worker-one",
         )
         .await
-        .expect("SQLx fail_jobs fast path should handle jobs without queues");
+        .expect("SQLx fail_jobs should handle jobs without queues");
 
         let batch = batch_get_jobs(
             &test_db.test_pool,
@@ -344,7 +344,7 @@ async fn sqlx_pool_exercises_get_and_fail_fast_paths() {
             Some(now + chrono::Duration::seconds(1)),
         )
         .await
-        .expect("SQLx batch_get_jobs fast path should succeed");
+        .expect("SQLx batch_get_jobs should succeed");
         assert_eq!(batch.len(), 1);
         assert_eq!(batch[0].task_identifier(), "sqlx_fetch_queue");
 
@@ -358,7 +358,7 @@ async fn sqlx_pool_exercises_get_and_fail_fast_paths() {
             "sqlx-worker-two",
         )
         .await
-        .expect("SQLx fail_jobs fast path should handle queued jobs");
+        .expect("SQLx fail_jobs should handle queued jobs");
     })
     .await;
 }
