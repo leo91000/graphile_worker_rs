@@ -1,4 +1,4 @@
-use graphile_worker_database::{DbExecutor, DbValue};
+use graphile_worker_database::{DbExecutorArg, DbValue};
 use indoc::formatdoc;
 
 use crate::errors::Result;
@@ -19,7 +19,7 @@ fn task_rows_to_details(tasks: Vec<TaskRow>) -> TaskDetails {
 
 #[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn get_tasks_details(
-    executor: &impl DbExecutor,
+    mut executor: impl DbExecutorArg,
     escaped_schema: &str,
     task_names: Vec<String>,
 ) -> Result<TaskDetails> {

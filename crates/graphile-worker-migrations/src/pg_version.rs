@@ -1,11 +1,11 @@
-use graphile_worker_database::{DbExecutor, DbParams};
+use graphile_worker_database::{DbExecutorArg, DbParams};
 use indoc::formatdoc;
 
 use crate::MigrateError;
 
 /// Fetches the postgres version and checks if it is compatible with Garphile Worker
 pub async fn fetch_and_check_postgres_version(
-    executor: &impl DbExecutor,
+    mut executor: impl DbExecutorArg,
 ) -> Result<u32, MigrateError> {
     let sql = formatdoc!(
         r#"

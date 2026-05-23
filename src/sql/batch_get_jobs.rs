@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use graphile_worker_database::{DbExecutor, DbParams, DbValue};
+use graphile_worker_database::{DbExecutorArg, DbParams, DbValue};
 use indoc::formatdoc;
 
 use crate::errors::Result;
@@ -11,7 +11,7 @@ use super::job_query_helpers::{
 use super::task_identifiers::TaskDetails;
 
 pub async fn batch_get_jobs(
-    executor: &impl DbExecutor,
+    mut executor: impl DbExecutorArg,
     task_details: &TaskDetails,
     escaped_schema: &str,
     worker_id: &str,

@@ -7,8 +7,8 @@ use sqlx::postgres::{PgArguments, PgRow};
 use sqlx::{Column, PgPool, Postgres, Row, TypeInfo};
 
 use crate::{
-    Database, DatabaseDriver, DbCell, DbError, DbExecutor, DbParams, DbRow, DbTransaction, DbValue,
-    Notification, NotificationStream, TransactionDriver,
+    Database, DatabaseDriver, DbCell, DbError, DbExecutor, DbExecutorArg, DbParams, DbRow,
+    DbTransaction, DbValue, Notification, NotificationStream, TransactionDriver,
 };
 
 #[derive(Clone, Debug)]
@@ -203,6 +203,62 @@ impl DbExecutor for PgPool {
     ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
         Box::pin(async move {
             let rows = bind_params(sql, &params).fetch_all(self).await?;
+            rows.into_iter().map(sqlx_row_to_db_row).collect()
+        })
+    }
+}
+
+impl DbExecutorArg for &mut sqlx::Transaction<'_, Postgres> {
+    fn execute<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
+        Box::pin(async move {
+            bind_params(sql, &params)
+                .execute((**self).as_mut())
+                .await
+                .map(|result| result.rows_affected())
+                .map_err(Into::into)
+        })
+    }
+
+    fn fetch_all<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
+        Box::pin(async move {
+            let rows = bind_params(sql, &params)
+                .fetch_all((**self).as_mut())
+                .await?;
+            rows.into_iter().map(sqlx_row_to_db_row).collect()
+        })
+    }
+}
+
+impl DbExecutorArg for &mut sqlx::PgConnection {
+    fn execute<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
+        Box::pin(async move {
+            bind_params(sql, &params)
+                .execute(&mut **self)
+                .await
+                .map(|result| result.rows_affected())
+                .map_err(Into::into)
+        })
+    }
+
+    fn fetch_all<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
+        Box::pin(async move {
+            let rows = bind_params(sql, &params).fetch_all(&mut **self).await?;
             rows.into_iter().map(sqlx_row_to_db_row).collect()
         })
     }

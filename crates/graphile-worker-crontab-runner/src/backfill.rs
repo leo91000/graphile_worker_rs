@@ -1,6 +1,6 @@
 use chrono::prelude::*;
 use graphile_worker_crontab_types::Crontab;
-use graphile_worker_database::DbExecutor;
+use graphile_worker_database::DbExecutorArg;
 use tracing::debug;
 
 use crate::{
@@ -55,7 +55,7 @@ pub(crate) fn get_backfill_and_unknown_items<'a, 'b>(
 }
 
 pub(crate) async fn register_and_backfill_items<Tz: TimeZone>(
-    executor: &impl DbExecutor,
+    mut executor: impl DbExecutorArg,
     escaped_schema: &str,
     crontabs: &[Crontab],
     start_time: &DateTime<Tz>,
@@ -64,7 +64,7 @@ pub(crate) async fn register_and_backfill_items<Tz: TimeZone>(
 where
     Tz::Offset: Send + Sync,
 {
-    let known_crontabs = get_known_crontabs(executor, escaped_schema).await?;
+    let known_crontabs = get_known_crontabs(&mut executor, escaped_schema).await?;
 
     let BackfillAndUnknownItems {
         backfill_items_and_date,
@@ -72,7 +72,13 @@ where
     } = get_backfill_and_unknown_items(crontabs, &known_crontabs);
 
     if !unknown_identifiers.is_empty() {
-        insert_unknown_crontabs(executor, escaped_schema, &unknown_identifiers, start_time).await?;
+        insert_unknown_crontabs(
+            &mut executor,
+            escaped_schema,
+            &unknown_identifiers,
+            start_time,
+        )
+        .await?;
     }
 
     let largest_backfill = backfill_items_and_date
@@ -106,8 +112,14 @@ where
 
             if !to_backfill.is_empty() {
                 debug!(nb_jobs = to_backfill.len(), at = ?ts, "cron:backfill");
-                schedule_cron_jobs(executor, &to_backfill, &ts, escaped_schema, use_local_time)
-                    .await?;
+                schedule_cron_jobs(
+                    &mut executor,
+                    &to_backfill,
+                    &ts,
+                    escaped_schema,
+                    use_local_time,
+                )
+                .await?;
             }
 
             ts += *ONE_MINUTE;

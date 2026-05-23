@@ -1,4 +1,4 @@
-use graphile_worker_database::{DbExecutor, DbValue};
+use graphile_worker_database::{DbExecutorArg, DbValue};
 use indoc::formatdoc;
 
 use crate::errors::GraphileWorkerError;
@@ -7,7 +7,7 @@ use crate::Job;
 
 #[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn complete_job(
-    executor: &impl DbExecutor,
+    mut executor: impl DbExecutorArg,
     job: &Job,
     worker_id: &str,
     escaped_schema: &str,
