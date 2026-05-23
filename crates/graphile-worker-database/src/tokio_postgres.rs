@@ -344,6 +344,33 @@ impl DbExecutorArg for &Transaction<'_> {
     }
 }
 
+impl DbExecutorArg for &mut Transaction<'_> {
+    fn execute<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
+        Box::pin(async move {
+            let params = boxed_params(params);
+            let refs = param_refs(&params);
+            (**self).execute(sql, &refs).await.map_err(Into::into)
+        })
+    }
+
+    fn fetch_all<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
+        Box::pin(async move {
+            let params = boxed_params(params);
+            let refs = param_refs(&params);
+            let rows = (**self).query(sql, &refs).await?;
+            rows.into_iter().map(tokio_row_to_db_row).collect()
+        })
+    }
+}
+
 impl DbExecutorArg for &deadpool_postgres::Client {
     fn execute<'a>(
         &'a mut self,
