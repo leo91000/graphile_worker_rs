@@ -378,11 +378,6 @@ pub async fn create_test_database() -> TestDatabase {
         .await
         .expect("Failed to create test database");
 
-    sqlx::query(sqlx::AssertSqlSafe(format!("CREATE SCHEMA {}", db_name)))
-        .execute(&pg_pool)
-        .await
-        .expect("Failed to create test schema");
-
     let test_options = pg_conn_options.database(&db_name);
     let test_database_url = test_database_url(&db_url, &db_name);
 
