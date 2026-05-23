@@ -147,10 +147,6 @@ fn sqlx_row_to_db_row(row: PgRow) -> Result<DbRow, DbError> {
 }
 
 impl DbExecutor for SqlxDatabase {
-    fn try_sqlx_pool(&self) -> Option<&::sqlx::PgPool> {
-        Some(&self.pool)
-    }
-
     fn execute<'a>(
         &'a self,
         sql: &'a str,
@@ -178,10 +174,6 @@ impl DbExecutor for SqlxDatabase {
 }
 
 impl DbExecutor for PgPool {
-    fn try_sqlx_pool(&self) -> Option<&::sqlx::PgPool> {
-        Some(self)
-    }
-
     fn execute<'a>(
         &'a self,
         sql: &'a str,

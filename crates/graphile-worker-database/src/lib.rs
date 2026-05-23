@@ -212,11 +212,6 @@ impl DbError {
 }
 
 pub trait DbExecutor: Send + Sync {
-    #[cfg(feature = "driver-sqlx")]
-    fn try_sqlx_pool(&self) -> Option<&::sqlx::PgPool> {
-        None
-    }
-
     fn execute<'a>(&'a self, sql: &'a str, params: DbParams)
         -> BoxFuture<'a, Result<u64, DbError>>;
 
@@ -251,11 +246,6 @@ pub trait DbExecutor: Send + Sync {
 }
 
 pub trait DbExecutorArg: Send {
-    #[cfg(feature = "driver-sqlx")]
-    fn try_sqlx_pool(&mut self) -> Option<&::sqlx::PgPool> {
-        None
-    }
-
     fn execute<'a>(
         &'a mut self,
         sql: &'a str,
@@ -299,11 +289,6 @@ pub trait DbExecutorArg: Send {
 }
 
 impl<T: DbExecutor + ?Sized> DbExecutorArg for &T {
-    #[cfg(feature = "driver-sqlx")]
-    fn try_sqlx_pool(&mut self) -> Option<&::sqlx::PgPool> {
-        DbExecutor::try_sqlx_pool(*self)
-    }
-
     fn execute<'a>(
         &'a mut self,
         sql: &'a str,
@@ -322,11 +307,6 @@ impl<T: DbExecutor + ?Sized> DbExecutorArg for &T {
 }
 
 impl<T: DbExecutorArg + ?Sized> DbExecutorArg for &mut T {
-    #[cfg(feature = "driver-sqlx")]
-    fn try_sqlx_pool(&mut self) -> Option<&::sqlx::PgPool> {
-        (**self).try_sqlx_pool()
-    }
-
     fn execute<'a>(
         &'a mut self,
         sql: &'a str,
@@ -397,11 +377,6 @@ impl fmt::Debug for Database {
 }
 
 impl DbExecutor for Database {
-    #[cfg(feature = "driver-sqlx")]
-    fn try_sqlx_pool(&self) -> Option<&::sqlx::PgPool> {
-        self.inner.try_sqlx_pool()
-    }
-
     fn execute<'a>(
         &'a self,
         sql: &'a str,

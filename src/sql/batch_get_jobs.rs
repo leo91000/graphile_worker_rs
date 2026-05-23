@@ -65,33 +65,6 @@ pub async fn batch_get_jobs(
         "#
     );
 
-    #[cfg(feature = "driver-sqlx")]
-    if let Some(pool) = executor.try_sqlx_pool() {
-        let mut q = sqlx::query_as(&sql)
-            .bind(worker_id)
-            .bind(task_details.task_ids())
-            .bind(batch_size);
-
-        if has_flags {
-            q = q.bind(flags_to_skip);
-        }
-        if let Some(ts) = now {
-            q = q.bind(ts);
-        }
-
-        let jobs: Vec<graphile_worker_job::DbJob> = q
-            .fetch_all(pool)
-            .await
-            .map_err(graphile_worker_database::DbError::from)?;
-        return Ok(jobs
-            .into_iter()
-            .map(|job| {
-                let task_identifier = task_details.get_or_empty(job.id(), job.task_id());
-                Job::from_db_job(job, task_identifier)
-            })
-            .collect());
-    }
-
     let mut params = vec![
         DbValue::Text(worker_id.to_string()),
         DbValue::I32Array(task_details.task_ids().to_vec()),

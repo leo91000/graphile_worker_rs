@@ -1,7 +1,5 @@
 use crate::{errors::GraphileWorkerError, JobKeyMode, JobSpec};
 use chrono::{DateTime, Utc};
-#[cfg(feature = "driver-sqlx")]
-use graphile_worker_database::DbError;
 use graphile_worker_database::{DbExecutorArg, DbValue};
 use graphile_worker_job::Job;
 use indoc::formatdoc;
@@ -156,34 +154,6 @@ fn add_jobs_sql(escaped_schema: &str) -> String {
     )
 }
 
-#[cfg(feature = "driver-sqlx")]
-async fn add_jobs_sqlx<'a>(
-    pool: &sqlx::PgPool,
-    escaped_schema: &str,
-    jobs: &[JobToAdd<'a>],
-    task_details: &TaskDetails,
-    job_key_preserve_run_at: bool,
-    default_run_at: Option<DateTime<Utc>>,
-) -> Result<Vec<Job>, GraphileWorkerError> {
-    let sql = add_jobs_sql(escaped_schema);
-
-    let specs_json = build_batch_specs_json(jobs, default_run_at)?;
-    let db_jobs: Vec<graphile_worker_job::DbJob> = sqlx::query_as(&sql)
-        .bind(&specs_json)
-        .bind(job_key_preserve_run_at)
-        .fetch_all(pool)
-        .await
-        .map_err(DbError::from)?;
-
-    Ok(db_jobs
-        .into_iter()
-        .map(|db_job| {
-            let identifier = task_details.get_or_empty(db_job.id(), db_job.task_id());
-            Job::from_db_job(db_job, identifier)
-        })
-        .collect())
-}
-
 #[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn add_jobs<'a>(
     mut executor: impl DbExecutorArg,
@@ -208,21 +178,6 @@ pub async fn add_jobs<'a>(
     }
 
     let default_run_at = use_local_time.then(Utc::now);
-    #[cfg(feature = "driver-sqlx")]
-    if let Some(pool) = executor.try_sqlx_pool() {
-        let result = add_jobs_sqlx(
-            pool,
-            escaped_schema,
-            jobs,
-            task_details,
-            job_key_preserve_run_at,
-            default_run_at,
-        )
-        .await?;
-        info!(count = result.len(), "Jobs added to queue in batch");
-        return Ok(result);
-    }
-
     let sql = add_jobs_sql(escaped_schema);
 
     let specs_json = build_batch_specs_json(jobs, default_run_at)?;

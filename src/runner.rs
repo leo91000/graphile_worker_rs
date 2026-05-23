@@ -946,11 +946,6 @@ mod tests {
     struct FailingDriver;
 
     impl DbExecutor for FailingDriver {
-        #[cfg(feature = "driver-sqlx")]
-        fn try_sqlx_pool(&self) -> Option<&::sqlx::PgPool> {
-            None
-        }
-
         fn execute<'a>(
             &'a self,
             _sql: &'a str,
@@ -993,8 +988,6 @@ mod tests {
     async fn failing_driver_contract_is_exercised() {
         let driver = FailingDriver;
 
-        #[cfg(feature = "driver-sqlx")]
-        assert!(driver.try_sqlx_pool().is_none());
         assert!(driver.as_any().is::<FailingDriver>());
         assert!(driver
             .execute("", DbParams::new())
