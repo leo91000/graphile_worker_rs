@@ -1,6 +1,6 @@
 #[cfg(feature = "driver-sqlx")]
 use graphile_worker_database::DbError;
-use graphile_worker_database::{DbExecutor, DbValue};
+use graphile_worker_database::{DbExecutorArg, DbValue};
 use indoc::formatdoc;
 
 use crate::errors::Result;
@@ -89,7 +89,7 @@ async fn fail_jobs_sqlx(
 
 #[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn fail_job(
-    executor: &impl DbExecutor,
+    mut executor: impl DbExecutorArg,
     job: &Job,
     escaped_schema: &str,
     worker_id: &str,
@@ -162,7 +162,7 @@ pub async fn fail_job(
 
 #[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn fail_jobs(
-    executor: &impl DbExecutor,
+    mut executor: impl DbExecutorArg,
     jobs: &[FailedJob<'_>],
     escaped_schema: &str,
     worker_id: &str,

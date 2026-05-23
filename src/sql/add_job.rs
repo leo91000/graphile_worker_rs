@@ -2,7 +2,7 @@ use crate::{errors::GraphileWorkerError, JobKeyMode, JobSpec};
 use chrono::{DateTime, Utc};
 #[cfg(feature = "driver-sqlx")]
 use graphile_worker_database::DbError;
-use graphile_worker_database::{DbExecutor, DbValue};
+use graphile_worker_database::{DbExecutorArg, DbValue};
 use graphile_worker_job::Job;
 use indoc::formatdoc;
 use tracing::info;
@@ -25,7 +25,7 @@ pub struct JobToAdd<'a> {
 /// Add a job to the queue
 #[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn add_job(
-    executor: &impl DbExecutor,
+    mut executor: impl DbExecutorArg,
     escaped_schema: &str,
     identifier: &str,
     payload: serde_json::Value,
@@ -186,7 +186,7 @@ async fn add_jobs_sqlx<'a>(
 
 #[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn add_jobs<'a>(
-    executor: &impl DbExecutor,
+    mut executor: impl DbExecutorArg,
     escaped_schema: &str,
     jobs: &[JobToAdd<'a>],
     task_details: &TaskDetails,

@@ -337,12 +337,9 @@ fn create_graphile_database(test_pool: PgPool, test_database_url: &str) -> Datab
     #[cfg(feature = "driver-tokio-postgres")]
     {
         let _ = test_pool;
-        return graphile_worker::tokio_postgres::TokioPostgresDatabase::from_url(
-            test_database_url,
-            2,
-        )
-        .expect("Failed to create tokio-postgres database")
-        .into();
+        graphile_worker::tokio_postgres::TokioPostgresDatabase::from_url(test_database_url, 2)
+            .expect("Failed to create tokio-postgres database")
+            .into()
     }
 
     #[cfg(all(not(feature = "driver-tokio-postgres"), feature = "driver-sqlx"))]

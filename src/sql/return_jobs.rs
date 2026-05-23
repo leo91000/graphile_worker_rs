@@ -1,11 +1,11 @@
-use graphile_worker_database::{DbExecutor, DbValue};
+use graphile_worker_database::{DbExecutorArg, DbValue};
 use indoc::formatdoc;
 
 use crate::errors::Result;
 use graphile_worker_job::Job;
 
 pub async fn return_jobs(
-    executor: &impl DbExecutor,
+    mut executor: impl DbExecutorArg,
     jobs: &[Job],
     escaped_schema: &str,
     worker_id: &str,

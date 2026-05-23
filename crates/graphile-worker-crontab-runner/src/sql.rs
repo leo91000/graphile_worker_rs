@@ -1,7 +1,7 @@
 use chrono::prelude::*;
 use getset::Getters;
 use graphile_worker_crontab_types::{Crontab, JobKeyMode};
-use graphile_worker_database::{DbError, DbExecutor, DbParams, DbValue};
+use graphile_worker_database::{DbError, DbExecutorArg, DbParams, DbValue};
 use indoc::formatdoc;
 use serde::Serialize;
 use serde_json::json;
@@ -31,7 +31,7 @@ impl KnownCrontab {
 }
 
 pub async fn get_known_crontabs(
-    executor: &impl DbExecutor,
+    mut executor: impl DbExecutorArg,
     escaped_schema: &str,
 ) -> Result<Vec<KnownCrontab>, DbError> {
     let sql = formatdoc!(
@@ -56,7 +56,7 @@ pub async fn get_known_crontabs(
 }
 
 pub async fn insert_unknown_crontabs<Tz: TimeZone, S: AsRef<str>>(
-    executor: &impl DbExecutor,
+    mut executor: impl DbExecutorArg,
     escaped_schema: &str,
     unknown_identifiers: &[S],
     start_time: &DateTime<Tz>,
@@ -136,7 +136,7 @@ pub enum ScheduleCronJobError {
 }
 
 pub async fn schedule_cron_jobs<Tz: TimeZone>(
-    executor: &impl DbExecutor,
+    mut executor: impl DbExecutorArg,
     crontab_jobs: &[CrontabJob],
     last_execution: &DateTime<Tz>,
     escaped_schema: &str,

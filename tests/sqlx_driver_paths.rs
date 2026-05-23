@@ -13,6 +13,21 @@ use helpers::with_test_db;
 
 mod helpers;
 
+async fn count_jobs(test_db: &helpers::TestDatabase, identifier: &str) -> i64 {
+    sqlx::query_scalar(
+        r#"
+            SELECT count(*)
+            FROM graphile_worker._private_jobs jobs
+            JOIN graphile_worker._private_tasks tasks ON tasks.id = jobs.task_id
+            WHERE tasks.identifier = $1
+        "#,
+    )
+    .bind(identifier)
+    .fetch_one(&test_db.test_pool)
+    .await
+    .expect("Failed to count jobs")
+}
+
 #[tokio::test]
 async fn sqlx_pool_exercises_batch_add_jobs_fast_path() {
     with_test_db(|test_db| async move {
@@ -115,6 +130,130 @@ async fn sqlx_pool_exercises_batch_add_jobs_fast_path() {
         .await
         .expect("SQLx add_jobs fast path should insert large batches");
         assert_eq!(large_added.len(), 512);
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn sqlx_transaction_executor_participates_in_caller_transaction() {
+    with_test_db(|test_db| async move {
+        test_db
+            .worker_utils()
+            .migrate()
+            .await
+            .expect("Failed to migrate");
+
+        let mut tx = test_db
+            .test_pool
+            .begin()
+            .await
+            .expect("Failed to begin transaction");
+
+        add_job(
+            &mut tx,
+            "graphile_worker",
+            "sqlx_transaction_job",
+            json!({ "transactional": true }),
+            JobSpec::default(),
+            false,
+        )
+        .await
+        .expect("Failed to add job in SQLx transaction");
+
+        tx.rollback()
+            .await
+            .expect("Failed to roll back transaction");
+
+        assert_eq!(count_jobs(&test_db, "sqlx_transaction_job").await, 0);
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn sqlx_transaction_executor_handles_batch_and_multistep_helpers() {
+    with_test_db(|test_db| async move {
+        test_db
+            .worker_utils()
+            .migrate()
+            .await
+            .expect("Failed to migrate");
+
+        let mut tx = test_db
+            .test_pool
+            .begin()
+            .await
+            .expect("Failed to begin transaction");
+
+        let task_details = get_tasks_details(
+            &mut tx,
+            "graphile_worker",
+            vec!["sqlx_transaction_batch".to_string()],
+        )
+        .await
+        .expect("Failed to get task details in transaction");
+
+        let spec = JobSpec::default();
+        let jobs = [
+            JobToAdd {
+                identifier: "sqlx_transaction_batch",
+                payload: json!({ "value": 1 }),
+                spec: &spec,
+            },
+            JobToAdd {
+                identifier: "sqlx_transaction_batch",
+                payload: json!({ "value": 2 }),
+                spec: &spec,
+            },
+        ];
+
+        let added = add_jobs(
+            &mut tx,
+            "graphile_worker",
+            &jobs,
+            &task_details,
+            false,
+            false,
+        )
+        .await
+        .expect("Failed to add batch jobs in SQLx transaction");
+        assert_eq!(added.len(), 2);
+
+        tx.rollback()
+            .await
+            .expect("Failed to roll back transaction");
+
+        assert_eq!(count_jobs(&test_db, "sqlx_transaction_batch").await, 0);
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn sqlx_connection_executor_adds_job() {
+    with_test_db(|test_db| async move {
+        test_db
+            .worker_utils()
+            .migrate()
+            .await
+            .expect("Failed to migrate");
+
+        let mut connection = test_db
+            .test_pool
+            .acquire()
+            .await
+            .expect("Failed to acquire SQLx connection");
+
+        add_job(
+            &mut *connection,
+            "graphile_worker",
+            "sqlx_connection_job",
+            json!({ "connection": true }),
+            JobSpec::default(),
+            false,
+        )
+        .await
+        .expect("Failed to add job with SQLx connection");
+
+        assert_eq!(count_jobs(&test_db, "sqlx_connection_job").await, 1);
     })
     .await;
 }

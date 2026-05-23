@@ -6,11 +6,11 @@ use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
 use serde_json::Value;
 use tokio::sync::{mpsc::UnboundedSender, oneshot, Mutex};
 use tokio_postgres::types::{ToSql, Type};
-use tokio_postgres::{AsyncMessage, Client, NoTls, Row};
+use tokio_postgres::{AsyncMessage, Client, NoTls, Row, Transaction};
 
 use crate::{
-    Database, DatabaseDriver, DbCell, DbError, DbExecutor, DbParams, DbRow, DbTransaction, DbValue,
-    Notification, NotificationStream, TransactionDriver,
+    Database, DatabaseDriver, DbCell, DbError, DbExecutor, DbExecutorArg, DbParams, DbRow,
+    DbTransaction, DbValue, Notification, NotificationStream, TransactionDriver,
 };
 
 const INITIAL_LISTENER_RECONNECT_DELAY: Duration = Duration::from_millis(50);
@@ -282,6 +282,116 @@ impl DbExecutor for TokioPostgresDatabase {
     ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
         Box::pin(async move {
             let client = self.pool.get().await?;
+            let params = boxed_params(params);
+            let refs = param_refs(&params);
+            let rows = client.query(sql, &refs).await?;
+            rows.into_iter().map(tokio_row_to_db_row).collect()
+        })
+    }
+}
+
+impl DbExecutorArg for &Client {
+    fn execute<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
+        Box::pin(async move {
+            let params = boxed_params(params);
+            let refs = param_refs(&params);
+            (**self).execute(sql, &refs).await.map_err(Into::into)
+        })
+    }
+
+    fn fetch_all<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
+        Box::pin(async move {
+            let params = boxed_params(params);
+            let refs = param_refs(&params);
+            let rows = (**self).query(sql, &refs).await?;
+            rows.into_iter().map(tokio_row_to_db_row).collect()
+        })
+    }
+}
+
+impl DbExecutorArg for &Transaction<'_> {
+    fn execute<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
+        Box::pin(async move {
+            let params = boxed_params(params);
+            let refs = param_refs(&params);
+            (**self).execute(sql, &refs).await.map_err(Into::into)
+        })
+    }
+
+    fn fetch_all<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
+        Box::pin(async move {
+            let params = boxed_params(params);
+            let refs = param_refs(&params);
+            let rows = (**self).query(sql, &refs).await?;
+            rows.into_iter().map(tokio_row_to_db_row).collect()
+        })
+    }
+}
+
+impl DbExecutorArg for &deadpool_postgres::Client {
+    fn execute<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
+        Box::pin(async move {
+            let params = boxed_params(params);
+            let refs = param_refs(&params);
+            (**self).execute(sql, &refs).await.map_err(Into::into)
+        })
+    }
+
+    fn fetch_all<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
+        Box::pin(async move {
+            let params = boxed_params(params);
+            let refs = param_refs(&params);
+            let rows = (**self).query(sql, &refs).await?;
+            rows.into_iter().map(tokio_row_to_db_row).collect()
+        })
+    }
+}
+
+impl DbExecutorArg for &Pool {
+    fn execute<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
+        Box::pin(async move {
+            let client = self.get().await?;
+            let params = boxed_params(params);
+            let refs = param_refs(&params);
+            client.execute(sql, &refs).await.map_err(Into::into)
+        })
+    }
+
+    fn fetch_all<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
+        Box::pin(async move {
+            let client = self.get().await?;
             let params = boxed_params(params);
             let refs = param_refs(&params);
             let rows = client.query(sql, &refs).await?;

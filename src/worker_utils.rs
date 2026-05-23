@@ -4,7 +4,7 @@ use crate::sql::add_job::{add_job, add_jobs, JobToAdd, RawJobSpec};
 use crate::sql::task_identifiers::{get_tasks_details, SharedTaskDetails};
 use crate::tracing::add_tracing_info;
 use crate::{errors::GraphileWorkerError, DbJob, Job, JobSpec};
-use graphile_worker_database::{Database, DbExecutor, DbValue};
+use graphile_worker_database::{Database, DbExecutor, DbExecutorArg, DbValue};
 use graphile_worker_lifecycle_hooks::{BeforeJobScheduleContext, HookRegistry, JobScheduleResult};
 use graphile_worker_migrations::{migrate, MigrateError};
 use graphile_worker_task_handler::{BatchTaskHandler, TaskHandler};
@@ -40,7 +40,7 @@ pub enum CleanupTask {
 impl CleanupTask {
     pub(crate) async fn execute(
         &self,
-        executor: &impl DbExecutor,
+        mut executor: impl DbExecutorArg,
         escaped_schema: &str,
         task_identifiers_to_keep: &[String],
     ) -> Result<(), GraphileWorkerError> {
