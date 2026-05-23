@@ -5,7 +5,7 @@ use graphile_worker_migrations::{
         m000001::M000001_MIGRATION, m000002::M000002_MIGRATION, m000003::M000003_MIGRATION,
         m000004::M000004_MIGRATION, m000005::M000005_MIGRATION, m000006::M000006_MIGRATION,
         m000007::M000007_MIGRATION, m000008::M000008_MIGRATION, m000009::M000009_MIGRATION,
-        m000010::M000010_MIGRATION,
+        m000010::M000010_MIGRATION, GraphileWorkerMigration,
     },
     MigrateError,
 };
@@ -121,6 +121,43 @@ async fn migration_can_take_over_from_pre_existing_migrations_table() {
             jobs_rows_after[0].task_identifier, "assert_jobs_work",
             "The job should still match 'assert_jobs_work' after re-migrating"
         );
+    })
+    .await;
+}
+
+#[cfg(feature = "driver-sqlx")]
+#[tokio::test]
+async fn migration_execute_supports_sqlx_transaction() {
+    with_test_db(|test_db| async move {
+        query("DROP SCHEMA IF EXISTS graphile_worker CASCADE;")
+            .execute(&test_db.test_pool)
+            .await
+            .unwrap();
+        query("CREATE SCHEMA graphile_worker;")
+            .execute(&test_db.test_pool)
+            .await
+            .unwrap();
+
+        let migration = GraphileWorkerMigration {
+            name: "m000001_sqlx_transaction",
+            is_breaking: false,
+            stmts: &[
+                "CREATE TABLE :GRAPHILE_WORKER_SCHEMA.sqlx_transaction_migration_test(id INT PRIMARY KEY)",
+                "INSERT INTO :GRAPHILE_WORKER_SCHEMA.sqlx_transaction_migration_test(id) VALUES (1)",
+            ],
+        };
+
+        let mut tx = test_db.test_pool.begin().await.unwrap();
+        migration.execute(&mut tx, "graphile_worker").await.unwrap();
+        tx.commit().await.unwrap();
+
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM graphile_worker.sqlx_transaction_migration_test")
+                .fetch_one(&test_db.test_pool)
+                .await
+                .unwrap();
+
+        assert_eq!(count, 1);
     })
     .await;
 }
