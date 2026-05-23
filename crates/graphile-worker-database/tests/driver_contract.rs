@@ -531,7 +531,10 @@ async fn tokio_postgres_driver_satisfies_database_contract() {
 async fn tokio_postgres_listener_reconnects_after_connection_loss() {
     let channel = unique_channel("database_driver_tokio_reconnect");
     let application_name = unique_channel("database_driver_tokio_listener");
-    let listen_query = format!(r#"LISTEN "{channel}""#);
+    let listen_query = format!(
+        "LISTEN {}",
+        graphile_worker_database::escape_identifier(&channel)
+    );
     let mut config = database_url().parse::<tokio_postgres::Config>().unwrap();
     config.application_name(&application_name);
     let tokio_database = TokioPostgresDatabase::from_config(config, 4).unwrap();
