@@ -1,8 +1,8 @@
 use std::process::{Command, Output};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
 use sqlx::PgPool;
+use uuid::Uuid;
 
 fn database_url_for_test_db(source_url: &str, name: &str) -> String {
     let mut database_url = source_url.to_string();
@@ -80,11 +80,7 @@ async fn cli_manages_job_lifecycle_with_database_url_flag() {
         .await
         .expect("failed to connect to source database");
 
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system time should be after unix epoch")
-        .as_nanos();
-    let database_name = format!("graphile_worker_cli_test_{}_{}", std::process::id(), suffix);
+    let database_name = format!("graphile_worker_cli_test_{}", Uuid::now_v7().simple());
     sqlx::query(sqlx::AssertSqlSafe(format!(
         "CREATE DATABASE {database_name}"
     )))
