@@ -5,9 +5,8 @@ use std::path::PathBuf;
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use graphile_worker::utils::escape_identifier;
 use graphile_worker::worker_utils::{CleanupTask, RescheduleJobOptions};
-use graphile_worker::{Database, DbJob, Job, JobKeyMode, JobSpec, WorkerUtils};
+use graphile_worker::{escape_identifier, Database, DbJob, Job, JobKeyMode, JobSpec, WorkerUtils};
 use graphile_worker_admin_ui::{AdminAuthConfig, AdminServerConfig};
 use indoc::formatdoc;
 use serde::Serialize;
@@ -446,6 +445,7 @@ async fn main() -> Result<()> {
         .database_url
         .as_deref()
         .ok_or_else(|| anyhow!("missing database URL; pass --database-url or set DATABASE_URL"))?;
+    let escaped_schema = escape_identifier(&cli.schema);
 
     let pool = PgPoolOptions::new()
         .max_connections(cli.max_connections)
@@ -454,9 +454,6 @@ async fn main() -> Result<()> {
         .context("failed to connect to PostgreSQL")?;
 
     let database: Database = pool.clone().into();
-    let escaped_schema = escape_identifier(&database, &cli.schema)
-        .await
-        .with_context(|| format!("failed to escape schema name `{}`", cli.schema))?;
     let utils = WorkerUtils::new(database, escaped_schema.clone());
 
     run_command(&cli, &pool, &utils, &escaped_schema).await

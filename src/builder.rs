@@ -315,7 +315,7 @@ impl WorkerOptions {
         let schema = self
             .schema
             .unwrap_or_else(|| String::from("graphile_worker"));
-        let escaped_schema = escape_identifier(&database, &schema).await?;
+        let escaped_schema = escape_identifier(&schema);
 
         migrate(&database, &escaped_schema).await?;
 
