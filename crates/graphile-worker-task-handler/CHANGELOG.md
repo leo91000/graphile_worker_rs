@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.17](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_handler-v0.5.16...graphile_worker_task_handler-v0.5.17) - 2026-05-23
+
+### Other
+
+- updated the following local packages: graphile_worker_ctx
+
 ## [0.5.16](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_handler-v0.5.15...graphile_worker_task_handler-v0.5.16) - 2026-05-12
 
 ### Other
