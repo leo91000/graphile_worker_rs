@@ -20,7 +20,7 @@ async fn count_jobs(test_db: &helpers::TestDatabase, identifier: &str) -> i64 {
         JOIN graphile_worker._private_tasks tasks ON tasks.id = jobs.task_id
         WHERE tasks.identifier = $1
     "};
-    sqlx::query_scalar(&query)
+    sqlx::query_scalar(sqlx::AssertSqlSafe(query.as_str()))
         .bind(identifier)
         .fetch_one(&test_db.test_pool)
         .await

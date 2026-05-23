@@ -624,10 +624,12 @@ mod tests {
     }
 
     async fn drop_schema(pg_pool: &PgPool, schema: &str) {
-        sqlx::query(&format!("DROP SCHEMA IF EXISTS {schema} CASCADE"))
-            .execute(pg_pool)
-            .await
-            .expect("Failed to drop fallback test schema");
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "DROP SCHEMA IF EXISTS {schema} CASCADE"
+        )))
+        .execute(pg_pool)
+        .await
+        .expect("Failed to drop fallback test schema");
     }
 
     fn completion_hooks(counter: Arc<AtomicUsize>) -> Arc<HookRegistry> {
@@ -693,9 +695,9 @@ mod tests {
 
         assert_eq!(hook_count.load(Ordering::SeqCst), 1);
 
-        let remaining: (i64,) = sqlx::query_as(&format!(
+        let remaining: (i64,) = sqlx::query_as(sqlx::AssertSqlSafe(format!(
             "SELECT COUNT(*) FROM {schema}._private_jobs WHERE id = $1"
-        ))
+        )))
         .bind(job_id)
         .fetch_one(&pg_pool)
         .await
@@ -719,9 +721,9 @@ mod tests {
             .await
             .expect("Failed to add failure fallback job");
         let job_id = *job.id();
-        sqlx::query(&format!(
+        sqlx::query(sqlx::AssertSqlSafe(format!(
             "UPDATE {schema}._private_jobs SET locked_by = $1, locked_at = now() WHERE id = $2"
-        ))
+        )))
         .bind("worker")
         .bind(job_id)
         .execute(&pg_pool)
@@ -749,9 +751,9 @@ mod tests {
 
         assert_eq!(hook_count.load(Ordering::SeqCst), 1);
 
-        let row: (Option<String>, Option<String>) = sqlx::query_as(&format!(
+        let row: (Option<String>, Option<String>) = sqlx::query_as(sqlx::AssertSqlSafe(format!(
             "SELECT last_error, locked_by FROM {schema}._private_jobs WHERE id = $1"
-        ))
+        )))
         .bind(job_id)
         .fetch_one(&pg_pool)
         .await
