@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use futures::{lock::Mutex, StreamExt};
 use serde_json::Value;
 use sqlx::postgres::{PgArguments, PgRow};
-use sqlx::{Column, PgPool, Postgres, Row, TypeInfo};
+use sqlx::{AssertSqlSafe, Column, PgPool, Postgres, Row, TypeInfo};
 
 use crate::{
     Database, DatabaseDriver, DbCell, DbError, DbExecutor, DbExecutorArg, DbParams, DbRow,
@@ -92,7 +92,7 @@ fn bind_params<'q>(
     sql: &'q str,
     params: &DbParams,
 ) -> sqlx::query::Query<'q, Postgres, PgArguments> {
-    let mut query = sqlx::query(sql);
+    let mut query = sqlx::query(AssertSqlSafe(sql));
     for value in params.values() {
         query = bind_value(query, value);
     }

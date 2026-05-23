@@ -51,7 +51,7 @@ async fn unlocks_jobs_for_given_workers_leaves_others_unaffected() {
                 "UPDATE {schema}._private_jobs SET locked_at = $1, locked_by = $2 WHERE id = $3",
                 schema = "graphile_worker"
             );
-            sqlx::query(&lock_job_sql)
+            sqlx::query(sqlx::AssertSqlSafe(lock_job_sql.as_str()))
                 .bind(worker_id.map(|_| date))
                 .bind(worker_id)
                 .bind(job.id())
@@ -71,7 +71,7 @@ async fn unlocks_jobs_for_given_workers_leaves_others_unaffected() {
                     WHERE jobs.job_queue_id = job_queues.id;"#,
             schema = "graphile_worker"
         );
-        sqlx::query(&update_queues_sql)
+        sqlx::query(sqlx::AssertSqlSafe(update_queues_sql.as_str()))
             .execute(&test_db.test_pool)
             .await
             .expect("Failed to update job queues based on locked jobs");

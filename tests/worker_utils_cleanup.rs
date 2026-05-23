@@ -112,7 +112,7 @@ async fn cleanup_with_gc_job_queues() {
                 "#,
                 schema = "graphile_worker"
             );
-            sqlx::query(&sql)
+            sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
                 .bind(date)
                 .bind(worker_id)
                 .bind(job.id())

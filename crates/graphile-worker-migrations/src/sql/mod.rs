@@ -15,7 +15,9 @@ impl MigrationExecutor for DbTransaction {
 #[cfg(feature = "driver-sqlx")]
 impl MigrationExecutor for sqlx::Transaction<'_, sqlx::Postgres> {
     async fn execute_statement(&mut self, stmt: &str) -> Result<(), DbError> {
-        sqlx::query(stmt).execute(self.as_mut()).await?;
+        sqlx::query(sqlx::AssertSqlSafe(stmt))
+            .execute(self.as_mut())
+            .await?;
         Ok(())
     }
 }

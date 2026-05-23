@@ -85,10 +85,12 @@ async fn cli_manages_job_lifecycle_with_database_url_flag() {
         .expect("system time should be after unix epoch")
         .as_nanos();
     let database_name = format!("graphile_worker_cli_test_{}_{}", std::process::id(), suffix);
-    sqlx::query(&format!("CREATE DATABASE {database_name}"))
-        .execute(&source_pool)
-        .await
-        .expect("failed to create test database");
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "CREATE DATABASE {database_name}"
+    )))
+    .execute(&source_pool)
+    .await
+    .expect("failed to create test database");
 
     let database_url = database_url_for_test_db(&source_url, &database_name);
 
@@ -180,8 +182,10 @@ async fn cli_manages_job_lifecycle_with_database_url_flag() {
     let source_pool = PgPool::connect(&source_url)
         .await
         .expect("failed to reconnect to source database");
-    sqlx::query(&format!("DROP DATABASE {database_name} WITH (FORCE)"))
-        .execute(&source_pool)
-        .await
-        .expect("failed to drop test database");
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE {database_name} WITH (FORCE)"
+    )))
+    .execute(&source_pool)
+    .await
+    .expect("failed to drop test database");
 }

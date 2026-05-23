@@ -18,10 +18,13 @@ pub struct BenchDatabase {
 impl BenchDatabase {
     pub async fn drop(&self) {
         self.bench_pool.close().await;
-        sqlx::query(&format!("DROP DATABASE {} WITH (FORCE)", self.name))
-            .execute(&self.source_pool)
-            .await
-            .expect("Failed to drop bench database");
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "DROP DATABASE {} WITH (FORCE)",
+            self.name
+        )))
+        .execute(&self.source_pool)
+        .await
+        .expect("Failed to drop bench database");
     }
 
     pub fn create_worker_options(&self) -> WorkerOptions {
@@ -99,7 +102,7 @@ pub async fn create_bench_database() -> BenchDatabase {
     let db_id = Uuid::now_v7();
     let db_name = format!("__bench_graphile_worker_{}", db_id.simple());
 
-    sqlx::query(&format!("CREATE DATABASE {}", db_name))
+    sqlx::query(sqlx::AssertSqlSafe(format!("CREATE DATABASE {}", db_name)))
         .execute(&pg_pool)
         .await
         .expect("Failed to create bench database");

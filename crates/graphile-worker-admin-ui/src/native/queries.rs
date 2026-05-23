@@ -141,10 +141,7 @@ pub(crate) async fn task_identifiers_by_id(
         .collect())
 }
 
-pub(crate) fn apply_job_filters<'a>(
-    query: &mut QueryBuilder<'a, Postgres>,
-    args: &'a ListJobsParams,
-) {
+pub(crate) fn apply_job_filters(query: &mut QueryBuilder<Postgres>, args: &ListJobsParams) {
     if let Some(identifier) = args.identifier.as_ref().filter(|value| !value.is_empty()) {
         query.push(" and tasks.identifier = ");
         query.push_bind(identifier);
@@ -224,7 +221,7 @@ pub(crate) async fn get_stats(pool: &PgPool, escaped_schema: &str) -> Result<Job
         "#
     );
 
-    sqlx::query_as(&sql)
+    sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
         .fetch_one(pool)
         .await
         .map_err(Into::into)
@@ -254,7 +251,7 @@ pub(crate) async fn list_queues(
         "#
     );
 
-    sqlx::query_as(&sql)
+    sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
         .fetch_all(pool)
         .await
         .map_err(Into::into)
@@ -286,7 +283,7 @@ pub(crate) async fn list_locked_workers(
         "#
     );
 
-    sqlx::query_as(&sql)
+    sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
         .fetch_all(pool)
         .await
         .map_err(Into::into)

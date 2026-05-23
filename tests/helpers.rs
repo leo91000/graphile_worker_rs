@@ -80,10 +80,13 @@ pub struct SelectionOfJobs {
 impl TestDatabase {
     async fn drop(&self) {
         self.test_pool.close().await;
-        sqlx::query(&format!("DROP DATABASE {} WITH (FORCE)", self.name))
-            .execute(&self.source_pool)
-            .await
-            .expect("Failed to drop test database");
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "DROP DATABASE {} WITH (FORCE)",
+            self.name
+        )))
+        .execute(&self.source_pool)
+        .await
+        .expect("Failed to drop test database");
     }
 
     pub fn create_worker_options(&self) -> WorkerOptions {
@@ -370,12 +373,12 @@ pub async fn create_test_database() -> TestDatabase {
     let db_id = uuid::Uuid::now_v7();
     let db_name = format!("__test_graphile_worker_{}", db_id.simple());
 
-    sqlx::query(&format!("CREATE DATABASE {}", db_name))
+    sqlx::query(sqlx::AssertSqlSafe(format!("CREATE DATABASE {}", db_name)))
         .execute(&pg_pool)
         .await
         .expect("Failed to create test database");
 
-    sqlx::query(&format!("CREATE SCHEMA {}", db_name))
+    sqlx::query(sqlx::AssertSqlSafe(format!("CREATE SCHEMA {}", db_name)))
         .execute(&pg_pool)
         .await
         .expect("Failed to create test schema");

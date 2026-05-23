@@ -830,7 +830,7 @@ async fn get_job(pool: &PgPool, escaped_schema: &str, id: i64) -> Result<ListedJ
         .with_context(|| format!("failed to get job {id}"))
 }
 
-fn apply_job_filters<'a>(query: &mut QueryBuilder<'a, Postgres>, args: &'a ListArgs) {
+fn apply_job_filters(query: &mut QueryBuilder<Postgres>, args: &ListArgs) {
     if let Some(identifier) = &args.identifier {
         query.push(" and tasks.identifier = ");
         query.push_bind(identifier);
@@ -882,7 +882,7 @@ async fn get_stats(pool: &PgPool, escaped_schema: &str) -> Result<JobStats> {
         "#
     );
 
-    sqlx::query_as(&sql)
+    sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
         .fetch_one(pool)
         .await
         .context("failed to get stats")
@@ -909,7 +909,7 @@ async fn list_queues(pool: &PgPool, escaped_schema: &str) -> Result<Vec<QueueRow
         "#
     );
 
-    sqlx::query_as(&sql)
+    sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
         .fetch_all(pool)
         .await
         .context("failed to list queues")
@@ -938,7 +938,7 @@ async fn list_locked_workers(pool: &PgPool, escaped_schema: &str) -> Result<Vec<
         "#
     );
 
-    sqlx::query_as(&sql)
+    sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
         .fetch_all(pool)
         .await
         .context("failed to list workers")
