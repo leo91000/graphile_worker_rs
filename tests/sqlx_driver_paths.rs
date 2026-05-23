@@ -14,18 +14,17 @@ use helpers::with_test_db;
 mod helpers;
 
 async fn count_jobs(test_db: &helpers::TestDatabase, identifier: &str) -> i64 {
-    sqlx::query_scalar(
-        r#"
-            SELECT count(*)
-            FROM graphile_worker._private_jobs jobs
-            JOIN graphile_worker._private_tasks tasks ON tasks.id = jobs.task_id
-            WHERE tasks.identifier = $1
-        "#,
-    )
-    .bind(identifier)
-    .fetch_one(&test_db.test_pool)
-    .await
-    .expect("Failed to count jobs")
+    let query = indoc::formatdoc! {"
+        SELECT count(*)
+        FROM graphile_worker._private_jobs jobs
+        JOIN graphile_worker._private_tasks tasks ON tasks.id = jobs.task_id
+        WHERE tasks.identifier = $1
+    "};
+    sqlx::query_scalar(&query)
+        .bind(identifier)
+        .fetch_one(&test_db.test_pool)
+        .await
+        .expect("Failed to count jobs")
 }
 
 #[tokio::test]

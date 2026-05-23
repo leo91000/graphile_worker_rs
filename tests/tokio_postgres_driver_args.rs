@@ -228,13 +228,40 @@ async fn tokio_postgres_executor_args_support_direct_queries() {
             .await
             .expect("Failed to roll back tokio-postgres transaction");
 
+        let mut tx = client
+            .transaction()
+            .await
+            .expect("Failed to begin mutable tokio-postgres transaction");
+        let mut tx_executor = &mut tx;
+
+        DbExecutorArg::execute(
+            &mut tx_executor,
+            "SELECT $1::int",
+            vec![DbValue::I32(6)].into(),
+        )
+        .await
+        .expect("mutable tokio-postgres transaction execute should succeed");
+
+        let tx_rows = DbExecutorArg::fetch_all(
+            &mut tx_executor,
+            "SELECT $1::int AS value",
+            vec![DbValue::I32(7)].into(),
+        )
+        .await
+        .expect("mutable tokio-postgres transaction fetch_all should succeed");
+        assert_eq!(tx_rows[0].try_get::<i32>("value").unwrap(), 7);
+
+        tx.rollback()
+            .await
+            .expect("Failed to roll back mutable tokio-postgres transaction");
+
         let pool = deadpool_pool(&test_db.name);
         let mut pool_executor = &pool;
 
         DbExecutorArg::execute(
             &mut pool_executor,
             "SELECT $1::int",
-            vec![DbValue::I32(6)].into(),
+            vec![DbValue::I32(8)].into(),
         )
         .await
         .expect("deadpool pool execute should succeed");
@@ -242,11 +269,11 @@ async fn tokio_postgres_executor_args_support_direct_queries() {
         let pool_rows = DbExecutorArg::fetch_all(
             &mut pool_executor,
             "SELECT $1::int AS value",
-            vec![DbValue::I32(7)].into(),
+            vec![DbValue::I32(9)].into(),
         )
         .await
         .expect("deadpool pool fetch_all should succeed");
-        assert_eq!(pool_rows[0].try_get::<i32>("value").unwrap(), 7);
+        assert_eq!(pool_rows[0].try_get::<i32>("value").unwrap(), 9);
 
         let deadpool_client = pool.get().await.expect("Failed to get deadpool client");
         let mut deadpool_client_executor = &deadpool_client;
@@ -254,7 +281,7 @@ async fn tokio_postgres_executor_args_support_direct_queries() {
         DbExecutorArg::execute(
             &mut deadpool_client_executor,
             "SELECT $1::int",
-            vec![DbValue::I32(8)].into(),
+            vec![DbValue::I32(10)].into(),
         )
         .await
         .expect("deadpool client execute should succeed");
@@ -262,11 +289,11 @@ async fn tokio_postgres_executor_args_support_direct_queries() {
         let deadpool_client_rows = DbExecutorArg::fetch_all(
             &mut deadpool_client_executor,
             "SELECT $1::int AS value",
-            vec![DbValue::I32(9)].into(),
+            vec![DbValue::I32(11)].into(),
         )
         .await
         .expect("deadpool client fetch_all should succeed");
-        assert_eq!(deadpool_client_rows[0].try_get::<i32>("value").unwrap(), 9);
+        assert_eq!(deadpool_client_rows[0].try_get::<i32>("value").unwrap(), 11);
 
         let params = DbParams::new();
         DbExecutorArg::execute(&mut deadpool_client_executor, "SELECT 1", params)
