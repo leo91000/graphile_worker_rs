@@ -10,6 +10,10 @@ use futures::Stream;
 use serde_json::Value;
 use thiserror::Error;
 
+mod identifier;
+
+pub use identifier::escape_identifier;
+
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 pub type NotificationStream = Pin<Box<dyn Stream<Item = Result<Notification, DbError>> + Send>>;
 

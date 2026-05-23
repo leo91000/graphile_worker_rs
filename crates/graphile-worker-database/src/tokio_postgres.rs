@@ -9,8 +9,8 @@ use tokio_postgres::types::{ToSql, Type};
 use tokio_postgres::{AsyncMessage, Client, NoTls, Row, Transaction};
 
 use crate::{
-    Database, DatabaseDriver, DbCell, DbError, DbExecutor, DbExecutorArg, DbParams, DbRow,
-    DbTransaction, DbValue, Notification, NotificationStream, TransactionDriver,
+    escape_identifier, Database, DatabaseDriver, DbCell, DbError, DbExecutor, DbExecutorArg,
+    DbParams, DbRow, DbTransaction, DbValue, Notification, NotificationStream, TransactionDriver,
 };
 
 const INITIAL_LISTENER_RECONNECT_DELAY: Duration = Duration::from_millis(50);
@@ -169,10 +169,6 @@ fn tokio_row_to_db_row(row: Row) -> Result<DbRow, DbError> {
     }
 
     Ok(DbRow::new(cells))
-}
-
-fn quote_identifier(identifier: &str) -> String {
-    format!("\"{}\"", identifier.replace('"', "\"\""))
 }
 
 fn next_listener_reconnect_delay(delay: Duration) -> Duration {
@@ -451,7 +447,7 @@ impl DatabaseDriver for TokioPostgresDatabase {
                 return Ok(None);
             };
 
-            let sql = format!("LISTEN {}", quote_identifier(channel));
+            let sql = format!("LISTEN {}", escape_identifier(channel));
             let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
             let (client, closed_rx) = connect_tokio_postgres_listener(&config, &sql, &tx).await?;
 
