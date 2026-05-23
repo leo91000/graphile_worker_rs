@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.7](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.7.6...graphile_worker_crontab_runner-v0.7.7) - 2026-05-23
+
+### Fixed
+
+- accept transaction executors for add_job
+
 ## [0.7.6](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.7.5...graphile_worker_crontab_runner-v0.7.6) - 2026-05-12
 
 ### Other

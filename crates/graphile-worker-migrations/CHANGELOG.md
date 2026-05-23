@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.17](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.16...graphile_worker_migrations-v0.4.17) - 2026-05-23
+
+### Fixed
+
+- accept transaction executors for add_job
+
 ## [0.4.16](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.15...graphile_worker_migrations-v0.4.16) - 2026-05-12
 
 ### Other
