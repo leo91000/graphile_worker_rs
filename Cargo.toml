@@ -40,7 +40,7 @@ async-signal = "0.2.14"
 async-std = "1.13.2"
 axum = "0.8.9"
 base64 = "0.22.1"
-chrono = { version = "0.4.44", features = ["serde"] }
+chrono = { version = "0.4.45", features = ["serde"] }
 clap = "4.6.1"
 criterion = "0.8.2"
 deadpool-postgres = "0.14.1"
