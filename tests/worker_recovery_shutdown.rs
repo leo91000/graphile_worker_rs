@@ -8,10 +8,7 @@ use graphile_worker::{
 };
 use graphile_worker_runtime::sleep as runtime_sleep;
 use serde::{Deserialize, Serialize};
-use tokio::{
-    task::spawn_local,
-    time::{sleep, Instant},
-};
+use tokio::time::{sleep, Instant};
 
 mod helpers;
 
@@ -83,13 +80,14 @@ async fn shutdown_aborted_job_is_returned_without_backoff() {
 
         let hooks_plugin = RecoveryHooksPlugin::new();
         let counters = hooks_plugin.counters.clone();
+        let shutdown_recovery_delay = Duration::from_secs(2);
 
         let worker = Arc::new(
             Worker::options()
                 .database(test_db.database.clone())
                 .concurrency(1)
                 .shutdown_grace_period(Duration::from_millis(50))
-                .shutdown_recovery_delay(Duration::from_secs(2))
+                .shutdown_recovery_delay(shutdown_recovery_delay)
                 .listen_os_shutdown_signals(false)
                 .define_job::<SlowJob>()
                 .add_plugin(hooks_plugin)
@@ -99,10 +97,11 @@ async fn shutdown_aborted_job_is_returned_without_backoff() {
         );
 
         let worker_for_run = Arc::clone(&worker);
-        let worker_fut = spawn_local(async move {
+        let worker_fut = tokio::task::spawn(async move {
             let _ = worker_for_run.run().await;
         });
 
+        let mut shutdown_requested_at = None;
         let start = Instant::now();
         while start.elapsed() < Duration::from_secs(5) {
             let jobs = test_db.get_jobs().await;
@@ -110,6 +109,7 @@ async fn shutdown_aborted_job_is_returned_without_backoff() {
                 .iter()
                 .any(|j| j.id == *job.id() && j.locked_by.is_some())
             {
+                shutdown_requested_at = Some(chrono::Utc::now());
                 worker.request_shutdown();
                 break;
             }
@@ -133,9 +133,15 @@ async fn shutdown_aborted_job_is_returned_without_backoff() {
 
         assert_eq!(recovered.attempts, 0, "attempts should be decremented back");
         assert!(recovered.locked_by.is_none(), "job should be unlocked");
+        let expected_run_at = shutdown_requested_at.expect("shutdown should have been requested")
+            + chrono::Duration::from_std(shutdown_recovery_delay)
+                .expect("shutdown recovery delay should convert to chrono duration")
+            - chrono::Duration::milliseconds(500);
         assert!(
-            recovered.run_at >= chrono::Utc::now() - Duration::from_secs(1),
-            "job should be rescheduled in the future"
+            recovered.run_at >= expected_run_at,
+            "job should be rescheduled with recovery delay (expected >= {:?}, got {:?})",
+            expected_run_at,
+            recovered.run_at
         );
         assert_eq!(counters.job_interrupted.load(Ordering::SeqCst), 1);
         assert_eq!(counters.job_fail.load(Ordering::SeqCst), 0);
