@@ -12,12 +12,15 @@ use graphile_worker::{
     escape_identifier, Database, DbJob, Job, JobKeyMode, JobSpec, SweepStaleWorkersOptions,
     WorkerUtils,
 };
+use graphile_worker_admin_api::queries::{self as admin_queries, ListJobsQueryOptions};
+use graphile_worker_admin_api::{
+    DbJobOutput, JobState as AdminJobState, ListJobsParams, ListedJob, LockedWorkerRow, QueueRow,
+};
 use graphile_worker_admin_ui::{AdminAuthConfig, AdminServerConfig};
-use indoc::formatdoc;
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::postgres::PgPoolOptions;
-use sqlx::{FromRow, PgPool, Postgres, QueryBuilder};
+use sqlx::PgPool;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -152,8 +155,8 @@ struct ListArgs {
     queue: Option<String>,
 
     /// Filter by job state.
-    #[arg(long, value_enum, default_value_t = JobState::All)]
-    state: JobState,
+    #[arg(long, value_enum, default_value_t = CliJobState::All)]
+    state: CliJobState,
 
     /// Maximum jobs to return.
     #[arg(long, default_value_t = 50)]
@@ -294,7 +297,7 @@ enum AdminAuthModeArg {
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
-enum JobState {
+enum CliJobState {
     All,
     Ready,
     Scheduled,
@@ -346,117 +349,47 @@ impl From<CleanupTaskArg> for CleanupTask {
     }
 }
 
-#[derive(Debug, FromRow, Serialize)]
-struct ListedJob {
-    id: i64,
-    task_identifier: String,
-    queue_name: Option<String>,
-    payload: Value,
-    priority: i16,
-    run_at: DateTime<Utc>,
-    attempts: i16,
-    max_attempts: i16,
-    last_error: Option<String>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-    key: Option<String>,
-    locked_at: Option<DateTime<Utc>>,
-    locked_by: Option<String>,
-    revision: i32,
-    flags: Option<Value>,
-    is_available: bool,
-}
-
-#[derive(Debug, FromRow, Serialize)]
-struct JobStats {
-    total: i64,
-    ready: i64,
-    scheduled: i64,
-    locked: i64,
-    failed: i64,
-}
-
-#[derive(Debug, FromRow, Serialize)]
-struct QueueRow {
-    id: i32,
-    queue_name: String,
-    locked_at: Option<DateTime<Utc>>,
-    locked_by: Option<String>,
-    job_count: i64,
-    ready_count: i64,
-}
-
-#[derive(Debug, FromRow, Serialize)]
-struct LockedWorkerRow {
-    worker_id: String,
-    locked_jobs: i64,
-    locked_queues: i64,
-}
-
-#[derive(Debug, Serialize)]
-struct DbJobOutput {
-    id: i64,
-    task_id: i32,
-    task_identifier: Option<String>,
-    job_queue_id: Option<i32>,
-    payload: Value,
-    priority: i16,
-    run_at: DateTime<Utc>,
-    attempts: i16,
-    max_attempts: i16,
-    last_error: Option<String>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-    key: Option<String>,
-    revision: i32,
-    locked_at: Option<DateTime<Utc>>,
-    locked_by: Option<String>,
-    flags: Option<Value>,
-}
-
-impl DbJobOutput {
-    fn from_db_job(job: &DbJob) -> Self {
-        Self {
-            id: *job.id(),
-            task_id: *job.task_id(),
-            task_identifier: None,
-            job_queue_id: *job.job_queue_id(),
-            payload: job.payload().clone(),
-            priority: *job.priority(),
-            run_at: *job.run_at(),
-            attempts: *job.attempts(),
-            max_attempts: *job.max_attempts(),
-            last_error: job.last_error().clone(),
-            created_at: *job.created_at(),
-            updated_at: *job.updated_at(),
-            key: job.key().clone(),
-            revision: *job.revision(),
-            locked_at: *job.locked_at(),
-            locked_by: job.locked_by().clone(),
-            flags: job.flags().clone(),
-        }
+fn db_job_output_from_db_job(job: &DbJob) -> DbJobOutput {
+    DbJobOutput {
+        id: *job.id(),
+        task_id: *job.task_id(),
+        task_identifier: None,
+        job_queue_id: *job.job_queue_id(),
+        payload: job.payload().clone(),
+        priority: *job.priority(),
+        run_at: *job.run_at(),
+        attempts: *job.attempts(),
+        max_attempts: *job.max_attempts(),
+        last_error: job.last_error().clone(),
+        created_at: *job.created_at(),
+        updated_at: *job.updated_at(),
+        key: job.key().clone(),
+        revision: *job.revision(),
+        locked_at: *job.locked_at(),
+        locked_by: job.locked_by().clone(),
+        flags: job.flags().clone(),
     }
+}
 
-    fn from_job(job: &Job) -> Self {
-        Self {
-            id: *job.id(),
-            task_id: *job.task_id(),
-            task_identifier: Some(job.task_identifier().clone()),
-            job_queue_id: *job.job_queue_id(),
-            payload: job.payload().clone(),
-            priority: *job.priority(),
-            run_at: *job.run_at(),
-            attempts: *job.attempts(),
-            max_attempts: *job.max_attempts(),
-            last_error: job.last_error().clone(),
-            created_at: *job.created_at(),
-            updated_at: *job.updated_at(),
-            key: job.key().clone(),
-            revision: *job.revision(),
-            locked_at: *job.locked_at(),
-            locked_by: job.locked_by().clone(),
-            flags: job.flags().clone(),
-        }
+fn db_job_output_from_job(job: &Job) -> DbJobOutput {
+    DbJobOutput {
+        id: *job.id(),
+        task_id: *job.task_id(),
+        task_identifier: Some(job.task_identifier().clone()),
+        job_queue_id: *job.job_queue_id(),
+        payload: job.payload().clone(),
+        priority: *job.priority(),
+        run_at: *job.run_at(),
+        attempts: *job.attempts(),
+        max_attempts: *job.max_attempts(),
+        last_error: job.last_error().clone(),
+        created_at: *job.created_at(),
+        updated_at: *job.updated_at(),
+        key: job.key().clone(),
+        revision: *job.revision(),
+        locked_at: *job.locked_at(),
+        locked_by: job.locked_by().clone(),
+        flags: job.flags().clone(),
     }
 }
 
@@ -505,7 +438,7 @@ async fn run_command(
                 .await
                 .context("failed to add job")?;
             if cli.json {
-                print_json(&DbJobOutput::from_job(&job))?;
+                print_json(&db_job_output_from_job(&job))?;
             } else {
                 println!(
                     "Added job {} for task `{}`",
@@ -515,7 +448,15 @@ async fn run_command(
             }
         }
         Command::List(args) => {
-            let jobs = list_jobs(pool, escaped_schema, args).await?;
+            let params = list_jobs_params(args)?;
+            let jobs = admin_queries::list_jobs(
+                pool,
+                escaped_schema,
+                &params,
+                ListJobsQueryOptions::default(),
+            )
+            .await
+            .context("failed to list jobs")?;
             if cli.json {
                 print_json(&jobs)?;
             } else {
@@ -523,7 +464,9 @@ async fn run_command(
             }
         }
         Command::Show(args) => {
-            let job = get_job(pool, escaped_schema, args.id).await?;
+            let job = admin_queries::get_job(pool, escaped_schema, args.id)
+                .await
+                .with_context(|| format!("failed to get job {}", args.id))?;
             if cli.json {
                 print_json(&job)?;
             } else {
@@ -620,7 +563,9 @@ async fn run_command(
             }
         }
         Command::Stats => {
-            let stats = get_stats(pool, escaped_schema).await?;
+            let stats = admin_queries::get_stats(pool, escaped_schema)
+                .await
+                .context("failed to get stats")?;
             if cli.json {
                 print_json(&stats)?;
             } else {
@@ -632,7 +577,9 @@ async fn run_command(
             }
         }
         Command::Queues => {
-            let queues = list_queues(pool, escaped_schema).await?;
+            let queues = admin_queries::list_queues(pool, escaped_schema)
+                .await
+                .context("failed to list queues")?;
             if cli.json {
                 print_json(&queues)?;
             } else {
@@ -640,7 +587,9 @@ async fn run_command(
             }
         }
         Command::Workers => {
-            let workers = list_locked_workers(pool, escaped_schema).await?;
+            let workers = admin_queries::list_locked_workers(pool, escaped_schema)
+                .await
+                .context("failed to list workers")?;
             if cli.json {
                 print_json(&workers)?;
             } else {
@@ -800,7 +749,7 @@ fn read_payload(args: &AddArgs) -> Result<Value> {
     serde_json::from_str(&payload).context("payload must be valid JSON")
 }
 
-async fn list_jobs(pool: &PgPool, escaped_schema: &str, args: &ListArgs) -> Result<Vec<ListedJob>> {
+fn list_jobs_params(args: &ListArgs) -> Result<ListJobsParams> {
     if args.limit < 0 {
         return Err(anyhow!("--limit must be greater than or equal to 0"));
     }
@@ -808,199 +757,25 @@ async fn list_jobs(pool: &PgPool, escaped_schema: &str, args: &ListArgs) -> Resu
         return Err(anyhow!("--offset must be greater than or equal to 0"));
     }
 
-    let mut query = QueryBuilder::<Postgres>::new(formatdoc!(
-        r#"
-            select
-                jobs.id,
-                tasks.identifier as task_identifier,
-                job_queues.queue_name,
-                jobs.payload,
-                jobs.priority,
-                jobs.run_at,
-                jobs.attempts,
-                jobs.max_attempts,
-                jobs.last_error,
-                jobs.created_at,
-                jobs.updated_at,
-                jobs.key,
-                jobs.locked_at,
-                jobs.locked_by,
-                jobs.revision,
-                jobs.flags,
-                jobs.is_available
-            from {escaped_schema}._private_jobs as jobs
-            inner join {escaped_schema}._private_tasks as tasks on tasks.id = jobs.task_id
-            left join {escaped_schema}._private_job_queues as job_queues on job_queues.id = jobs.job_queue_id
-            where true
-        "#
-    ));
-
-    apply_job_filters(&mut query, args);
-    query.push(" order by jobs.id asc limit ");
-    query.push_bind(args.limit);
-    query.push(" offset ");
-    query.push_bind(args.offset);
-
-    query
-        .build_query_as()
-        .fetch_all(pool)
-        .await
-        .context("failed to list jobs")
-}
-
-async fn get_job(pool: &PgPool, escaped_schema: &str, id: i64) -> Result<ListedJob> {
-    let mut query = QueryBuilder::<Postgres>::new(formatdoc!(
-        r#"
-            select
-                jobs.id,
-                tasks.identifier as task_identifier,
-                job_queues.queue_name,
-                jobs.payload,
-                jobs.priority,
-                jobs.run_at,
-                jobs.attempts,
-                jobs.max_attempts,
-                jobs.last_error,
-                jobs.created_at,
-                jobs.updated_at,
-                jobs.key,
-                jobs.locked_at,
-                jobs.locked_by,
-                jobs.revision,
-                jobs.flags,
-                jobs.is_available
-            from {escaped_schema}._private_jobs as jobs
-            inner join {escaped_schema}._private_tasks as tasks on tasks.id = jobs.task_id
-            left join {escaped_schema}._private_job_queues as job_queues on job_queues.id = jobs.job_queue_id
-            where jobs.id =
-        "#
-    ));
-    query.push_bind(id);
-
-    query
-        .build_query_as()
-        .fetch_one(pool)
-        .await
-        .with_context(|| format!("failed to get job {id}"))
-}
-
-fn apply_job_filters(query: &mut QueryBuilder<Postgres>, args: &ListArgs) {
-    if let Some(identifier) = &args.identifier {
-        query.push(" and tasks.identifier = ");
-        query.push_bind(identifier);
-    }
-
-    if let Some(queue) = &args.queue {
-        query.push(" and job_queues.queue_name = ");
-        query.push_bind(queue);
-    }
-
-    match args.state {
-        JobState::All => {}
-        JobState::Ready => {
-            query.push(" and jobs.locked_at is null and jobs.attempts < jobs.max_attempts and jobs.run_at <= now()");
-        }
-        JobState::Scheduled => {
-            query.push(" and jobs.locked_at is null and jobs.attempts < jobs.max_attempts and jobs.run_at > now()");
-        }
-        JobState::Locked => {
-            query.push(" and jobs.locked_at is not null");
-        }
-        JobState::Failed => {
-            query.push(" and jobs.locked_at is null and jobs.attempts >= jobs.max_attempts");
-        }
-    }
-}
-
-async fn get_stats(pool: &PgPool, escaped_schema: &str) -> Result<JobStats> {
-    let sql = formatdoc!(
-        r#"
-            select
-                count(*)::bigint as total,
-                count(*) filter (
-                    where locked_at is null
-                    and attempts < max_attempts
-                    and run_at <= now()
-                )::bigint as ready,
-                count(*) filter (
-                    where locked_at is null
-                    and attempts < max_attempts
-                    and run_at > now()
-                )::bigint as scheduled,
-                count(*) filter (where locked_at is not null)::bigint as locked,
-                count(*) filter (
-                    where locked_at is null
-                    and attempts >= max_attempts
-                )::bigint as failed
-            from {escaped_schema}._private_jobs
-        "#
-    );
-
-    sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
-        .fetch_one(pool)
-        .await
-        .context("failed to get stats")
-}
-
-async fn list_queues(pool: &PgPool, escaped_schema: &str) -> Result<Vec<QueueRow>> {
-    let sql = formatdoc!(
-        r#"
-            select
-                job_queues.id,
-                job_queues.queue_name,
-                job_queues.locked_at,
-                job_queues.locked_by,
-                count(jobs.*)::bigint as job_count,
-                count(jobs.*) filter (
-                    where jobs.locked_at is null
-                    and jobs.attempts < jobs.max_attempts
-                    and jobs.run_at <= now()
-                )::bigint as ready_count
-            from {escaped_schema}._private_job_queues as job_queues
-            left join {escaped_schema}._private_jobs as jobs on jobs.job_queue_id = job_queues.id
-            group by job_queues.id, job_queues.queue_name, job_queues.locked_at, job_queues.locked_by
-            order by job_queues.queue_name asc
-        "#
-    );
-
-    sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
-        .fetch_all(pool)
-        .await
-        .context("failed to list queues")
-}
-
-async fn list_locked_workers(pool: &PgPool, escaped_schema: &str) -> Result<Vec<LockedWorkerRow>> {
-    let sql = formatdoc!(
-        r#"
-            select
-                worker_id,
-                sum(locked_jobs)::bigint as locked_jobs,
-                sum(locked_queues)::bigint as locked_queues
-            from (
-                select locked_by as worker_id, count(*)::bigint as locked_jobs, 0::bigint as locked_queues
-                from {escaped_schema}._private_jobs
-                where locked_by is not null
-                group by locked_by
-                union all
-                select locked_by as worker_id, 0::bigint as locked_jobs, count(*)::bigint as locked_queues
-                from {escaped_schema}._private_job_queues
-                where locked_by is not null
-                group by locked_by
-            ) as locks
-            group by worker_id
-            order by worker_id asc
-        "#
-    );
-
-    sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
-        .fetch_all(pool)
-        .await
-        .context("failed to list workers")
+    Ok(ListJobsParams {
+        state: match args.state {
+            CliJobState::All => AdminJobState::All,
+            CliJobState::Ready => AdminJobState::Ready,
+            CliJobState::Scheduled => AdminJobState::Scheduled,
+            CliJobState::Locked => AdminJobState::Locked,
+            CliJobState::Failed => AdminJobState::Failed,
+        },
+        identifier: args.identifier.clone(),
+        queue: args.queue.clone(),
+        search: None,
+        limit: args.limit,
+        offset: args.offset,
+    })
 }
 
 fn print_db_job_result(json: bool, action: &str, jobs: &[DbJob]) -> Result<()> {
     if json {
-        let output: Vec<_> = jobs.iter().map(DbJobOutput::from_db_job).collect();
+        let output: Vec<_> = jobs.iter().map(db_job_output_from_db_job).collect();
         print_json(&output)?;
         return Ok(());
     }

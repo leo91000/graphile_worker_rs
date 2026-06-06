@@ -16,6 +16,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 chrono.workspace = true
 futures.workspace = true
+graphile_worker_admin_api.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

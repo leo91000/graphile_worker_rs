@@ -17,6 +17,7 @@ resolver = "2"
 
 [workspace.dependencies]
 graphile_worker = { path = ".", version = "0.13.1", default-features = false }
+graphile_worker_admin_api = { path = "crates/graphile-worker-admin-api", version = "0.1.0" }
 graphile_worker_admin_ui = { path = "crates/graphile-worker-admin-ui", version = "0.1.2" }
 graphile_worker_admin_ui_client = { path = "crates/graphile-worker-admin-ui-client", version = "0.1.1" }
 graphile_worker_crontab_parser = { path = "crates/graphile-worker-crontab-parser", version = "0.5.21" }

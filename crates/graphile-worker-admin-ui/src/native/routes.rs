@@ -8,17 +8,20 @@ use chrono::Utc;
 use graphile_worker::recovery::WorkerRecoveryConfig;
 use graphile_worker::worker_utils::RescheduleJobOptions;
 use graphile_worker::{DbJob, JobSpec, SweepStaleWorkersOptions};
+use graphile_worker_admin_api::queries::{
+    get_job, get_stats, list_jobs, list_locked_workers, list_queues, task_identifiers_by_id,
+    ListJobsQueryOptions,
+};
 
 use super::auth::CSRF_HEADER;
 use super::error::{ApiError, Result};
-use super::queries::{
-    get_job, get_stats, list_jobs, list_locked_workers, list_queues, task_identifiers_by_id,
-};
 use super::state::AppState;
 use super::types::{
-    ActiveWorkerRow, AddJobRequest, CleanupTaskName, DbJobOutput, JobAction, JobActionRequest,
-    JobActionResponse, ListJobsParams, ListJobsResponse, ListedJob, MaintenanceAction,
-    MaintenanceRequest, MessageResponse, OverviewResponse, RemoveJobByKeyRequest, SessionResponse,
+    cleanup_task_from_name, db_job_output_from_db_job, db_job_output_from_job,
+    job_key_mode_from_request, ActiveWorkerRow, AddJobRequest, CleanupTaskName, JobAction,
+    JobActionRequest, JobActionResponse, ListJobsParams, ListJobsResponse, ListedJob,
+    MaintenanceAction, MaintenanceRequest, MessageResponse, OverviewResponse,
+    RemoveJobByKeyRequest, SessionResponse,
 };
 use super::view::{render_admin_html, AdminUiRenderConfig};
 
@@ -74,7 +77,15 @@ pub(crate) async fn jobs(
     State(state): State<Arc<AppState>>,
     Query(params): Query<ListJobsParams>,
 ) -> Result<Json<ListJobsResponse>, ApiError> {
-    let jobs = list_jobs(&state.pool, &state.escaped_schema, &params).await?;
+    let jobs = list_jobs(
+        &state.pool,
+        &state.escaped_schema,
+        &params,
+        ListJobsQueryOptions {
+            max_limit: Some(500),
+        },
+    )
+    .await?;
     Ok(Json(ListJobsResponse { jobs }))
 }
 
@@ -130,7 +141,7 @@ pub(crate) async fn add_job(
         spec = spec.job_key(key);
     }
     if let Some(job_key_mode) = job_key_mode {
-        spec = spec.job_key_mode(job_key_mode);
+        spec = spec.job_key_mode(job_key_mode_from_request(job_key_mode));
     }
     if let Some(priority) = priority {
         spec = spec.priority(priority);
@@ -148,7 +159,7 @@ pub(crate) async fn add_job(
 
     Ok(Json(JobActionResponse {
         message: format!("Added job {}", job.id()),
-        jobs: vec![DbJobOutput::from_job(&job)],
+        jobs: vec![db_job_output_from_job(&job)],
     }))
 }
 
@@ -266,7 +277,7 @@ pub(crate) async fn maintenance(
             } else {
                 request.cleanup_tasks
             };
-            let cleanup_tasks: Vec<_> = tasks.into_iter().map(Into::into).collect();
+            let cleanup_tasks: Vec<_> = tasks.into_iter().map(cleanup_task_from_name).collect();
             state
                 .utils
                 .cleanup(&cleanup_tasks)
@@ -358,7 +369,7 @@ async fn action_response(
         message: format!("{action} {} job(s)", jobs.len()),
         jobs: jobs
             .iter()
-            .map(|job| DbJobOutput::from_db_job(job, identifiers.get(job.task_id()).cloned()))
+            .map(|job| db_job_output_from_db_job(job, identifiers.get(job.task_id()).cloned()))
             .collect(),
     }))
 }
