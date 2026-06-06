@@ -1,6 +1,6 @@
 use crate::batcher::{CompletionBatcher, FailureBatcher};
 use crate::cron::CronBuilder;
-use crate::local_queue::LocalQueueConfig;
+use crate::local_queue::{LocalQueueConfig, LocalQueueConfigError};
 use crate::runner::WorkerFn;
 use crate::sql::task_identifiers::{get_tasks_details, SharedTaskDetails};
 use crate::utils::escape_identifier;
@@ -223,6 +223,10 @@ pub enum WorkerBuildError {
     /// Failed to apply database migrations
     #[error("Error occurred while migrating the database schema: {0}")]
     MigrationError(#[from] graphile_worker_migrations::MigrateError),
+
+    /// Local queue configuration is invalid
+    #[error("Invalid local queue configuration: {0}")]
+    LocalQueueConfig(#[from] LocalQueueConfigError),
 }
 
 impl WorkerOptions {
@@ -325,6 +329,9 @@ impl WorkerOptions {
         } else {
             None
         };
+        if let Some(config) = local_queue_config.as_ref() {
+            config.validate(poll_interval)?;
+        }
 
         let completion_batcher = self.complete_job_batch_delay.map(|delay| {
             Arc::new(CompletionBatcher::new(

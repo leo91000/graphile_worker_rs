@@ -1,3 +1,10 @@
+//! Shared admin API contracts for Graphile Worker.
+//!
+//! Request and response DTOs are available without database features so native
+//! and WASM admin clients can share one wire contract. The optional `sqlx`
+//! feature exposes read-query helpers for the native admin server and CLI; those
+//! helpers are SQLx-backed by design and are not the core driver's abstraction.
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

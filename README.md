@@ -53,6 +53,11 @@ async-std = { version = "1", features = ["attributes"] }
 futures = "0.3"
 ```
 
+Runtime-specific code is intentionally kept behind adapter crates and
+`graphile_worker_runtime`. Core worker modules use that runtime facade instead
+of calling Tokio or async-std directly, so the same worker logic can run on the
+enabled runtime feature.
+
 ## Getting Started
 
 ### 1. Define a Task
@@ -743,7 +748,7 @@ utils.reschedule_jobs(&[job_id5, job_id6], options).await?;
 
 // Run database cleanup tasks
 utils.cleanup(&[
-    CleanupTask::DeletePermenantlyFailedJobs,
+    CleanupTask::DeletePermanentlyFailedJobs,
     CleanupTask::GcTaskIdentifiers,
     CleanupTask::GcJobQueues,
 ]).await?;

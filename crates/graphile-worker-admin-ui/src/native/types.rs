@@ -29,7 +29,7 @@ pub(crate) fn job_key_mode_from_request(value: JobKeyModeRequest) -> JobKeyMode 
 
 pub(crate) fn cleanup_task_from_name(value: CleanupTaskName) -> CleanupTask {
     match value {
-        CleanupTaskName::DeletePermanentlyFailedJobs => CleanupTask::DeletePermenantlyFailedJobs,
+        CleanupTaskName::DeletePermanentlyFailedJobs => CleanupTask::DeletePermanentlyFailedJobs,
         CleanupTaskName::GcTaskIdentifiers => CleanupTask::GcTaskIdentifiers,
         CleanupTaskName::GcJobQueues => CleanupTask::GcJobQueues,
     }
