@@ -1,12 +1,17 @@
 use std::fs;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use graphile_worker::recovery::WorkerRecoveryConfig;
 use graphile_worker::worker_utils::{CleanupTask, RescheduleJobOptions};
-use graphile_worker::{escape_identifier, Database, DbJob, Job, JobKeyMode, JobSpec, WorkerUtils};
+use graphile_worker::{
+    escape_identifier, Database, DbJob, Job, JobKeyMode, JobSpec, SweepStaleWorkersOptions,
+    WorkerUtils,
+};
 use graphile_worker_admin_ui::{AdminAuthConfig, AdminServerConfig};
 use indoc::formatdoc;
 use serde::Serialize;
@@ -86,6 +91,9 @@ enum Command {
 
     /// List worker ids that currently hold locks.
     Workers,
+
+    /// Recover jobs from inactive workers and orphan locks.
+    SweepStaleWorkers(SweepStaleWorkersArgs),
 
     /// Serve the embedded Leptos admin UI and JSON management API.
     Admin(AdminArgs),
@@ -225,6 +233,21 @@ struct ForceUnlockArgs {
     /// Worker ids to unlock.
     #[arg(required = true)]
     worker_ids: Vec<String>,
+}
+
+#[derive(Args, Debug)]
+struct SweepStaleWorkersArgs {
+    /// Time since last heartbeat before a worker is deemed inactive (e.g. 5m, 300s).
+    #[arg(long, value_parser = parse_duration)]
+    sweep_threshold: Option<Duration>,
+
+    /// Delay before recovered jobs are eligible to run again (e.g. 30s).
+    #[arg(long, value_parser = parse_duration)]
+    recovery_delay: Option<Duration>,
+
+    /// List stale workers without recovering jobs.
+    #[arg(long)]
+    dry_run: bool,
 }
 
 #[derive(Args, Debug)]
@@ -622,6 +645,40 @@ async fn run_command(
                 print_json(&workers)?;
             } else {
                 print_workers_table(&workers);
+            }
+        }
+        Command::SweepStaleWorkers(args) => {
+            let defaults = WorkerRecoveryConfig::default();
+            let result = utils
+                .sweep_stale_workers(SweepStaleWorkersOptions {
+                    sweep_threshold: args.sweep_threshold.or(Some(defaults.sweep_threshold)),
+                    recovery_delay: args.recovery_delay.or(Some(defaults.recovery_delay)),
+                    dry_run: args.dry_run,
+                    ..Default::default()
+                })
+                .await
+                .context("failed to sweep stale workers")?;
+            if cli.json {
+                print_json(&result)?;
+            } else if args.dry_run {
+                if result.worker_ids.is_empty() {
+                    println!("No stale workers found");
+                } else {
+                    println!(
+                        "Would recover {} worker(s): {}",
+                        result.worker_ids.len(),
+                        result.worker_ids.join(", ")
+                    );
+                }
+            } else if result.worker_ids.is_empty() {
+                println!("No stale workers found");
+            } else {
+                println!(
+                    "Recovered {} job(s) from {} worker(s): {}",
+                    result.recovered_count,
+                    result.worker_ids.len(),
+                    result.worker_ids.join(", ")
+                );
             }
         }
         Command::Admin(args) => {
@@ -1037,6 +1094,35 @@ fn print_json(value: &impl Serialize) -> Result<()> {
     Ok(())
 }
 
+fn parse_duration(value: &str) -> std::result::Result<Duration, String> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err("duration must not be empty".to_string());
+    }
+
+    if let Ok(seconds) = value.parse::<u64>() {
+        return Ok(Duration::from_secs(seconds));
+    }
+
+    let (number, unit) = value
+        .find(|character: char| !character.is_ascii_digit())
+        .map(|index| value.split_at(index))
+        .ok_or_else(|| format!("invalid duration `{value}`"))?;
+
+    let amount: u64 = number
+        .parse()
+        .map_err(|_| format!("invalid duration `{value}`"))?;
+
+    let seconds = match unit.trim().to_ascii_lowercase().as_str() {
+        "s" | "sec" | "secs" | "second" | "seconds" => amount,
+        "m" | "min" | "mins" | "minute" | "minutes" => amount * 60,
+        "h" | "hr" | "hrs" | "hour" | "hours" => amount * 60 * 60,
+        unit => return Err(format!("unsupported duration unit `{unit}`")),
+    };
+
+    Ok(Duration::from_secs(seconds))
+}
+
 fn parse_utc_datetime(value: &str) -> std::result::Result<DateTime<Utc>, String> {
     if value.eq_ignore_ascii_case("now") {
         return Ok(Utc::now());
@@ -1074,5 +1160,21 @@ mod tests {
         let tasks: Vec<CleanupTask> = CleanupTaskArg::all().into_iter().map(Into::into).collect();
 
         assert_eq!(tasks.len(), 3);
+    }
+
+    #[test]
+    fn parses_duration_units() {
+        assert_eq!(
+            parse_duration("300").expect("seconds"),
+            Duration::from_secs(300)
+        );
+        assert_eq!(
+            parse_duration("5m").expect("minutes"),
+            Duration::from_secs(300)
+        );
+        assert_eq!(
+            parse_duration("2h").expect("hours"),
+            Duration::from_secs(7200)
+        );
     }
 }

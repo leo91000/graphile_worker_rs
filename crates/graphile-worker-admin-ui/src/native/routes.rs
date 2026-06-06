@@ -1,11 +1,13 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::extract::{Path, Query, State};
 use axum::response::Html;
 use axum::Json;
 use chrono::Utc;
+use graphile_worker::recovery::WorkerRecoveryConfig;
 use graphile_worker::worker_utils::RescheduleJobOptions;
-use graphile_worker::{DbJob, JobSpec};
+use graphile_worker::{DbJob, JobSpec, SweepStaleWorkersOptions};
 
 use super::auth::CSRF_HEADER;
 use super::error::{ApiError, Result};
@@ -14,9 +16,9 @@ use super::queries::{
 };
 use super::state::AppState;
 use super::types::{
-    AddJobRequest, CleanupTaskName, DbJobOutput, JobAction, JobActionRequest, JobActionResponse,
-    ListJobsParams, ListJobsResponse, ListedJob, MaintenanceAction, MaintenanceRequest,
-    MessageResponse, OverviewResponse, RemoveJobByKeyRequest, SessionResponse,
+    ActiveWorkerRow, AddJobRequest, CleanupTaskName, DbJobOutput, JobAction, JobActionRequest,
+    JobActionResponse, ListJobsParams, ListJobsResponse, ListedJob, MaintenanceAction,
+    MaintenanceRequest, MessageResponse, OverviewResponse, RemoveJobByKeyRequest, SessionResponse,
 };
 use super::view::{render_admin_html, AdminUiRenderConfig};
 
@@ -45,10 +47,26 @@ pub(crate) async fn overview(
     let stats = get_stats(&state.pool, &state.escaped_schema).await?;
     let queues = list_queues(&state.pool, &state.escaped_schema).await?;
     let workers = list_locked_workers(&state.pool, &state.escaped_schema).await?;
+    let recovery_defaults = WorkerRecoveryConfig::default();
+    let active_workers = state
+        .utils
+        .list_active_workers(recovery_defaults.sweep_threshold)
+        .await
+        .map_err(ApiError::internal)?
+        .into_iter()
+        .map(|worker| ActiveWorkerRow {
+            worker_id: worker.worker_id,
+            last_heartbeat_at: worker.last_heartbeat_at,
+            started_at: worker.started_at,
+            metadata: worker.metadata,
+            is_stale: worker.is_stale,
+        })
+        .collect();
     Ok(Json(OverviewResponse {
         stats,
         queues,
         workers,
+        active_workers,
     }))
 }
 
@@ -271,6 +289,48 @@ pub(crate) async fn maintenance(
             Ok(Json(MessageResponse {
                 message: format!("Unlocked {} worker id(s)", worker_ids.len()),
             }))
+        }
+        MaintenanceAction::SweepStaleWorkers => {
+            let defaults = WorkerRecoveryConfig::default();
+            let result = state
+                .utils
+                .sweep_stale_workers(SweepStaleWorkersOptions {
+                    sweep_threshold: request
+                        .sweep_threshold_secs
+                        .map(Duration::from_secs)
+                        .or(Some(defaults.sweep_threshold)),
+                    recovery_delay: request
+                        .recovery_delay_secs
+                        .map(Duration::from_secs)
+                        .or(Some(defaults.recovery_delay)),
+                    dry_run: request.dry_run,
+                    ..Default::default()
+                })
+                .await
+                .map_err(ApiError::internal)?;
+
+            let message = if request.dry_run {
+                if result.worker_ids.is_empty() {
+                    "No stale workers found".to_string()
+                } else {
+                    format!(
+                        "Would recover {} worker(s): {}",
+                        result.worker_ids.len(),
+                        result.worker_ids.join(", ")
+                    )
+                }
+            } else if result.worker_ids.is_empty() {
+                "No stale workers found".to_string()
+            } else {
+                format!(
+                    "Recovered {} job(s) from {} worker(s): {}",
+                    result.recovered_count,
+                    result.worker_ids.len(),
+                    result.worker_ids.join(", ")
+                )
+            };
+
+            Ok(Json(MessageResponse { message }))
         }
     }
 }
