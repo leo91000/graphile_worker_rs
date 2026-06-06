@@ -3,26 +3,55 @@ use std::collections::{BTreeSet, HashMap};
 use indoc::formatdoc;
 use sqlx::{PgPool, Postgres, QueryBuilder};
 
-use super::error::{ApiError, Result};
-use super::types::{JobState, JobStats, ListJobsParams, ListedJob, LockedWorkerRow, QueueRow};
+use crate::{JobState, JobStats, ListJobsParams, ListedJob, LockedWorkerRow, QueueRow};
 
-pub(crate) async fn list_jobs(
+pub type Result<T> = core::result::Result<T, AdminQueryError>;
+
+#[derive(Debug, thiserror::Error)]
+pub enum AdminQueryError {
+    #[error("{0}")]
+    BadRequest(String),
+    #[error("{0}")]
+    NotFound(String),
+    #[error(transparent)]
+    Sqlx(#[from] sqlx::Error),
+}
+
+impl AdminQueryError {
+    fn bad_request(message: impl Into<String>) -> Self {
+        Self::BadRequest(message.into())
+    }
+
+    fn not_found(message: impl Into<String>) -> Self {
+        Self::NotFound(message.into())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ListJobsQueryOptions {
+    pub max_limit: Option<i64>,
+}
+
+pub async fn list_jobs(
     pool: &PgPool,
     escaped_schema: &str,
     args: &ListJobsParams,
-) -> Result<Vec<ListedJob>, ApiError> {
+    options: ListJobsQueryOptions,
+) -> Result<Vec<ListedJob>> {
     if args.limit < 0 {
-        return Err(ApiError::bad_request(
+        return Err(AdminQueryError::bad_request(
             "limit must be greater than or equal to 0",
         ));
     }
     if args.offset < 0 {
-        return Err(ApiError::bad_request(
+        return Err(AdminQueryError::bad_request(
             "offset must be greater than or equal to 0",
         ));
     }
 
-    let limit = args.limit.min(500);
+    let limit = options
+        .max_limit
+        .map_or(args.limit, |max_limit| args.limit.min(max_limit));
     let mut query = QueryBuilder::<Postgres>::new(formatdoc!(
         r#"
             select
@@ -63,11 +92,7 @@ pub(crate) async fn list_jobs(
         .map_err(Into::into)
 }
 
-pub(crate) async fn get_job(
-    pool: &PgPool,
-    escaped_schema: &str,
-    id: i64,
-) -> Result<ListedJob, ApiError> {
+pub async fn get_job(pool: &PgPool, escaped_schema: &str, id: i64) -> Result<ListedJob> {
     let mut query = QueryBuilder::<Postgres>::new(formatdoc!(
         r#"
             select
@@ -100,21 +125,17 @@ pub(crate) async fn get_job(
         .build_query_as()
         .fetch_one(pool)
         .await
-        .map_err(|error| job_lookup_error(id, error))
+        .map_err(|error| match error {
+            sqlx::Error::RowNotFound => AdminQueryError::not_found(format!("job {id} not found")),
+            error => error.into(),
+        })
 }
 
-pub(crate) fn job_lookup_error(id: i64, error: sqlx::Error) -> ApiError {
-    match error {
-        sqlx::Error::RowNotFound => ApiError::not_found(format!("job {id} not found")),
-        error => error.into(),
-    }
-}
-
-pub(crate) async fn task_identifiers_by_id(
+pub async fn task_identifiers_by_id(
     pool: &PgPool,
     escaped_schema: &str,
     task_ids: impl IntoIterator<Item = i32>,
-) -> Result<HashMap<i32, String>, ApiError> {
+) -> Result<HashMap<i32, String>> {
     let task_ids = task_ids.into_iter().collect::<BTreeSet<_>>();
     if task_ids.is_empty() {
         return Ok(HashMap::new());
@@ -141,7 +162,7 @@ pub(crate) async fn task_identifiers_by_id(
         .collect())
 }
 
-pub(crate) fn apply_job_filters(query: &mut QueryBuilder<Postgres>, args: &ListJobsParams) {
+pub fn apply_job_filters(query: &mut QueryBuilder<Postgres>, args: &ListJobsParams) {
     if let Some(identifier) = args.identifier.as_ref().filter(|value| !value.is_empty()) {
         query.push(" and tasks.identifier = ");
         query.push_bind(identifier);
@@ -197,7 +218,7 @@ pub(crate) fn apply_job_filters(query: &mut QueryBuilder<Postgres>, args: &ListJ
     }
 }
 
-pub(crate) async fn get_stats(pool: &PgPool, escaped_schema: &str) -> Result<JobStats, ApiError> {
+pub async fn get_stats(pool: &PgPool, escaped_schema: &str) -> Result<JobStats> {
     let sql = formatdoc!(
         r#"
             select
@@ -227,10 +248,7 @@ pub(crate) async fn get_stats(pool: &PgPool, escaped_schema: &str) -> Result<Job
         .map_err(Into::into)
 }
 
-pub(crate) async fn list_queues(
-    pool: &PgPool,
-    escaped_schema: &str,
-) -> Result<Vec<QueueRow>, ApiError> {
+pub async fn list_queues(pool: &PgPool, escaped_schema: &str) -> Result<Vec<QueueRow>> {
     let sql = formatdoc!(
         r#"
             select
@@ -257,10 +275,10 @@ pub(crate) async fn list_queues(
         .map_err(Into::into)
 }
 
-pub(crate) async fn list_locked_workers(
+pub async fn list_locked_workers(
     pool: &PgPool,
     escaped_schema: &str,
-) -> Result<Vec<LockedWorkerRow>, ApiError> {
+) -> Result<Vec<LockedWorkerRow>> {
     let sql = formatdoc!(
         r#"
             select

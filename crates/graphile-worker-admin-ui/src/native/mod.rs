@@ -2,7 +2,6 @@ mod assets;
 mod auth;
 mod error;
 mod middleware;
-mod queries;
 mod routes;
 mod server;
 mod state;
@@ -28,6 +27,8 @@ mod tests {
     use base64::engine::general_purpose::STANDARD;
     use base64::Engine;
     use graphile_worker::WorkerUtils;
+    use graphile_worker_admin_api::queries::{apply_job_filters, AdminQueryError};
+    use graphile_worker_admin_api::{default_limit, JobState};
     use sqlx::{Postgres, QueryBuilder};
 
     use super::auth::{
@@ -35,10 +36,9 @@ mod tests {
     };
     use super::error::{AdminUiError, ApiError};
     use super::middleware::unauthorized_response;
-    use super::queries::{apply_job_filters, job_lookup_error};
     use super::routes::add_job;
     use super::state::{AdminServerConfig, AppState};
-    use super::types::{default_limit, AddJobRequest, JobKeyModeRequest, JobState, ListJobsParams};
+    use super::types::{AddJobRequest, JobKeyModeRequest, ListJobsParams};
     use super::view::{render_admin_html, AdminUiRenderConfig};
 
     #[test]
@@ -185,8 +185,8 @@ mod tests {
     }
 
     #[test]
-    fn job_lookup_error_maps_missing_job_to_not_found() {
-        let error = job_lookup_error(42, sqlx::Error::RowNotFound);
+    fn admin_query_not_found_maps_to_not_found() {
+        let error = ApiError::from(AdminQueryError::NotFound("job 42 not found".to_string()));
 
         assert_eq!(error.status, StatusCode::NOT_FOUND);
         assert!(error.message.contains("42"));

@@ -3,6 +3,7 @@ use std::fmt;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use graphile_worker_admin_api::queries::AdminQueryError;
 use thiserror::Error;
 
 use super::types::ErrorResponse;
@@ -74,6 +75,16 @@ impl From<sqlx::Error> for ApiError {
         match value {
             sqlx::Error::RowNotFound => Self::not_found("resource not found"),
             error => Self::internal(error),
+        }
+    }
+}
+
+impl From<AdminQueryError> for ApiError {
+    fn from(value: AdminQueryError) -> Self {
+        match value {
+            AdminQueryError::BadRequest(message) => Self::bad_request(message),
+            AdminQueryError::NotFound(message) => Self::not_found(message),
+            AdminQueryError::Sqlx(error) => error.into(),
         }
     }
 }

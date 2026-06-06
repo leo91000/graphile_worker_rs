@@ -24,8 +24,8 @@ graphile_worker = { workspace = true, features = [
   "runtime-tokio",
   "tls-rustls",
 ] }
+graphile_worker_admin_api = { workspace = true, features = ["sqlx"] }
 graphile_worker_admin_ui.workspace = true
-indoc.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx = { workspace = true, features = ["runtime-tokio", "tls-rustls"] }
