@@ -4,6 +4,8 @@ use serde_json::Value;
 
 #[cfg(feature = "sqlx")]
 pub mod queries;
+#[cfg(feature = "sqlx")]
+mod sql;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "kebab-case")]

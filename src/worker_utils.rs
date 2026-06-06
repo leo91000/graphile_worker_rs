@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use std::time::Duration;
 
-use crate::recovery::{sweep_stale_workers, ActiveWorkerRow};
+use crate::recovery::{sweep_stale_workers, ActiveWorkerRow, WorkerRecoveryConfig};
 use crate::sql::add_job::{add_job, add_jobs, JobToAdd, RawJobSpec};
 use crate::sql::task_identifiers::{get_tasks_details, SharedTaskDetails};
 use crate::sql::worker_heartbeat::list_active_workers;
@@ -789,11 +789,23 @@ impl WorkerUtils {
         &self,
         options: SweepStaleWorkersOptions,
     ) -> Result<SweepStaleWorkersResult, GraphileWorkerError> {
+        let recovery_config = WorkerRecoveryConfig::default();
+        self.sweep_stale_workers_with_config(&recovery_config, options)
+            .await
+    }
+
+    /// Sweeps inactive workers with an explicit recovery configuration.
+    pub async fn sweep_stale_workers_with_config(
+        &self,
+        recovery_config: &WorkerRecoveryConfig,
+        options: SweepStaleWorkersOptions,
+    ) -> Result<SweepStaleWorkersResult, GraphileWorkerError> {
         sweep_stale_workers(
             &self.database,
             &self.escaped_schema,
             self.hooks.as_ref(),
             "worker_utils",
+            recovery_config,
             options,
         )
         .await

@@ -147,7 +147,6 @@ async fn stale_worker_heartbeat_recovers_locked_jobs() {
                     sweep_threshold: Some(Duration::from_millis(300)),
                     recovery_delay: Some(Duration::from_millis(100)),
                     dry_run: false,
-                    ..Default::default()
                 })
                 .await
                 .expect("failed to sweep stale workers");
@@ -199,7 +198,6 @@ async fn orphan_lock_is_recovered_after_threshold() {
                 sweep_threshold: Some(Duration::from_secs(60)),
                 recovery_delay: Some(Duration::from_millis(750)),
                 dry_run: false,
-                ..Default::default()
             })
             .await
             .expect("failed to sweep orphan lock");
@@ -637,7 +635,6 @@ async fn recovery_hook_is_applied_to_dead_worker_sweep() {
                 sweep_threshold: Some(Duration::from_secs(60)),
                 recovery_delay: Some(Duration::from_millis(100)),
                 dry_run: false,
-                ..Default::default()
             })
             .await
             .expect("failed to sweep stale workers");
@@ -686,7 +683,6 @@ async fn concurrent_sweeps_recover_locked_job_once() {
             sweep_threshold: Some(Duration::from_secs(60)),
             recovery_delay: Some(Duration::from_millis(100)),
             dry_run: false,
-            ..Default::default()
         };
         let first_utils = WorkerUtils::new(test_db.database.clone(), "graphile_worker".to_string());
         let second_utils = WorkerUtils::new(test_db.database.clone(), "graphile_worker".to_string());
@@ -863,12 +859,14 @@ async fn resilient_job_uses_extended_sweep_threshold() {
         let sweep_utils = WorkerUtils::new(test_db.database.clone(), "graphile_worker".to_string());
 
         let result = sweep_utils
-            .sweep_stale_workers(SweepStaleWorkersOptions {
-                recovery_config: Some(config.clone()),
-                recovery_delay: Some(Duration::from_millis(100)),
-                dry_run: false,
-                ..Default::default()
-            })
+            .sweep_stale_workers_with_config(
+                &config,
+                SweepStaleWorkersOptions {
+                    recovery_delay: Some(Duration::from_millis(100)),
+                    dry_run: false,
+                    ..Default::default()
+                },
+            )
             .await
             .expect("failed to sweep resilient worker before extended threshold");
 
@@ -889,12 +887,14 @@ async fn resilient_job_uses_extended_sweep_threshold() {
         .expect("failed to age resilient worker heartbeat");
 
         let result = sweep_utils
-            .sweep_stale_workers(SweepStaleWorkersOptions {
-                recovery_config: Some(config),
-                recovery_delay: Some(Duration::from_millis(100)),
-                dry_run: false,
-                ..Default::default()
-            })
+            .sweep_stale_workers_with_config(
+                &config,
+                SweepStaleWorkersOptions {
+                    recovery_delay: Some(Duration::from_millis(100)),
+                    dry_run: false,
+                    ..Default::default()
+                },
+            )
             .await
             .expect("failed to sweep resilient worker after extended threshold");
 
@@ -944,7 +944,6 @@ async fn recovery_hook_skip_leaves_job_locked() {
                 sweep_threshold: Some(Duration::from_secs(60)),
                 recovery_delay: Some(Duration::from_millis(100)),
                 dry_run: false,
-                ..Default::default()
             })
             .await
             .expect("failed to sweep skipped recovery lock");
@@ -998,7 +997,6 @@ async fn recovery_hook_fail_with_backoff_unlocks_with_retry_delay() {
                 sweep_threshold: Some(Duration::from_secs(60)),
                 recovery_delay: Some(Duration::from_millis(100)),
                 dry_run: false,
-                ..Default::default()
             })
             .await
             .expect("failed to sweep fail-with-backoff recovery lock");
@@ -1075,7 +1073,6 @@ async fn queued_job_recovery_counts_jobs_and_unlocks_queue() {
                 sweep_threshold: Some(Duration::from_secs(60)),
                 recovery_delay: Some(Duration::from_millis(100)),
                 dry_run: false,
-                ..Default::default()
             })
             .await
             .expect("failed to sweep queued recovery lock");

@@ -3,6 +3,7 @@ use std::collections::{BTreeSet, HashMap};
 use indoc::formatdoc;
 use sqlx::{PgPool, Postgres, QueryBuilder};
 
+use crate::sql::safe_query_as;
 use crate::{JobState, JobStats, ListJobsParams, ListedJob, LockedWorkerRow, QueueRow};
 
 pub type Result<T> = core::result::Result<T, AdminQueryError>;
@@ -242,7 +243,7 @@ pub async fn get_stats(pool: &PgPool, escaped_schema: &str) -> Result<JobStats> 
         "#
     );
 
-    sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
+    safe_query_as(sql.as_str())
         .fetch_one(pool)
         .await
         .map_err(Into::into)
@@ -269,7 +270,7 @@ pub async fn list_queues(pool: &PgPool, escaped_schema: &str) -> Result<Vec<Queu
         "#
     );
 
-    sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
+    safe_query_as(sql.as_str())
         .fetch_all(pool)
         .await
         .map_err(Into::into)
@@ -301,7 +302,7 @@ pub async fn list_locked_workers(
         "#
     );
 
-    sqlx::query_as(sqlx::AssertSqlSafe(sql.as_str()))
+    safe_query_as(sql.as_str())
         .fetch_all(pool)
         .await
         .map_err(Into::into)

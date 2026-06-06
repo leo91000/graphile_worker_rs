@@ -4,7 +4,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
-use derive_builder::Builder;
 use futures::FutureExt;
 use graphile_worker_database::Database;
 use graphile_worker_job::Job;
@@ -19,7 +18,9 @@ use graphile_worker_shutdown_signal::ShutdownSignal;
 use rand::RngExt;
 use thiserror::Error;
 
+use crate::background_tasks::TaskSlot;
 use crate::streams::JobSignalSender;
+use config::{calculate_retry_delay, RETURN_JOBS_RETRY_OPTIONS};
 use tracing::{debug, error, trace, warn};
 
 use crate::sql::batch_get_jobs::batch_get_jobs;
@@ -27,160 +28,10 @@ use crate::sql::get_job::get_job;
 use crate::sql::return_jobs::return_jobs;
 use crate::sql::task_identifiers::SharedTaskDetails;
 
-const DEFAULT_LOCAL_QUEUE_SIZE: usize = 100;
-const DEFAULT_LOCAL_QUEUE_TTL: Duration = Duration::from_secs(5 * 60);
-
-struct RetryOptions {
-    max_attempts: u32,
-    min_delay_ms: u64,
-    max_delay_ms: u64,
-    multiplier: f64,
-}
-
-const RETURN_JOBS_RETRY_OPTIONS: RetryOptions = RetryOptions {
-    max_attempts: 20,
-    min_delay_ms: 200,
-    max_delay_ms: 30_000,
-    multiplier: 1.5,
+mod config;
+pub use config::{
+    LocalQueueConfig, LocalQueueConfigBuilder, RefetchDelayConfig, RefetchDelayConfigBuilder,
 };
-
-fn calculate_retry_delay(attempt: u32, options: &RetryOptions) -> Duration {
-    let base = options.min_delay_ms as f64 * options.multiplier.powi(attempt as i32);
-    let capped = base.min(options.max_delay_ms as f64);
-    let jittered = capped * (0.5 + rand::rng().random::<f64>() * 0.5);
-    Duration::from_millis(jittered as u64)
-}
-
-#[derive(Debug, Clone, Builder)]
-#[builder(build_fn(private, name = "build_internal"), pattern = "owned")]
-pub struct RefetchDelayConfig {
-    #[builder(default = "Duration::from_millis(100)")]
-    pub duration: Duration,
-    #[builder(default = "0")]
-    pub threshold: usize,
-    #[builder(default, setter(strip_option))]
-    pub max_abort_threshold: Option<usize>,
-}
-
-impl Default for RefetchDelayConfig {
-    fn default() -> Self {
-        Self::builder().build()
-    }
-}
-
-impl RefetchDelayConfig {
-    pub fn builder() -> RefetchDelayConfigBuilder {
-        RefetchDelayConfigBuilder::default()
-    }
-
-    pub fn with_duration(self, duration: Duration) -> Self {
-        Self { duration, ..self }
-    }
-
-    pub fn with_threshold(self, threshold: usize) -> Self {
-        Self { threshold, ..self }
-    }
-
-    pub fn with_max_abort_threshold(self, max_abort_threshold: usize) -> Self {
-        Self {
-            max_abort_threshold: Some(max_abort_threshold),
-            ..self
-        }
-    }
-}
-
-impl RefetchDelayConfigBuilder {
-    pub fn build(self) -> RefetchDelayConfig {
-        self.build_internal()
-            .expect("All fields have defaults, build should never fail")
-    }
-}
-
-#[derive(Debug, Clone, Builder)]
-#[builder(build_fn(private, name = "build_internal"), pattern = "owned")]
-pub struct LocalQueueConfig {
-    /// Maximum number of jobs each local queue may fetch and hold at once.
-    ///
-    /// When `queue_count` is greater than 1, this value is per local queue.
-    /// For example, `size = 1_250` and `queue_count = 4` allows up to 5,000
-    /// jobs to be locked locally across the worker.
-    #[builder(default = "DEFAULT_LOCAL_QUEUE_SIZE")]
-    pub size: usize,
-    /// How long locally fetched jobs may stay unclaimed before being returned to the database.
-    #[builder(default = "DEFAULT_LOCAL_QUEUE_TTL")]
-    pub ttl: Duration,
-    /// Optional delay strategy used when a fetch returns fewer jobs than requested.
-    #[builder(default, setter(strip_option))]
-    pub refetch_delay: Option<RefetchDelayConfig>,
-    /// Number of independent local queues to run inside this worker.
-    ///
-    /// Multiple queues can improve throughput for very small high-volume jobs by
-    /// letting the worker fetch several batches in parallel. This also increases
-    /// the maximum number of jobs locked locally to `size * queue_count`, so keep
-    /// `size` lower when increasing this value.
-    ///
-    /// If this is greater than the worker concurrency, only `concurrency` queues
-    /// are started because every local queue needs at least one worker draining it.
-    ///
-    /// Throughput depends on the job payload, handler cost, PostgreSQL latency,
-    /// connection pool size, worker concurrency, and local queue settings. There
-    /// is no universal best value; benchmark realistic workloads before changing
-    /// this in production.
-    ///
-    /// Defaults to 1, which preserves the original single-local-queue behavior.
-    #[builder(default = "1")]
-    pub queue_count: usize,
-}
-
-impl Default for LocalQueueConfig {
-    fn default() -> Self {
-        Self::builder().build()
-    }
-}
-
-impl LocalQueueConfig {
-    pub fn builder() -> LocalQueueConfigBuilder {
-        LocalQueueConfigBuilder::default()
-    }
-
-    pub fn with_size(self, size: usize) -> Self {
-        Self { size, ..self }
-    }
-
-    pub fn with_ttl(self, ttl: Duration) -> Self {
-        Self { ttl, ..self }
-    }
-
-    pub fn with_refetch_delay(self, refetch_delay: RefetchDelayConfig) -> Self {
-        Self {
-            refetch_delay: Some(refetch_delay),
-            ..self
-        }
-    }
-
-    /// Sets how many independent local queues this worker should run.
-    ///
-    /// `size` is applied to each queue, so total local capacity is
-    /// `size * queue_count`. Higher values increase parallel fetch capacity but
-    /// can also lock more jobs locally and increase database load.
-    ///
-    /// If this is greater than worker concurrency, it is capped at concurrency.
-    /// There is no single best value for all workloads, so benchmark realistic
-    /// jobs before relying on a throughput tuning.
-    pub fn with_queue_count(self, queue_count: usize) -> Self {
-        Self {
-            queue_count,
-            ..self
-        }
-    }
-}
-
-impl LocalQueueConfigBuilder {
-    pub fn build(self) -> LocalQueueConfig {
-        self.build_internal()
-            .expect("All fields have defaults, build should never fail")
-    }
-}
 
 #[derive(Debug, Error)]
 pub enum LocalQueueError {
@@ -218,7 +69,10 @@ struct LocalQueueState {
     fetch_again: AtomicBool,
     refetch_delay: RefetchDelayState,
     state_notify: runtime::Notify,
-    ttl_timer_handle: runtime::Mutex<Option<runtime::AbortHandle>>,
+    run_task: TaskSlot,
+    shutdown_task: TaskSlot,
+    refetch_delay_task: TaskSlot,
+    ttl_timer_task: TaskSlot,
     run_complete_notify: runtime::Notify,
     config: LocalQueueConfig,
     database: Database,
@@ -241,7 +95,10 @@ impl LocalQueueState {
             fetch_again: AtomicBool::new(false),
             refetch_delay: RefetchDelayState::default(),
             state_notify: runtime::Notify::new(),
-            ttl_timer_handle: runtime::Mutex::new(None),
+            run_task: TaskSlot::empty("local_queue_run"),
+            shutdown_task: TaskSlot::empty("local_queue_shutdown"),
+            refetch_delay_task: TaskSlot::empty("local_queue_refetch_delay"),
+            ttl_timer_task: TaskSlot::empty("local_queue_ttl"),
             run_complete_notify: runtime::Notify::new(),
             config: params.config,
             database: params.database,
@@ -378,18 +235,20 @@ impl LocalQueue {
         let queue: LocalQueue = params.into();
 
         let queue_clone = queue.clone();
-        drop(runtime::spawn(async move {
+        let run_task = runtime::spawn(async move {
             queue_clone.run().await;
-        }));
+        });
+        queue.0.run_task.replace_abort(run_task);
 
         if let Some(signal) = shutdown_signal {
             let queue_for_shutdown = queue.clone();
-            drop(runtime::spawn(async move {
+            let shutdown_task = runtime::spawn(async move {
                 signal.await;
                 if let Err(e) = queue_for_shutdown.release().await {
                     warn!(error = %e, "Error releasing LocalQueue on shutdown");
                 }
-            }));
+            });
+            queue.0.shutdown_task.replace_abort(shutdown_task);
         }
 
         queue
@@ -551,7 +410,7 @@ impl LocalQueue {
             .await;
 
         let queue_clone = self.clone();
-        drop(runtime::spawn(async move {
+        let refetch_delay_task = runtime::spawn(async move {
             let sleep = runtime::sleep(duration).fuse();
             let notified = queue_clone.0.refetch_delay.abort_notify.notified().fuse();
             futures::pin_mut!(sleep, notified);
@@ -563,7 +422,8 @@ impl LocalQueue {
                     queue_clone.refetch_delay_complete(true).await;
                 }
             };
-        }));
+        });
+        self.0.refetch_delay_task.replace_abort(refetch_delay_task);
     }
 
     async fn refetch_delay_complete(&self, aborted: bool) {
@@ -632,13 +492,8 @@ impl LocalQueue {
     async fn start_ttl_timer(&self) {
         let ttl = self.0.config.ttl;
 
-        let mut handle_guard = self.0.ttl_timer_handle.lock().await;
-        if let Some(existing_handle) = handle_guard.take() {
-            existing_handle.abort();
-        }
-
         let queue_clone = self.clone();
-        let join_handle = runtime::spawn(async move {
+        let ttl_timer_task = runtime::spawn(async move {
             runtime::sleep(ttl).await;
 
             let mode = *queue_clone.0.mode.read().await;
@@ -647,7 +502,7 @@ impl LocalQueue {
             }
         });
 
-        *handle_guard = Some(join_handle.abort_handle());
+        self.0.ttl_timer_task.replace_abort(ttl_timer_task);
     }
 
     async fn return_jobs_with_retry(
@@ -810,9 +665,8 @@ impl LocalQueue {
         self.0.refetch_delay.abort_notify.notify_waiters();
         self.0.state_notify.notify_waiters();
 
-        if let Some(handle) = self.0.ttl_timer_handle.lock().await.take() {
-            handle.abort();
-        }
+        self.0.ttl_timer_task.abort();
+        self.0.refetch_delay_task.abort();
 
         debug!("LocalQueue releasing, returning jobs to database");
 
@@ -866,6 +720,7 @@ impl LocalQueue {
 
 #[cfg(test)]
 mod tests {
+    use super::config::RetryOptions;
     use super::*;
 
     #[test]

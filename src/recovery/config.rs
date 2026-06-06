@@ -116,14 +116,3 @@ pub fn job_has_resilient_flag(job: &Job, config: &WorkerRecoveryConfig) -> bool 
             .unwrap_or(false)
     })
 }
-
-pub(crate) fn effective_sweep_threshold(
-    config: &WorkerRecoveryConfig,
-    has_resilient_lock: bool,
-) -> Duration {
-    if has_resilient_lock {
-        config.sweep_threshold * config.resilient_sweep_threshold_multiplier
-    } else {
-        config.sweep_threshold
-    }
-}

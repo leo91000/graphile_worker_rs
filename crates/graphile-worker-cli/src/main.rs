@@ -6,21 +6,26 @@ use std::time::Duration;
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use graphile_worker::recovery::WorkerRecoveryConfig;
 use graphile_worker::worker_utils::{CleanupTask, RescheduleJobOptions};
 use graphile_worker::{
     escape_identifier, Database, DbJob, Job, JobKeyMode, JobSpec, SweepStaleWorkersOptions,
     WorkerUtils,
 };
 use graphile_worker_admin_api::queries::{self as admin_queries, ListJobsQueryOptions};
-use graphile_worker_admin_api::{
-    DbJobOutput, JobState as AdminJobState, ListJobsParams, ListedJob, LockedWorkerRow, QueueRow,
-};
+use graphile_worker_admin_api::{DbJobOutput, JobState as AdminJobState, ListJobsParams};
 use graphile_worker_admin_ui::{AdminAuthConfig, AdminServerConfig};
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+
+mod output;
+mod parsers;
+use output::{
+    print_db_job_result, print_job_details, print_jobs_table, print_json, print_queues_table,
+    print_workers_table,
+};
+use parsers::{parse_duration, parse_utc_datetime};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -597,13 +602,11 @@ async fn run_command(
             }
         }
         Command::SweepStaleWorkers(args) => {
-            let defaults = WorkerRecoveryConfig::default();
             let result = utils
                 .sweep_stale_workers(SweepStaleWorkersOptions {
-                    sweep_threshold: args.sweep_threshold.or(Some(defaults.sweep_threshold)),
-                    recovery_delay: args.recovery_delay.or(Some(defaults.recovery_delay)),
+                    sweep_threshold: args.sweep_threshold,
+                    recovery_delay: args.recovery_delay,
                     dry_run: args.dry_run,
-                    ..Default::default()
                 })
                 .await
                 .context("failed to sweep stale workers")?;
@@ -773,183 +776,14 @@ fn list_jobs_params(args: &ListArgs) -> Result<ListJobsParams> {
     })
 }
 
-fn print_db_job_result(json: bool, action: &str, jobs: &[DbJob]) -> Result<()> {
-    if json {
-        let output: Vec<_> = jobs.iter().map(db_job_output_from_db_job).collect();
-        print_json(&output)?;
-        return Ok(());
-    }
-
-    let ids = jobs
-        .iter()
-        .map(|job| job.id().to_string())
-        .collect::<Vec<_>>()
-        .join(", ");
-    println!("{action} {} job(s): {ids}", jobs.len());
-    Ok(())
-}
-
-fn print_jobs_table(jobs: &[ListedJob]) {
-    println!("id\ttask\tqueue\tstate\trun_at\tattempts\tpriority\tkey\tlocked_by");
-    for job in jobs {
-        println!(
-            "{}\t{}\t{}\t{}\t{}\t{}/{}\t{}\t{}\t{}",
-            job.id,
-            job.task_identifier,
-            job.queue_name.as_deref().unwrap_or("-"),
-            state_for(job),
-            job.run_at.to_rfc3339(),
-            job.attempts,
-            job.max_attempts,
-            job.priority,
-            job.key.as_deref().unwrap_or("-"),
-            job.locked_by.as_deref().unwrap_or("-")
-        );
-    }
-}
-
-fn print_job_details(job: &ListedJob) -> Result<()> {
-    println!("id: {}", job.id);
-    println!("task: {}", job.task_identifier);
-    println!("queue: {}", job.queue_name.as_deref().unwrap_or("-"));
-    println!("state: {}", state_for(job));
-    println!("run_at: {}", job.run_at.to_rfc3339());
-    println!("attempts: {}/{}", job.attempts, job.max_attempts);
-    println!("priority: {}", job.priority);
-    println!("key: {}", job.key.as_deref().unwrap_or("-"));
-    println!("locked_by: {}", job.locked_by.as_deref().unwrap_or("-"));
-    println!("last_error: {}", job.last_error.as_deref().unwrap_or("-"));
-    println!("payload: {}", serde_json::to_string_pretty(&job.payload)?);
-    Ok(())
-}
-
-fn print_queues_table(queues: &[QueueRow]) {
-    println!("id\tqueue\tjobs\tready\tlocked_by\tlocked_at");
-    for queue in queues {
-        println!(
-            "{}\t{}\t{}\t{}\t{}\t{}",
-            queue.id,
-            queue.queue_name,
-            queue.job_count,
-            queue.ready_count,
-            queue.locked_by.as_deref().unwrap_or("-"),
-            queue
-                .locked_at
-                .map(|locked_at| locked_at.to_rfc3339())
-                .unwrap_or_else(|| "-".to_string())
-        );
-    }
-}
-
-fn print_workers_table(workers: &[LockedWorkerRow]) {
-    println!("worker_id\tlocked_jobs\tlocked_queues");
-    for worker in workers {
-        println!(
-            "{}\t{}\t{}",
-            worker.worker_id, worker.locked_jobs, worker.locked_queues
-        );
-    }
-}
-
-fn state_for(job: &ListedJob) -> &'static str {
-    if job.locked_at.is_some() {
-        return "locked";
-    }
-    if job.attempts >= job.max_attempts {
-        return "failed";
-    }
-    if job.run_at > Utc::now() {
-        return "scheduled";
-    }
-    "ready"
-}
-
-fn print_json(value: &impl Serialize) -> Result<()> {
-    println!("{}", serde_json::to_string_pretty(value)?);
-    Ok(())
-}
-
-fn parse_duration(value: &str) -> std::result::Result<Duration, String> {
-    let value = value.trim();
-    if value.is_empty() {
-        return Err("duration must not be empty".to_string());
-    }
-
-    if let Ok(seconds) = value.parse::<u64>() {
-        return Ok(Duration::from_secs(seconds));
-    }
-
-    let (number, unit) = value
-        .find(|character: char| !character.is_ascii_digit())
-        .map(|index| value.split_at(index))
-        .ok_or_else(|| format!("invalid duration `{value}`"))?;
-
-    let amount: u64 = number
-        .parse()
-        .map_err(|_| format!("invalid duration `{value}`"))?;
-
-    let seconds = match unit.trim().to_ascii_lowercase().as_str() {
-        "s" | "sec" | "secs" | "second" | "seconds" => amount,
-        "m" | "min" | "mins" | "minute" | "minutes" => amount * 60,
-        "h" | "hr" | "hrs" | "hour" | "hours" => amount * 60 * 60,
-        unit => return Err(format!("unsupported duration unit `{unit}`")),
-    };
-
-    Ok(Duration::from_secs(seconds))
-}
-
-fn parse_utc_datetime(value: &str) -> std::result::Result<DateTime<Utc>, String> {
-    if value.eq_ignore_ascii_case("now") {
-        return Ok(Utc::now());
-    }
-
-    DateTime::parse_from_rfc3339(value)
-        .map(|datetime| datetime.with_timezone(&Utc))
-        .map_err(|error| error.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parses_rfc3339_datetime_as_utc() {
-        let parsed =
-            parse_utc_datetime("2026-01-02T03:04:05+02:00").expect("datetime should parse");
-
-        assert_eq!(parsed.to_rfc3339(), "2026-01-02T01:04:05+00:00");
-    }
-
-    #[test]
-    fn parses_now_datetime() {
-        let before = Utc::now();
-        let parsed = parse_utc_datetime("now").expect("now should parse");
-        let after = Utc::now();
-
-        assert!(parsed >= before);
-        assert!(parsed <= after);
-    }
 
     #[test]
     fn maps_cleanup_task_names() {
         let tasks: Vec<CleanupTask> = CleanupTaskArg::all().into_iter().map(Into::into).collect();
 
         assert_eq!(tasks.len(), 3);
-    }
-
-    #[test]
-    fn parses_duration_units() {
-        assert_eq!(
-            parse_duration("300").expect("seconds"),
-            Duration::from_secs(300)
-        );
-        assert_eq!(
-            parse_duration("5m").expect("minutes"),
-            Duration::from_secs(300)
-        );
-        assert_eq!(
-            parse_duration("2h").expect("hours"),
-            Duration::from_secs(7200)
-        );
     }
 }

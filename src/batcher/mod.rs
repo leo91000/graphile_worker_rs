@@ -11,8 +11,12 @@ use graphile_worker_shutdown_signal::ShutdownSignal;
 use indoc::formatdoc;
 use tracing::{error, trace, warn};
 
+use crate::background_tasks::TaskSlot;
 use crate::sql::fail_job::{fail_job, fail_jobs, FailedJob};
 use crate::Job;
+
+mod shared;
+use shared::recv_or_shutdown;
 
 const BATCHER_CHANNEL_CAPACITY: usize = 4096;
 
@@ -25,7 +29,7 @@ pub struct CompletionRequest {
 
 pub struct CompletionBatcher {
     tx: runtime::Sender<CompletionRequest>,
-    task: runtime::Mutex<Option<runtime::JoinHandle<()>>>,
+    task: TaskSlot,
     database: Database,
     escaped_schema: String,
     worker_id: String,
@@ -56,7 +60,7 @@ impl CompletionBatcher {
 
         Self {
             tx,
-            task: runtime::Mutex::new(Some(task)),
+            task: TaskSlot::new("completion_batcher", task),
             database,
             escaped_schema,
             worker_id,
@@ -77,11 +81,7 @@ impl CompletionBatcher {
     }
 
     pub async fn await_shutdown(&self) {
-        if let Some(handle) = self.task.lock().await.take() {
-            if let Err(e) = handle.await {
-                error!(error = ?e, "Completion batcher task panicked");
-            }
-        }
+        self.task.stop().await;
     }
 }
 
@@ -154,25 +154,6 @@ async fn completion_batcher_task(
 
         flush_batch(&batch, &database, &escaped_schema, &worker_id, &hooks).await;
         batch.clear();
-    }
-}
-
-struct RecvOrShutdown<T> {
-    item: Option<T>,
-    shutdown: bool,
-}
-
-async fn recv_or_shutdown<T>(
-    rx: &runtime::Receiver<T>,
-    shutdown_signal: &mut ShutdownSignal,
-) -> RecvOrShutdown<T> {
-    let recv = rx.recv().fuse();
-    let shutdown = shutdown_signal.fuse();
-    futures::pin_mut!(recv, shutdown);
-
-    futures::select_biased! {
-        _ = shutdown => RecvOrShutdown { item: None, shutdown: true },
-        item = recv => RecvOrShutdown { item: item.ok(), shutdown: false },
     }
 }
 
@@ -360,7 +341,7 @@ pub struct FailureRequest {
 
 pub struct FailureBatcher {
     tx: runtime::Sender<FailureRequest>,
-    task: runtime::Mutex<Option<runtime::JoinHandle<()>>>,
+    task: TaskSlot,
     database: Database,
     escaped_schema: String,
     worker_id: String,
@@ -391,7 +372,7 @@ impl FailureBatcher {
 
         Self {
             tx,
-            task: runtime::Mutex::new(Some(task)),
+            task: TaskSlot::new("failure_batcher", task),
             database,
             escaped_schema,
             worker_id,
@@ -410,11 +391,7 @@ impl FailureBatcher {
     }
 
     pub async fn await_shutdown(&self) {
-        if let Some(handle) = self.task.lock().await.take() {
-            if let Err(e) = handle.await {
-                error!(error = ?e, "Failure batcher task panicked");
-            }
-        }
+        self.task.stop().await;
     }
 }
 

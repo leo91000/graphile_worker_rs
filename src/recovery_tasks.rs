@@ -3,6 +3,7 @@ use std::sync::Arc;
 use futures::FutureExt;
 use tracing::{debug, error, warn};
 
+use crate::background_tasks::BackgroundTasks;
 use crate::recovery::{sweep_stale_workers, SweepStaleWorkersOptions};
 use crate::sql::worker_heartbeat::{worker_deregister, worker_heartbeat};
 use crate::Worker;
@@ -36,38 +37,18 @@ pub(crate) async fn deregister_worker(
 }
 
 pub(crate) struct RecoveryTasks {
-    handles: Vec<runtime::JoinHandle<()>>,
+    tasks: BackgroundTasks,
 }
 
 impl RecoveryTasks {
     pub(crate) fn empty() -> Self {
         Self {
-            handles: Vec::new(),
+            tasks: BackgroundTasks::new("recovery"),
         }
     }
 
-    fn abort(&self) {
-        for handle in &self.handles {
-            handle.abort_handle().abort();
-        }
-    }
-
-    pub(crate) async fn stop(mut self) {
-        self.abort();
-
-        let handles = std::mem::take(&mut self.handles);
-        for handle in handles {
-            match handle.await {
-                Ok(()) | Err(runtime::JoinError::Aborted) => {}
-                Err(error) => warn!(error = %error, "Worker recovery task failed during shutdown"),
-            }
-        }
-    }
-}
-
-impl Drop for RecoveryTasks {
-    fn drop(&mut self) {
-        self.abort();
+    pub(crate) async fn stop(self) {
+        self.tasks.stop().await;
     }
 }
 
@@ -91,9 +72,11 @@ pub(crate) fn spawn_recovery_tasks(worker: &Worker) -> RecoveryTasks {
         }
     });
 
-    RecoveryTasks {
-        handles: vec![heartbeat_handle, sweep_handle],
-    }
+    let mut tasks = BackgroundTasks::new("recovery");
+    tasks.push(heartbeat_handle);
+    tasks.push(sweep_handle);
+
+    RecoveryTasks { tasks }
 }
 
 async fn run_heartbeat_loop(worker: Arc<Worker>) -> Result<(), crate::errors::GraphileWorkerError> {
@@ -142,8 +125,8 @@ async fn sweep_once(worker: Arc<Worker>) -> Result<(), crate::errors::GraphileWo
         &worker.escaped_schema,
         Some(&worker.hooks),
         &worker.worker_id,
+        &worker.recovery_config,
         SweepStaleWorkersOptions {
-            recovery_config: Some(worker.recovery_config.clone()),
             ..Default::default()
         },
     )
