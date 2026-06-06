@@ -1,25 +1,13 @@
-#![allow(dead_code)]
-
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Utc};
 use graphile_worker::sql::add_job::add_job;
-use graphile_worker::Database;
-use graphile_worker::DbJob;
-use graphile_worker::Job;
-use graphile_worker::JobSpec;
-use graphile_worker::WorkerOptions;
-use graphile_worker::WorkerUtils;
+use graphile_worker::{Database, Job, JobSpec, WorkerOptions, WorkerUtils};
 use graphile_worker_crontab_runner::KnownCrontab;
 use serde_json::Value;
-use sqlx::postgres::{PgConnectOptions, PgRow};
-use sqlx::FromRow;
-use sqlx::PgPool;
-use sqlx::Row;
-use tokio::sync::Mutex;
-use tokio::sync::OnceCell;
+use sqlx::postgres::PgConnectOptions;
+use sqlx::{FromRow, PgPool, Row};
 use tokio::task::LocalSet;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
+
+use super::sql::{known_crontab_from_sqlx_row, safe_query};
 
 #[derive(FromRow, Debug, PartialEq, Eq)]
 pub struct JobWithQueueName {
@@ -68,25 +56,13 @@ pub struct TestDatabase {
     pub name: String,
 }
 
-#[derive(Clone)]
-pub struct SelectionOfJobs {
-    pub failed_job: Job,
-    pub regular_job_1: Job,
-    pub locked_job: Job,
-    pub regular_job_2: Job,
-    pub untouched_job: Job,
-}
-
 impl TestDatabase {
     async fn drop(&self) {
         self.test_pool.close().await;
-        sqlx::query(sqlx::AssertSqlSafe(format!(
-            "DROP DATABASE {} WITH (FORCE)",
-            self.name
-        )))
-        .execute(&self.source_pool)
-        .await
-        .expect("Failed to drop test database");
+        safe_query(format!("DROP DATABASE {} WITH (FORCE)", self.name))
+            .execute(&self.source_pool)
+            .await
+            .expect("Failed to drop test database");
     }
 
     pub fn create_worker_options(&self) -> WorkerOptions {
@@ -195,95 +171,6 @@ impl TestDatabase {
         WorkerUtils::new(self.database.clone(), "graphile_worker".into())
     }
 
-    pub async fn make_selection_of_jobs(&self) -> SelectionOfJobs {
-        let utils = self.worker_utils();
-
-        let in_one_hour = Utc::now() + chrono::Duration::hours(1);
-        let failed_job = utils
-            .add_raw_job(
-                "job3",
-                serde_json::json!({ "a": 1 }),
-                JobSpec {
-                    run_at: Some(in_one_hour),
-                    ..Default::default()
-                },
-            )
-            .await
-            .expect("Failed to add job");
-        let regular_job_1 = utils
-            .add_raw_job(
-                "job3",
-                serde_json::json!({ "a": 2 }),
-                JobSpec {
-                    run_at: Some(in_one_hour),
-                    ..Default::default()
-                },
-            )
-            .await
-            .expect("Failed to add job");
-        let locked_job = utils
-            .add_raw_job(
-                "job3",
-                serde_json::json!({ "a": 3 }),
-                JobSpec {
-                    run_at: Some(in_one_hour),
-                    ..Default::default()
-                },
-            )
-            .await
-            .expect("Failed to add job");
-        let regular_job_2 = utils
-            .add_raw_job(
-                "job3",
-                serde_json::json!({ "a": 4 }),
-                JobSpec {
-                    run_at: Some(in_one_hour),
-                    ..Default::default()
-                },
-            )
-            .await
-            .expect("Failed to add job");
-        let untouched_job = utils
-            .add_raw_job(
-                "job3",
-                serde_json::json!({ "a": 5 }),
-                JobSpec {
-                    run_at: Some(in_one_hour),
-                    ..Default::default()
-                },
-            )
-            .await
-            .expect("Failed to add job");
-
-        let locked_job = {
-            let locked_job_update = sqlx::query("update graphile_worker._private_jobs as jobs set locked_by = 'test', locked_at = now() where id = $1 returning *")
-            .bind(locked_job.id())
-            .fetch_one(&self.test_pool)
-            .await
-            .expect("Failed to lock job");
-
-            Job::from_db_job(db_job_from_sqlx_row(locked_job_update), "job3".to_string())
-        };
-
-        let failed_job = {
-            let failed_job_update = sqlx::query("update graphile_worker._private_jobs as jobs set last_error = 'Failed forever', attempts = max_attempts where id = $1 returning *")
-                .bind(failed_job.id())
-                .fetch_one(&self.test_pool)
-                .await
-                .expect("Failed to fail job");
-
-            Job::from_db_job(db_job_from_sqlx_row(failed_job_update), "job3".to_string())
-        };
-
-        SelectionOfJobs {
-            failed_job,
-            regular_job_1,
-            locked_job,
-            regular_job_2,
-            untouched_job,
-        }
-    }
-
     pub async fn get_known_crontabs(&self) -> Vec<KnownCrontab> {
         sqlx::query("select * from graphile_worker._private_known_crontabs")
             .fetch_all(&self.test_pool)
@@ -293,38 +180,6 @@ impl TestDatabase {
             .map(known_crontab_from_sqlx_row)
             .collect()
     }
-}
-
-fn db_job_from_sqlx_row(row: PgRow) -> DbJob {
-    DbJob::new(
-        row.get("id"),
-        row.get("job_queue_id"),
-        row.get("payload"),
-        row.get("priority"),
-        row.get("run_at"),
-        row.get("attempts"),
-        row.get("max_attempts"),
-        row.get("last_error"),
-        row.get("created_at"),
-        row.get("updated_at"),
-        row.get("key"),
-        row.get("revision"),
-        row.get("locked_at"),
-        row.get("locked_by"),
-        row.get("flags"),
-        row.get("task_id"),
-    )
-}
-
-fn known_crontab_from_sqlx_row(row: PgRow) -> KnownCrontab {
-    let known_since: DateTime<Utc> = row.get("known_since");
-    let last_execution: Option<DateTime<Utc>> = row.get("last_execution");
-
-    KnownCrontab::new(
-        row.get("identifier"),
-        known_since.with_timezone(&Local),
-        last_execution.map(|value| value.with_timezone(&Local)),
-    )
 }
 
 fn test_database_url(db_url: &str, db_name: &str) -> String {
@@ -373,7 +228,7 @@ pub async fn create_test_database() -> TestDatabase {
     let db_id = uuid::Uuid::now_v7();
     let db_name = format!("__test_graphile_worker_{}", db_id.simple());
 
-    sqlx::query(sqlx::AssertSqlSafe(format!("CREATE DATABASE {}", db_name)))
+    safe_query(format!("CREATE DATABASE {}", db_name))
         .execute(&pg_pool)
         .await
         .expect("Failed to create test database");
@@ -417,58 +272,4 @@ where
             result.expect("Test failed");
         })
         .await;
-}
-
-pub struct StaticCounter {
-    cell: OnceCell<Mutex<u32>>,
-}
-async fn init_job_count() -> Mutex<u32> {
-    Mutex::new(0)
-}
-impl StaticCounter {
-    pub const fn new() -> Self {
-        Self {
-            cell: OnceCell::const_new(),
-        }
-    }
-
-    pub async fn increment(&self) -> u32 {
-        let cell = self.cell.get_or_init(init_job_count).await;
-        let mut count = cell.lock().await;
-        *count += 1;
-        *count
-    }
-
-    pub async fn get(&self) -> u32 {
-        let cell = self.cell.get_or_init(init_job_count).await;
-        *cell.lock().await
-    }
-
-    pub async fn reset(&self) {
-        let cell = self.cell.get_or_init(init_job_count).await;
-        let mut count = cell.lock().await;
-        *count = 0;
-    }
-}
-
-impl Default for StaticCounter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-pub async fn enable_logs() {
-    static ONCE: OnceCell<()> = OnceCell::const_new();
-
-    ONCE.get_or_init(|| async {
-        let fmt_layer = tracing_subscriber::fmt::layer();
-        // Log level set to debug except for sqlx set at warn (to not show all sql requests)
-        let filter_layer = EnvFilter::try_new("debug,sqlx=warn").unwrap();
-
-        tracing_subscriber::registry()
-            .with(filter_layer)
-            .with(fmt_layer)
-            .init();
-    })
-    .await;
 }

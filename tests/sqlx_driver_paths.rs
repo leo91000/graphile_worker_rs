@@ -9,6 +9,7 @@ use graphile_worker::sql::task_identifiers::get_tasks_details;
 use graphile_worker::{DbExecutorArg, DbParams, DbValue, JobKeyMode, JobSpec, JobSpecBuilder};
 use serde_json::json;
 
+use helpers::sql::safe_query_scalar;
 use helpers::with_test_db;
 
 mod helpers;
@@ -20,7 +21,7 @@ async fn count_jobs(test_db: &helpers::TestDatabase, identifier: &str) -> i64 {
         JOIN graphile_worker._private_tasks tasks ON tasks.id = jobs.task_id
         WHERE tasks.identifier = $1
     "};
-    sqlx::query_scalar(sqlx::AssertSqlSafe(query.as_str()))
+    safe_query_scalar(query)
         .bind(identifier)
         .fetch_one(&test_db.test_pool)
         .await
