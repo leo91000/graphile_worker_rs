@@ -68,6 +68,7 @@ jobs:
         with:
           files: ./${{ matrix.output }}
           fail_ci_if_error: true
+          skip_validation: true
           verbose: true
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
@@ -78,6 +79,7 @@ jobs:
           files: ./${{ matrix.output }}
           flags: ${{ matrix.codecov_flags }}
           fail_ci_if_error: true
+          skip_validation: true
           verbose: true
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
