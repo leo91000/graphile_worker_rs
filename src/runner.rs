@@ -32,8 +32,8 @@ use thiserror::Error;
 use tracing::{debug, error, info, trace, warn, Instrument, Span};
 
 use crate::builder::WorkerOptions;
-use crate::recovery::apply_job_recovery;
 use crate::recovery::WorkerRecoveryConfig;
+use crate::recovery::{apply_job_recovery, JobRecoveryRequest};
 use crate::recovery_tasks::{deregister_worker, register_worker, spawn_recovery_tasks};
 use crate::sql::complete_job::complete_job;
 use crate::tracing::link_to_job_create_span;
@@ -222,7 +222,7 @@ impl Worker {
             })
             .await;
 
-        spawn_recovery_tasks(Arc::new(self.clone_for_recovery()));
+        let recovery_tasks = spawn_recovery_tasks(self);
 
         let local_queue = self.create_local_queues();
         let job_runner = self.job_runner_internal(local_queue);
@@ -242,6 +242,8 @@ impl Worker {
             Err(_) => ShutdownReason::Error,
         };
 
+        recovery_tasks.stop().await;
+
         self.hooks
             .emit(WorkerShutdownContext {
                 database: self.database.clone(),
@@ -250,14 +252,23 @@ impl Worker {
             })
             .await;
 
-        deregister_worker(self).await?;
+        let deregister_result = deregister_worker(self).await;
 
-        result?;
-
-        Ok(())
+        match (result, deregister_result) {
+            (Ok(_), Ok(())) => Ok(()),
+            (Ok(_), Err(error)) => Err(error.into()),
+            (Err(error), Ok(())) => Err(error),
+            (Err(error), Err(cleanup_error)) => {
+                warn!(
+                    error = %cleanup_error,
+                    "Failed to deregister worker after runtime error"
+                );
+                Err(error)
+            }
+        }
     }
 
-    fn clone_for_recovery(&self) -> Self {
+    pub(crate) fn clone_for_recovery(&self) -> Self {
         Self {
             worker_id: self.worker_id.clone(),
             concurrency: self.concurrency,
@@ -1360,15 +1371,17 @@ async fn release_job(
         Err(e) => {
             if matches!(e, RunJobError::TaskAborted) {
                 let recovery_delay = worker.recovery_config.shutdown_recovery_delay;
-                apply_job_recovery(
+                let recovered = apply_job_recovery(
                     &worker.database,
                     &worker.escaped_schema,
-                    &worker.hooks,
-                    &worker.worker_id,
-                    job.clone(),
-                    &worker.worker_id,
-                    FailureReason::ShutdownAborted,
-                    recovery_delay,
+                    JobRecoveryRequest {
+                        hooks: Some(&worker.hooks),
+                        worker_id: &worker.worker_id,
+                        job: job.clone(),
+                        previous_worker_id: &worker.worker_id,
+                        reason: FailureReason::ShutdownAborted,
+                        recovery_delay,
+                    },
                 )
                 .await
                 .map_err(|source| ReleaseJobError {
@@ -1376,7 +1389,7 @@ async fn release_job(
                     source,
                 })?;
 
-                if !worker.hooks.is_empty() {
+                if recovered && !worker.hooks.is_empty() {
                     worker
                         .hooks
                         .emit(JobInterruptedContext {

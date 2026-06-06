@@ -4,6 +4,7 @@ use graphile_worker_database::{DbExecutorArg, DbValue};
 use indoc::formatdoc;
 
 use crate::errors::Result;
+use crate::sql::duration::duration_as_millis_i64;
 use graphile_worker_job::Job;
 
 pub async fn return_jobs(
@@ -95,13 +96,6 @@ pub async fn return_job_for_recovery(
     recovery_delay: Option<Duration>,
     last_error: Option<&str>,
 ) -> Result<()> {
-    let delay_clause = recovery_delay
-        .map(|delay| format!("run_at = GREATEST(jobs.run_at, now() + interval '{} seconds'),", delay.as_secs()))
-        .unwrap_or_default();
-    let error_clause = last_error
-        .map(|message| format!("last_error = '{}',", message.replace('\'', "''")))
-        .unwrap_or_default();
-
     if job.job_queue_id().is_some() {
         let sql = formatdoc!(
             r#"
@@ -111,8 +105,11 @@ pub async fn return_job_for_recovery(
                         attempts = GREATEST(0, attempts - 1),
                         locked_by = null,
                         locked_at = null,
-                        {delay_clause}
-                        {error_clause}
+                        run_at = CASE
+                            WHEN $3::bigint IS NULL THEN jobs.run_at
+                            ELSE GREATEST(jobs.run_at, now() + ($3::bigint * interval '1 millisecond'))
+                        END,
+                        last_error = COALESCE($4::text, jobs.last_error),
                         updated_at = now()
                     where id = $2::bigint
                     and locked_by = $1::text
@@ -132,6 +129,8 @@ pub async fn return_job_for_recovery(
                 vec![
                     DbValue::Text(worker_id.to_string()),
                     DbValue::I64(*job.id()),
+                    DbValue::I64Opt(recovery_delay.map(duration_as_millis_i64)),
+                    DbValue::TextOpt(last_error.map(ToString::to_string)),
                 ]
                 .into(),
             )
@@ -141,12 +140,15 @@ pub async fn return_job_for_recovery(
             r#"
                 update {escaped_schema}._private_jobs as jobs
                 set
-                    attempts = GREATEST(0, attempts - 1),
-                    locked_by = null,
-                    locked_at = null,
-                    {delay_clause}
-                    {error_clause}
-                    updated_at = now()
+                        attempts = GREATEST(0, attempts - 1),
+                        locked_by = null,
+                        locked_at = null,
+                        run_at = CASE
+                            WHEN $3::bigint IS NULL THEN jobs.run_at
+                            ELSE GREATEST(jobs.run_at, now() + ($3::bigint * interval '1 millisecond'))
+                        END,
+                        last_error = COALESCE($4::text, jobs.last_error),
+                        updated_at = now()
                 where id = $2::bigint
                 and locked_by = $1::text;
             "#
@@ -158,6 +160,8 @@ pub async fn return_job_for_recovery(
                 vec![
                     DbValue::Text(worker_id.to_string()),
                     DbValue::I64(*job.id()),
+                    DbValue::I64Opt(recovery_delay.map(duration_as_millis_i64)),
+                    DbValue::TextOpt(last_error.map(ToString::to_string)),
                 ]
                 .into(),
             )

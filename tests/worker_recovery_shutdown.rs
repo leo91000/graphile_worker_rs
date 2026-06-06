@@ -106,7 +106,10 @@ async fn shutdown_aborted_job_is_returned_without_backoff() {
         let start = Instant::now();
         while start.elapsed() < Duration::from_secs(5) {
             let jobs = test_db.get_jobs().await;
-            if jobs.iter().any(|j| j.id == *job.id() && j.locked_by.is_some()) {
+            if jobs
+                .iter()
+                .any(|j| j.id == *job.id() && j.locked_by.is_some())
+            {
                 worker.request_shutdown();
                 break;
             }

@@ -1,17 +1,10 @@
 use std::sync::Arc;
 
-use chrono::Utc;
 use futures::FutureExt;
-use graphile_worker_lifecycle_hooks::WorkerRecoveredContext;
 use tracing::{debug, error, warn};
 
-use crate::recovery::{effective_sweep_threshold, WorkerRecoveryConfig};
-use crate::sql::recover_workers::recover_dead_worker_jobs;
-use crate::sql::worker_heartbeat::{
-    delete_stale_workers, get_worker_last_heartbeat, list_orphan_locked_workers,
-    list_stale_workers, release_sweep_lock, try_acquire_sweep_lock, worker_deregister,
-    worker_heartbeat, worker_holds_resilient_locks,
-};
+use crate::recovery::{sweep_stale_workers, SweepStaleWorkersOptions};
+use crate::sql::worker_heartbeat::{worker_deregister, worker_heartbeat};
 use crate::Worker;
 use graphile_worker_runtime as runtime;
 
@@ -32,7 +25,9 @@ pub(crate) async fn register_worker(
     .await
 }
 
-pub(crate) async fn deregister_worker(worker: &Worker) -> Result<(), crate::errors::GraphileWorkerError> {
+pub(crate) async fn deregister_worker(
+    worker: &Worker,
+) -> Result<(), crate::errors::GraphileWorkerError> {
     if !worker.recovery_config.enabled {
         return Ok(());
     }
@@ -40,24 +35,65 @@ pub(crate) async fn deregister_worker(worker: &Worker) -> Result<(), crate::erro
     worker_deregister(&worker.database, &worker.escaped_schema, &worker.worker_id).await
 }
 
-pub(crate) fn spawn_recovery_tasks(worker: Arc<Worker>) {
-    if !worker.recovery_config.enabled {
-        return;
+pub(crate) struct RecoveryTasks {
+    handles: Vec<runtime::JoinHandle<()>>,
+}
+
+impl RecoveryTasks {
+    pub(crate) fn empty() -> Self {
+        Self {
+            handles: Vec::new(),
+        }
     }
 
+    fn abort(&self) {
+        for handle in &self.handles {
+            handle.abort_handle().abort();
+        }
+    }
+
+    pub(crate) async fn stop(mut self) {
+        self.abort();
+
+        let handles = std::mem::take(&mut self.handles);
+        for handle in handles {
+            match handle.await {
+                Ok(()) | Err(runtime::JoinError::Aborted) => {}
+                Err(error) => warn!(error = %error, "Worker recovery task failed during shutdown"),
+            }
+        }
+    }
+}
+
+impl Drop for RecoveryTasks {
+    fn drop(&mut self) {
+        self.abort();
+    }
+}
+
+pub(crate) fn spawn_recovery_tasks(worker: &Worker) -> RecoveryTasks {
+    if !worker.recovery_config.enabled {
+        return RecoveryTasks::empty();
+    }
+
+    let worker = Arc::new(worker.clone_for_recovery());
     let heartbeat_worker = worker.clone();
-    runtime::spawn(async move {
+    let heartbeat_handle = runtime::spawn(async move {
         if let Err(error) = run_heartbeat_loop(heartbeat_worker).await {
             error!(error = %error, "Worker heartbeat loop failed");
         }
     });
 
     let sweep_worker = worker;
-    runtime::spawn(async move {
+    let sweep_handle = runtime::spawn(async move {
         if let Err(error) = run_sweeper_loop(sweep_worker).await {
             error!(error = %error, "Worker recovery sweeper failed");
         }
     });
+
+    RecoveryTasks {
+        handles: vec![heartbeat_handle, sweep_handle],
+    }
 }
 
 async fn run_heartbeat_loop(worker: Arc<Worker>) -> Result<(), crate::errors::GraphileWorkerError> {
@@ -101,111 +137,23 @@ async fn run_sweeper_loop(worker: Arc<Worker>) -> Result<(), crate::errors::Grap
 }
 
 async fn sweep_once(worker: Arc<Worker>) -> Result<(), crate::errors::GraphileWorkerError> {
-    if !try_acquire_sweep_lock(&worker.database).await? {
-        debug!("Another worker is already running recovery sweep");
-        return Ok(());
-    }
-
-    let sweep_result = perform_sweep(&worker).await;
-    if let Err(error) = release_sweep_lock(&worker.database).await {
-        warn!(error = %error, "Failed to release recovery sweep advisory lock");
-    }
-    sweep_result
-}
-
-async fn perform_sweep(worker: &Worker) -> Result<(), crate::errors::GraphileWorkerError> {
-    let config = &worker.recovery_config;
-    let stale_worker_ids =
-        list_stale_workers(&worker.database, &worker.escaped_schema, config.sweep_threshold).await?;
-
-    let mut dead_worker_ids = Vec::new();
-    for worker_id in stale_worker_ids {
-        if should_recover_worker(worker, &worker_id, config).await? {
-            dead_worker_ids.push(worker_id);
-        }
-    }
-
-    let orphan_worker_ids = list_orphan_locked_workers(
+    let result = sweep_stale_workers(
         &worker.database,
         &worker.escaped_schema,
-        config.sweep_threshold,
+        Some(&worker.hooks),
+        &worker.worker_id,
+        SweepStaleWorkersOptions {
+            recovery_config: Some(worker.recovery_config.clone()),
+            ..Default::default()
+        },
     )
     .await?;
 
-    for worker_id in orphan_worker_ids {
-        if !dead_worker_ids.iter().any(|id| id == &worker_id) {
-            dead_worker_ids.push(worker_id);
-        }
+    if result.worker_ids.is_empty() {
+        debug!("No stale workers found during recovery sweep");
     }
-
-    if dead_worker_ids.is_empty() {
-        return Ok(());
-    }
-
-    let recovered_count = recover_dead_worker_jobs(
-        &worker.database,
-        &worker.escaped_schema,
-        &dead_worker_ids,
-        config.recovery_delay,
-    )
-    .await?;
-
-    delete_stale_workers(&worker.database, &worker.escaped_schema, &dead_worker_ids).await?;
-
-    if !worker.hooks.is_empty() {
-        worker
-            .hooks
-            .emit(WorkerRecoveredContext {
-                worker_id: worker.worker_id.clone(),
-                dead_worker_ids: dead_worker_ids.clone(),
-                jobs_recovered: recovered_count.max(0) as usize,
-            })
-            .await;
-    }
-
-    warn!(
-        dead_worker_ids = ?dead_worker_ids,
-        recovered_count,
-        "Recovered jobs from inactive workers"
-    );
 
     Ok(())
-}
-
-async fn should_recover_worker(
-    worker: &Worker,
-    worker_id: &str,
-    config: &WorkerRecoveryConfig,
-) -> Result<bool, crate::errors::GraphileWorkerError> {
-    let has_resilient_locks = worker_holds_resilient_locks(
-        &worker.database,
-        &worker.escaped_schema,
-        worker_id,
-        &config.resilient_job_flags,
-    )
-    .await?;
-
-    if !has_resilient_locks {
-        return Ok(true);
-    }
-
-    let Some(last_heartbeat) = get_worker_last_heartbeat(
-        &worker.database,
-        &worker.escaped_schema,
-        worker_id,
-    )
-    .await?
-    else {
-        return Ok(true);
-    };
-
-    let threshold = effective_sweep_threshold(config, true);
-    let elapsed = Utc::now()
-        .signed_duration_since(last_heartbeat)
-        .to_std()
-        .unwrap_or_default();
-
-    Ok(elapsed >= threshold)
 }
 
 fn worker_recovery_metadata() -> Option<serde_json::Value> {
