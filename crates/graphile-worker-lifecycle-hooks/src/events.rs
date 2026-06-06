@@ -52,11 +52,15 @@ macro_rules! define_observer_event {
 
 macro_rules! define_interceptor_event {
     ($event:ident, $context:ty) => {
+        define_interceptor_event!($event, $context, HookResult);
+    };
+
+    ($event:ident, $context:ty, $output:ty) => {
         pub struct $event;
 
         impl Event for $event {
             type Context = $context;
-            type Output = HookResult;
+            type Output = $output;
 
             fn register_boxed(
                 hooks: &mut TypeErasedHooks,
@@ -69,12 +73,12 @@ macro_rules! define_interceptor_event {
         }
 
         impl Interceptable for $context {
-            type Output = HookResult;
+            type Output = $output;
 
             fn intercept_with(self, hooks: &TypeErasedHooks) -> BoxFuture<'_, Self::Output> {
                 Box::pin(async move {
                     let Some(handlers) = hooks.get_handlers::<$event>() else {
-                        return HookResult::default();
+                        return <$output as Default>::default();
                     };
                     for handler in handlers {
                         let result = handler(self.clone()).await;
@@ -82,7 +86,7 @@ macro_rules! define_interceptor_event {
                             return result;
                         }
                     }
-                    HookResult::default()
+                    <$output as Default>::default()
                 })
             }
         }
@@ -168,36 +172,4 @@ define_interceptor_event!(
     JobScheduleResult,
     payload
 );
-
-pub struct JobRecovery;
-
-impl Event for JobRecovery {
-    type Context = JobRecoveryContext;
-    type Output = JobRecoveryResult;
-
-    fn register_boxed(
-        hooks: &mut TypeErasedHooks,
-        handler: Box<dyn Fn(Self::Context) -> BoxFuture<'static, Self::Output> + Send + Sync>,
-    ) {
-        hooks.get_handlers_mut::<Self>().push(handler);
-    }
-}
-
-impl Interceptable for JobRecoveryContext {
-    type Output = JobRecoveryResult;
-
-    fn intercept_with(self, hooks: &TypeErasedHooks) -> BoxFuture<'_, Self::Output> {
-        Box::pin(async move {
-            let Some(handlers) = hooks.get_handlers::<JobRecovery>() else {
-                return JobRecoveryResult::default();
-            };
-            for handler in handlers {
-                let result = handler(self.clone()).await;
-                if result.is_terminal() {
-                    return result;
-                }
-            }
-            JobRecoveryResult::default()
-        })
-    }
-}
+define_interceptor_event!(JobRecovery, JobRecoveryContext, JobRecoveryResult);
