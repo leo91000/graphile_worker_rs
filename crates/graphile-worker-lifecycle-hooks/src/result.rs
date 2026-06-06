@@ -13,6 +13,18 @@ pub enum JobScheduleResult {
     Fail(String),
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum JobRecoveryResult {
+    #[default]
+    Default,
+    Reschedule {
+        run_at: chrono::DateTime<chrono::Utc>,
+        attempts: Option<i16>,
+    },
+    FailWithBackoff,
+    Skip,
+}
+
 impl Default for JobScheduleResult {
     fn default() -> Self {
         JobScheduleResult::Continue(serde_json::Value::Null)

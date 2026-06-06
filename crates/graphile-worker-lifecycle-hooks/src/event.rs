@@ -1,6 +1,6 @@
 use futures::future::BoxFuture;
 
-use crate::result::{HookResult, JobScheduleResult};
+use crate::result::{HookResult, JobRecoveryResult, JobScheduleResult};
 use crate::TypeErasedHooks;
 
 pub trait HookOutput: Default + Send + 'static {
@@ -28,6 +28,14 @@ impl HookOutput for HookResult {
 
     fn is_terminal(&self) -> bool {
         !matches!(self, HookResult::Continue)
+    }
+}
+
+impl HookOutput for JobRecoveryResult {
+    type ChainValue = ();
+
+    fn is_terminal(&self) -> bool {
+        !matches!(self, JobRecoveryResult::Default)
     }
 }
 

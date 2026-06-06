@@ -9,6 +9,14 @@ use graphile_worker_job::Job;
 use graphile_worker_job_spec::JobSpec;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FailureReason {
+    TaskError,
+    TaskPanic,
+    ShutdownAborted,
+    WorkerCrashed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShutdownReason {
     Signal,
     Error,
@@ -77,6 +85,28 @@ pub struct JobPermanentlyFailContext {
     pub job: Arc<Job>,
     pub worker_id: String,
     pub error: String,
+}
+
+#[derive(Clone)]
+pub struct JobInterruptedContext {
+    pub job: Arc<Job>,
+    pub worker_id: String,
+    pub reason: FailureReason,
+}
+
+#[derive(Clone)]
+pub struct JobRecoveryContext {
+    pub job: Arc<Job>,
+    pub worker_id: String,
+    pub previous_worker_id: String,
+    pub reason: FailureReason,
+}
+
+#[derive(Clone)]
+pub struct WorkerRecoveredContext {
+    pub worker_id: String,
+    pub dead_worker_ids: Vec<String>,
+    pub jobs_recovered: usize,
 }
 
 #[derive(Clone)]

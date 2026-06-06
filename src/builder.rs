@@ -227,6 +227,9 @@ pub struct WorkerOptions {
     /// When set, job failures are collected and flushed in batches.
     /// Retryable failures are still processed individually.
     fail_job_batch_delay: Option<Duration>,
+
+    /// Worker crash and shutdown recovery configuration.
+    worker_recovery_config: Option<crate::recovery::WorkerRecoveryConfig>,
 }
 
 /// Errors that can occur when initializing a worker.
@@ -372,6 +375,10 @@ impl WorkerOptions {
             ))
         });
 
+        let recovery_config = self
+            .worker_recovery_config
+            .unwrap_or_default();
+
         let worker = Worker {
             worker_id,
             concurrency,
@@ -390,6 +397,7 @@ impl WorkerOptions {
             local_queue_config,
             completion_batcher,
             failure_batcher,
+            recovery_config,
         };
 
         Ok(worker)
@@ -937,6 +945,64 @@ impl WorkerOptions {
     /// ```
     pub fn fail_job_batch_delay(mut self, delay: Duration) -> Self {
         self.fail_job_batch_delay = Some(delay);
+        self
+    }
+
+    /// Configures worker crash and shutdown recovery.
+    ///
+    /// See [`crate::WorkerRecoveryConfig`] for Pro-aligned options such as
+    /// `heartbeat_interval` (`heartbeatInterval`), `sweep_interval` (`sweepInterval`),
+    /// and `sweep_threshold` (`sweepThreshold`).
+    pub fn worker_recovery(mut self, config: crate::recovery::WorkerRecoveryConfig) -> Self {
+        self.worker_recovery_config = Some(config);
+        self
+    }
+
+    /// Sets the worker heartbeat interval (`heartbeatInterval`).
+    pub fn heartbeat_interval(mut self, interval: Duration) -> Self {
+        let mut config = self.worker_recovery_config.unwrap_or_default();
+        config.heartbeat_interval = interval;
+        self.worker_recovery_config = Some(config);
+        self
+    }
+
+    /// Sets the inactive worker sweep interval (`sweepInterval`).
+    pub fn sweep_interval(mut self, interval: Duration) -> Self {
+        let mut config = self.worker_recovery_config.unwrap_or_default();
+        config.sweep_interval = interval;
+        self.worker_recovery_config = Some(config);
+        self
+    }
+
+    /// Sets the inactive worker threshold (`sweepThreshold`).
+    pub fn sweep_threshold(mut self, threshold: Duration) -> Self {
+        let mut config = self.worker_recovery_config.unwrap_or_default();
+        config.sweep_threshold = threshold;
+        self.worker_recovery_config = Some(config);
+        self
+    }
+
+    /// Sets the delay before recovered jobs become eligible again.
+    pub fn recovery_delay(mut self, delay: Duration) -> Self {
+        let mut config = self.worker_recovery_config.unwrap_or_default();
+        config.recovery_delay = delay;
+        self.worker_recovery_config = Some(config);
+        self
+    }
+
+    /// Sets how long in-flight jobs may continue after a shutdown signal.
+    pub fn shutdown_grace_period(mut self, period: Duration) -> Self {
+        let mut config = self.worker_recovery_config.unwrap_or_default();
+        config.shutdown_grace_period = period;
+        self.worker_recovery_config = Some(config);
+        self
+    }
+
+    /// Sets the delay before shutdown-aborted jobs are retried.
+    pub fn shutdown_recovery_delay(mut self, delay: Duration) -> Self {
+        let mut config = self.worker_recovery_config.unwrap_or_default();
+        config.shutdown_recovery_delay = delay;
+        self.worker_recovery_config = Some(config);
         self
     }
 }

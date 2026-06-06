@@ -39,8 +39,13 @@ pub mod errors;
 /// Job specification and builder for configuring jobs
 pub mod job_spec;
 
+/// Worker crash and shutdown recovery
+pub mod recovery;
+
 /// Core worker implementation for running the job queue
 pub mod runner;
+
+mod recovery_tasks;
 
 /// LocalQueue for batch-fetching jobs to improve throughput
 pub mod local_queue;
@@ -81,6 +86,9 @@ pub use context_ext::WorkerContextExt;
 pub use local_queue::{
     LocalQueue, LocalQueueConfig, LocalQueueError, LocalQueueMode, RefetchDelayConfig,
 };
+pub use recovery::{
+    ActiveWorkerRow, WorkerRecoveryConfig, INFRASTRUCTURE_RESILIENT_FLAG,
+};
 pub use runner::Worker;
 pub use sql::add_job::RawJobSpec;
-pub use worker_utils::WorkerUtils;
+pub use worker_utils::{SweepStaleWorkersOptions, SweepStaleWorkersResult, WorkerUtils};
