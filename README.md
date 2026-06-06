@@ -179,6 +179,117 @@ futures::select_biased! {
 }
 ```
 
+### Worker Recovery
+
+Worker recovery is an opt-in feature for deployments where a job may remain
+locked after a process crash, network partition, forced abort, or orchestrator
+shutdown. When enabled, each worker records heartbeats in PostgreSQL and a
+background sweeper recovers jobs locked by workers that have stopped
+heartbeating.
+
+```rust,ignore
+use graphile_worker::{WorkerOptions, WorkerRecoveryConfig};
+use std::time::Duration;
+
+let recovery = WorkerRecoveryConfig::default()
+    .enabled(true)
+    .heartbeat_interval(Duration::from_secs(30))
+    .sweep_interval(Duration::from_secs(60))
+    .sweep_threshold(Duration::from_secs(300))
+    .recovery_delay(Duration::from_secs(30))
+    .shutdown_grace_period(Duration::from_secs(5))
+    .shutdown_recovery_delay(Duration::from_secs(30));
+
+let worker = WorkerOptions::default()
+    .worker_recovery(recovery)
+    .define_job::<SendEmail>()
+    .pg_pool(pg_pool)
+    .init()
+    .await?;
+```
+
+The convenience setters on `WorkerOptions` also enable recovery:
+
+```rust,ignore
+let worker = WorkerOptions::default()
+    .heartbeat_interval(Duration::from_secs(30))
+    .sweep_interval(Duration::from_secs(60))
+    .sweep_threshold(Duration::from_secs(300))
+    .recovery_delay(Duration::from_secs(30))
+    .define_job::<SendEmail>()
+    .pg_pool(pg_pool)
+    .init()
+    .await?;
+```
+
+Recovery behavior:
+
+- Recovery is disabled by default to avoid changing existing deployments.
+- Enabled workers register in `_private_workers` and refresh
+  `last_heartbeat_at` at `heartbeat_interval`.
+- The sweeper runs at `sweep_interval`, detects workers older than
+  `sweep_threshold`, and also detects orphan locks whose worker id is no longer
+  registered.
+- Sweeps use a transaction-scoped PostgreSQL advisory lock so only one sweeper
+  performs recovery at a time.
+- Recovered jobs are unlocked, their attempt count is decremented back, their
+  queue lock is released, and their `run_at` is delayed by `recovery_delay`.
+- Jobs aborted during graceful shutdown use `shutdown_grace_period` and
+  `shutdown_recovery_delay` instead of normal failure backoff, so shutdown does
+  not consume a retry attempt.
+- Jobs with the `infrastructure_resilient` flag use the resilient threshold
+  multiplier before being considered stale, which is useful for long-running
+  infrastructure jobs.
+
+Manual recovery is available through `WorkerUtils`, even when automatic
+recovery is disabled:
+
+```rust,ignore
+use graphile_worker::SweepStaleWorkersOptions;
+use std::time::Duration;
+
+let result = worker.create_utils()
+    .sweep_stale_workers(SweepStaleWorkersOptions {
+        sweep_threshold: Some(Duration::from_secs(300)),
+        recovery_delay: Some(Duration::from_secs(30)),
+        dry_run: false,
+        ..Default::default()
+    })
+    .await?;
+
+println!(
+    "Recovered {} job(s) from {:?}",
+    result.recovered_count,
+    result.worker_ids
+);
+```
+
+Recovery can be customized with the `JobRecovery` hook:
+
+```rust,ignore
+use graphile_worker::{
+    FailureReason, HookRegistry, JobRecovery, JobRecoveryResult, Plugin,
+};
+
+struct RecoveryPolicy;
+
+impl Plugin for RecoveryPolicy {
+    fn register(self, hooks: &mut HookRegistry) {
+        hooks.on(JobRecovery, |ctx| async move {
+            match ctx.reason {
+                FailureReason::WorkerCrashed => JobRecoveryResult::Default,
+                FailureReason::ShutdownAborted => JobRecoveryResult::Default,
+                _ => JobRecoveryResult::FailWithBackoff,
+            }
+        });
+    }
+}
+```
+
+Hook actions can keep the default recovery behavior, reschedule to an explicit
+time and attempt count, apply normal failure backoff, or skip recovery for that
+job.
+
 ### 3. Schedule Jobs
 
 #### Option A: Schedule a job via SQL
@@ -583,6 +694,8 @@ Multiple plugins can be registered and they will all receive hook calls in the o
 | `JobComplete` | Observer | Called after a job completes successfully |
 | `JobFail` | Observer | Called when a job fails (will retry) |
 | `JobPermanentlyFail` | Observer | Called when a job exceeds max attempts |
+| `JobInterrupted` | Observer | Called when recovery interrupts a job |
+| `WorkerRecovered` | Observer | Called after jobs are recovered from inactive workers |
 | `CronTick` | Observer | Called on each cron scheduler tick |
 | `CronJobScheduled` | Observer | Called when a cron job is scheduled |
 | `LocalQueueInit` | Observer | Called when local queue is initialized |
@@ -595,6 +708,7 @@ Multiple plugins can be registered and they will all receive hook calls in the o
 | `BeforeJobRun` | Interceptor | Can skip, fail, or continue job execution |
 | `AfterJobRun` | Interceptor | Can modify the job result after execution |
 | `BeforeJobSchedule` | Interceptor | Can skip, fail, or transform job before scheduling |
+| `JobRecovery` | Interceptor | Can customize recovery for interrupted jobs |
 
 ## Job Management Utilities
 
@@ -628,6 +742,21 @@ utils.cleanup(&[
     CleanupTask::GcTaskIdentifiers,
     CleanupTask::GcJobQueues,
 ]).await?;
+
+// List heartbeat-registered workers and mark stale entries
+let active_workers = utils
+    .list_active_workers(Duration::from_secs(300))
+    .await?;
+
+// Recover jobs from stale workers and orphan locks
+let result = utils
+    .sweep_stale_workers(SweepStaleWorkersOptions {
+        sweep_threshold: Some(Duration::from_secs(300)),
+        recovery_delay: Some(Duration::from_secs(30)),
+        dry_run: false,
+        ..Default::default()
+    })
+    .await?;
 ```
 
 ## CLI
@@ -645,6 +774,8 @@ graphile-worker reschedule 126 --run-at 2026-01-02T03:04:05Z
 graphile-worker remove cli-job-key
 graphile-worker cleanup
 graphile-worker force-unlock graphile_worker_deadbeef
+graphile-worker sweep-stale-workers --sweep-threshold 5m --recovery-delay 30s
+graphile-worker sweep-stale-workers --dry-run
 ```
 
 Use `--schema` or `GRAPHILE_WORKER_SCHEMA` for non-default schemas, and
@@ -671,8 +802,9 @@ graphile-worker admin --auth header --header-name x-admin-token
 
 The admin UI supports dashboard stats, job list filtering, pasted multi-value
 column filters, row selection, copy JSON/CSV actions, job add/complete/fail/run
-now/reschedule/remove-by-key actions, queue and worker views, force unlock,
-cleanup, migrations, theming, and dark mode.
+now/reschedule/remove-by-key actions, queue and worker views, active worker
+heartbeats, force unlock, stale worker recovery, cleanup, migrations, theming,
+and dark mode.
 
 ## Feature List
 
@@ -687,6 +819,7 @@ cleanup, migrations, theming, and dark mode.
   - Serialized execution via named queues
   - Automatic retries with exponential backoff
   - Customizable retry counts (default: 25 attempts over ~3 days)
+  - Opt-in worker heartbeat recovery for crashed workers and orphan locks
 - **Scheduling features**:
   - Delayed execution with `run_at`
   - Job prioritization
