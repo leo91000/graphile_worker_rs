@@ -41,8 +41,9 @@ pub const M000012_MIGRATION: GraphileWorkerMigration = GraphileWorkerMigration {
             and jobs.key = spec.job_key
             and is_available is not true;
         
-            -- TODO: is there a risk that a conflict could occur depending on the
-            -- isolation level?
+            -- The unique key index is the final arbiter for concurrent callers:
+            -- once unavailable matching jobs have their key cleared, competing
+            -- inserts for the same key are resolved by the ON CONFLICT update below.
         
             return query insert into :GRAPHILE_WORKER_SCHEMA.jobs (
                 job_queue_id,

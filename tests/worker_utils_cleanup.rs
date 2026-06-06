@@ -5,6 +5,7 @@ use graphile_worker::{
 use indoc::formatdoc;
 use serde::{Deserialize, Serialize};
 
+use crate::helpers::sql::safe_query;
 use crate::helpers::{with_test_db, StaticCounter};
 
 mod helpers;
@@ -112,7 +113,7 @@ async fn cleanup_with_gc_job_queues() {
                 "#,
                 schema = "graphile_worker"
             );
-            sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+            safe_query(sql)
                 .bind(date)
                 .bind(worker_id)
                 .bind(job.id())

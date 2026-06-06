@@ -4,7 +4,9 @@ use futures::{stream::FuturesUnordered, FutureExt, Stream, StreamExt};
 use graphile_worker_lifecycle_hooks::JobFetchContext;
 use graphile_worker_runtime as runtime;
 
-use super::{run_and_release_job, ProcessJobError, Worker, WorkerRunner, WorkerRuntimeError};
+use super::errors::{ProcessJobError, WorkerRuntimeError};
+use super::job_execution::run_and_release_job;
+use super::{Worker, WorkerRunner};
 use crate::local_queue::{LocalQueue, LocalQueueParams};
 use crate::streams::StreamSource;
 use crate::Job;

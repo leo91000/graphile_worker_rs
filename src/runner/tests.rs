@@ -15,7 +15,10 @@ use graphile_worker_shutdown_signal::ShutdownSignal;
 
 use crate::streams::StreamSource;
 
-use super::{panic_payload_to_string, release_job, Redacted, RunJobError, WorkerRunner};
+use super::errors::{Redacted, RunJobError};
+use super::job_execution::panic_payload_to_string;
+use super::release::release_job;
+use super::WorkerRunner;
 
 #[derive(Debug)]
 struct FailingDriver;
