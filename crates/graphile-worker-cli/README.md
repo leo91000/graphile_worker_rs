@@ -16,6 +16,8 @@ graphile-worker reschedule 126 --run-at 2026-01-02T03:04:05Z
 graphile-worker remove cli-job-key
 graphile-worker cleanup
 graphile-worker force-unlock graphile_worker_deadbeef
+graphile-worker sweep-stale-workers --sweep-threshold 5m --recovery-delay 30s
+graphile-worker sweep-stale-workers --dry-run
 ```
 
 Available commands:
@@ -34,3 +36,9 @@ Available commands:
 - `stats`
 - `queues`
 - `workers`
+- `sweep-stale-workers`
+
+`sweep-stale-workers` recovers jobs held by heartbeat-registered workers that
+have gone stale, and jobs or queues locked by worker ids that are no longer
+registered. Use `--dry-run` to list the workers that would be recovered without
+unlocking or rescheduling jobs.
