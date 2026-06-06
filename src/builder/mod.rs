@@ -5,15 +5,13 @@ use crate::runner::WorkerFn;
 use crate::sql::task_identifiers::{get_tasks_details, SharedTaskDetails};
 use crate::utils::escape_identifier;
 use crate::Worker;
-use futures::FutureExt;
 use graphile_worker_crontab_parser::{parse_crontab, CrontabParseError};
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_database::{Database, DbError};
 use graphile_worker_extensions::Extensions;
 use graphile_worker_lifecycle_hooks::{Event, HookRegistry, Plugin};
 use graphile_worker_migrations::migrate;
-use graphile_worker_runtime::Notify;
-use graphile_worker_shutdown_signal::{shutdown_signal, ShutdownSignal};
+use graphile_worker_shutdown_signal::shutdown_signal;
 use graphile_worker_task_handler::{BatchTaskHandler, JobDefinition, TaskHandler};
 use rand::Rng;
 use std::collections::HashMap;
@@ -21,6 +19,9 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
+
+mod shutdown;
+use shutdown::{combine_shutdown_signals, manual_shutdown_signal_pair};
 
 /// Input accepted by [`WorkerOptions::with_cron`].
 ///
@@ -74,34 +75,6 @@ impl CronInput for &String {
     fn append_to(self, options: WorkerOptions) -> Self::Output {
         self.as_str().append_to(options)
     }
-}
-
-/// Creates a shutdown signal that can be triggered manually via the returned notifier.
-fn manual_shutdown_signal_pair() -> (ShutdownSignal, Arc<Notify>) {
-    let notify = Arc::new(Notify::new());
-    let notify_for_signal = notify.clone();
-    let signal = async move {
-        notify_for_signal.notified().await;
-    }
-    .boxed()
-    .shared();
-
-    (signal, notify)
-}
-
-/// Resolves as soon as either of the provided shutdown signals completes.
-fn combine_shutdown_signals(left: ShutdownSignal, right: ShutdownSignal) -> ShutdownSignal {
-    async move {
-        let left = left.fuse();
-        let right = right.fuse();
-        futures::pin_mut!(left, right);
-        futures::select_biased! {
-            _ = left => (),
-            _ = right => (),
-        };
-    }
-    .boxed()
-    .shared()
 }
 
 #[cfg(feature = "driver-sqlx")]

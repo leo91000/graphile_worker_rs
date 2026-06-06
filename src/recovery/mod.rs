@@ -7,4 +7,6 @@ pub use config::{job_has_resilient_flag, WorkerRecoveryConfig, INFRASTRUCTURE_RE
 pub(crate) use job_recovery::apply_job_recovery;
 pub(crate) use sweep::sweep_stale_workers;
 pub(crate) use types::JobRecoveryRequest;
-pub use types::{ActiveWorkerRow, SweepStaleWorkersOptions, SweepStaleWorkersResult};
+pub use types::{
+    ActiveWorkerRow, ResolvedSweepConfig, SweepStaleWorkersOptions, SweepStaleWorkersResult,
+};

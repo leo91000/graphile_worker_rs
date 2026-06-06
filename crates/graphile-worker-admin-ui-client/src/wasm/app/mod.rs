@@ -15,18 +15,16 @@ use super::filters::{
 use super::modals::ModalView;
 use super::types::{
     AdminClientConfig, CleanupTaskName, JobAction, JobActionRequest, JobState, ListedJob,
-    MaintenanceAction, MaintenanceRequest, Modal, OverviewResponse,
+    MaintenanceAction, MaintenanceRequest, Modal,
 };
+
+mod state;
+use state::{empty_overview, stored_accent, stored_compact_density, stored_theme};
 
 #[component]
 pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
     let jobs = RwSignal::new(Vec::<ListedJob>::new());
-    let overview = RwSignal::new(OverviewResponse {
-        stats: Default::default(),
-        queues: Vec::new(),
-        workers: Vec::new(),
-        active_workers: Vec::new(),
-    });
+    let overview = RwSignal::new(empty_overview());
     let selected_jobs = RwSignal::new(Vec::<i64>::new());
     let selected_workers = RwSignal::new(Vec::<String>::new());
     let active_state = RwSignal::new(JobState::All);
@@ -41,11 +39,9 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
     let token = RwSignal::new(storage_get("gw-admin-token").unwrap_or_default());
     let refreshing = RwSignal::new(false);
     let refresh_pending = RwSignal::new(false);
-    let theme =
-        RwSignal::new(storage_get("gw-admin-theme").unwrap_or_else(|| "system".to_string()));
-    let accent =
-        RwSignal::new(storage_get("gw-admin-accent").unwrap_or_else(|| "cyan".to_string()));
-    let compact = RwSignal::new(storage_get("gw-admin-density").as_deref() == Some("compact"));
+    let theme = RwSignal::new(stored_theme());
+    let accent = RwSignal::new(stored_accent());
+    let compact = RwSignal::new(stored_compact_density());
     let auto_refresh_enabled = RwSignal::new(false);
     let auto_refresh_timer = Rc::new(RefCell::new(None::<Interval>));
 

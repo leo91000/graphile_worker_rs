@@ -7,6 +7,9 @@ use indoc::formatdoc;
 use crate::errors::Result;
 use crate::recovery::ActiveWorkerRow;
 use crate::sql::duration::duration_as_millis_i64;
+use crate::sql::dynamic::{
+    collect_column, get_required, DynamicSchema, PrivateTable, WorkerFunction,
+};
 
 /// Advisory lock namespace for coordinating stale worker sweeps.
 const SWEEP_LOCK_CLASS_ID: i32 = 0x4757_5253; // "GWRS"
@@ -18,9 +21,11 @@ pub async fn worker_heartbeat(
     worker_id: &str,
     metadata: Option<serde_json::Value>,
 ) -> Result<()> {
+    let worker_heartbeat =
+        DynamicSchema::new(escaped_schema).function(WorkerFunction::WorkerHeartbeat);
     let sql = formatdoc!(
         r#"
-            SELECT * FROM {escaped_schema}.worker_heartbeat($1::text, $2::json);
+            SELECT * FROM {worker_heartbeat}($1::text, $2::json);
         "#
     );
 
@@ -43,9 +48,11 @@ pub async fn worker_deregister(
     escaped_schema: &str,
     worker_id: &str,
 ) -> Result<()> {
+    let worker_deregister =
+        DynamicSchema::new(escaped_schema).function(WorkerFunction::WorkerDeregister);
     let sql = formatdoc!(
         r#"
-            SELECT * FROM {escaped_schema}.worker_deregister($1::text);
+            SELECT * FROM {worker_deregister}($1::text);
         "#
     );
 
@@ -61,10 +68,12 @@ pub async fn list_stale_workers(
     escaped_schema: &str,
     stale_threshold: Duration,
 ) -> Result<Vec<String>> {
+    let list_stale_workers =
+        DynamicSchema::new(escaped_schema).function(WorkerFunction::ListStaleWorkers);
     let sql = formatdoc!(
         r#"
             SELECT worker_id
-            FROM {escaped_schema}.list_stale_workers($1::bigint * interval '1 millisecond');
+            FROM {list_stale_workers}($1::bigint * interval '1 millisecond');
         "#
     );
 
@@ -75,9 +84,7 @@ pub async fn list_stale_workers(
         )
         .await?;
 
-    rows.iter()
-        .map(|row| row.try_get::<String>("worker_id").map_err(Into::into))
-        .collect()
+    collect_column(&rows, "worker_id")
 }
 
 pub async fn list_orphan_locked_workers(
@@ -85,10 +92,12 @@ pub async fn list_orphan_locked_workers(
     escaped_schema: &str,
     stale_threshold: Duration,
 ) -> Result<Vec<String>> {
+    let list_orphan_locked_workers =
+        DynamicSchema::new(escaped_schema).function(WorkerFunction::ListOrphanLockedWorkers);
     let sql = formatdoc!(
         r#"
             SELECT worker_id
-            FROM {escaped_schema}.list_orphan_locked_workers($1::bigint * interval '1 millisecond');
+            FROM {list_orphan_locked_workers}($1::bigint * interval '1 millisecond');
         "#
     );
 
@@ -99,9 +108,7 @@ pub async fn list_orphan_locked_workers(
         )
         .await?;
 
-    rows.iter()
-        .map(|row| row.try_get::<String>("worker_id").map_err(Into::into))
-        .collect()
+    collect_column(&rows, "worker_id")
 }
 
 pub async fn list_active_workers(
@@ -109,6 +116,7 @@ pub async fn list_active_workers(
     escaped_schema: &str,
     sweep_threshold: Duration,
 ) -> Result<Vec<ActiveWorkerRow>> {
+    let workers = DynamicSchema::new(escaped_schema).private_table(PrivateTable::Workers);
     let sql = formatdoc!(
         r#"
             SELECT
@@ -116,7 +124,7 @@ pub async fn list_active_workers(
                 workers.last_heartbeat_at,
                 workers.started_at,
                 workers.metadata
-            FROM {escaped_schema}._private_workers AS workers
+            FROM {workers} AS workers
             ORDER BY workers.last_heartbeat_at DESC;
         "#
     );
@@ -126,17 +134,17 @@ pub async fn list_active_workers(
 
     rows.iter()
         .map(|row| {
-            let last_heartbeat_at = row.try_get("last_heartbeat_at")?;
+            let last_heartbeat_at = get_required(row, "last_heartbeat_at")?;
             let is_stale = now
                 .signed_duration_since(last_heartbeat_at)
                 .to_std()
                 .ok()
                 .is_some_and(|elapsed| elapsed >= sweep_threshold);
             Ok(ActiveWorkerRow {
-                worker_id: row.try_get("worker_id")?,
+                worker_id: get_required(row, "worker_id")?,
                 last_heartbeat_at,
-                started_at: row.try_get("started_at")?,
-                metadata: row.try_get("metadata")?,
+                started_at: get_required(row, "started_at")?,
+                metadata: get_required(row, "metadata")?,
                 is_stale,
             })
         })
@@ -153,11 +161,12 @@ pub async fn worker_holds_resilient_locks(
         return Ok(false);
     }
 
+    let jobs = DynamicSchema::new(escaped_schema).private_table(PrivateTable::Jobs);
     let sql = formatdoc!(
         r#"
             SELECT EXISTS (
                 SELECT 1
-                FROM {escaped_schema}._private_jobs AS jobs
+                FROM {jobs} AS jobs
                 WHERE jobs.locked_by = $1::text
                 AND jobs.flags ?| $2::text[]
             ) AS has_resilient_locks;
@@ -174,7 +183,7 @@ pub async fn worker_holds_resilient_locks(
         )
         .await?;
 
-    row.try_get("has_resilient_locks").map_err(Into::into)
+    get_required(&row, "has_resilient_locks")
 }
 
 pub async fn get_worker_last_heartbeat(
@@ -182,10 +191,11 @@ pub async fn get_worker_last_heartbeat(
     escaped_schema: &str,
     worker_id: &str,
 ) -> Result<Option<chrono::DateTime<Utc>>> {
+    let workers = DynamicSchema::new(escaped_schema).private_table(PrivateTable::Workers);
     let sql = formatdoc!(
         r#"
             SELECT workers.last_heartbeat_at
-            FROM {escaped_schema}._private_workers AS workers
+            FROM {workers} AS workers
             WHERE workers.id = $1::text;
         "#
     );
@@ -197,9 +207,8 @@ pub async fn get_worker_last_heartbeat(
         )
         .await?;
 
-    row.map(|row| row.try_get("last_heartbeat_at"))
+    row.map(|row| get_required(&row, "last_heartbeat_at"))
         .transpose()
-        .map_err(Into::into)
 }
 
 pub async fn delete_stale_workers(
@@ -211,9 +220,11 @@ pub async fn delete_stale_workers(
         return Ok(());
     }
 
+    let delete_stale_workers =
+        DynamicSchema::new(escaped_schema).function(WorkerFunction::DeleteStaleWorkers);
     let sql = formatdoc!(
         r#"
-            SELECT * FROM {escaped_schema}.delete_stale_workers($1::text[]);
+            SELECT * FROM {delete_stale_workers}($1::text[]);
         "#
     );
 

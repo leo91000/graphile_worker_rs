@@ -7,6 +7,7 @@ use indoc::formatdoc;
 
 use crate::errors::Result;
 use crate::sql::duration::duration_as_millis_i64;
+use crate::sql::dynamic::{get_required, DynamicSchema, PrivateTable, WorkerFunction};
 
 pub async fn recover_dead_worker_jobs(
     mut executor: impl DbExecutorArg,
@@ -18,9 +19,11 @@ pub async fn recover_dead_worker_jobs(
         return Ok(0);
     }
 
+    let recover_dead_worker_jobs =
+        DynamicSchema::new(escaped_schema).function(WorkerFunction::RecoverDeadWorkerJobs);
     let sql = formatdoc!(
         r#"
-            SELECT {escaped_schema}.recover_dead_worker_jobs(
+            SELECT {recover_dead_worker_jobs}(
                 $1::text[],
                 $2::bigint * interval '1 millisecond'
             ) AS recovered_count;
@@ -37,7 +40,7 @@ pub async fn recover_dead_worker_jobs(
         )
         .await?;
 
-    row.try_get("recovered_count").map_err(Into::into)
+    get_required(&row, "recovered_count")
 }
 
 pub async fn get_locked_jobs_for_recovery(
@@ -49,11 +52,14 @@ pub async fn get_locked_jobs_for_recovery(
         return Ok(Vec::new());
     }
 
+    let schema = DynamicSchema::new(escaped_schema);
+    let jobs = schema.private_table(PrivateTable::Jobs);
+    let tasks = schema.private_table(PrivateTable::Tasks);
     let sql = formatdoc!(
         r#"
             SELECT jobs.*, tasks.identifier AS task_identifier
-            FROM {escaped_schema}._private_jobs AS jobs
-            JOIN {escaped_schema}._private_tasks AS tasks ON tasks.id = jobs.task_id
+            FROM {jobs} AS jobs
+            JOIN {tasks} AS tasks ON tasks.id = jobs.task_id
             WHERE jobs.locked_by = ANY($1::text[])
             ORDER BY jobs.id ASC;
         "#
@@ -69,7 +75,7 @@ pub async fn get_locked_jobs_for_recovery(
     rows.iter()
         .map(|row| {
             let db_job = crate::sql::rows::db_job_from_row(row)?;
-            let task_identifier = row.try_get("task_identifier")?;
+            let task_identifier = get_required(row, "task_identifier")?;
             Ok(Arc::new(Job::from_db_job(db_job, task_identifier)))
         })
         .collect()

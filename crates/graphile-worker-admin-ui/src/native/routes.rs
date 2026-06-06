@@ -302,20 +302,12 @@ pub(crate) async fn maintenance(
             }))
         }
         MaintenanceAction::SweepStaleWorkers => {
-            let defaults = WorkerRecoveryConfig::default();
             let result = state
                 .utils
                 .sweep_stale_workers(SweepStaleWorkersOptions {
-                    sweep_threshold: request
-                        .sweep_threshold_secs
-                        .map(Duration::from_secs)
-                        .or(Some(defaults.sweep_threshold)),
-                    recovery_delay: request
-                        .recovery_delay_secs
-                        .map(Duration::from_secs)
-                        .or(Some(defaults.recovery_delay)),
+                    sweep_threshold: request.sweep_threshold_secs.map(Duration::from_secs),
+                    recovery_delay: request.recovery_delay_secs.map(Duration::from_secs),
                     dry_run: request.dry_run,
-                    ..Default::default()
                 })
                 .await
                 .map_err(ApiError::internal)?;

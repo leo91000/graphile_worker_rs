@@ -7,7 +7,7 @@ use crate::errors::GraphileWorkerError;
 use crate::sql::fail_job::fail_job;
 use crate::sql::return_jobs::return_job_for_recovery;
 
-use super::types::JobRecoveryRequest;
+use super::types::{JobRecoveryOutcome, JobRecoveryRequest};
 
 const RECOVERY_LAST_ERROR: &str = "Job recovered after worker interruption";
 
@@ -15,7 +15,7 @@ pub(crate) async fn apply_job_recovery(
     mut executor: impl DbExecutorArg,
     escaped_schema: &str,
     request: JobRecoveryRequest<'_>,
-) -> Result<bool, GraphileWorkerError> {
+) -> Result<JobRecoveryOutcome, GraphileWorkerError> {
     let action = match request.hooks {
         Some(hooks) if !hooks.is_empty() => {
             hooks
@@ -41,7 +41,7 @@ pub(crate) async fn apply_job_recovery(
                 Some(RECOVERY_LAST_ERROR),
             )
             .await?;
-            Ok(true)
+            Ok(JobRecoveryOutcome::Recovered)
         }
         JobRecoveryResult::Reschedule { run_at, attempts } => {
             return_job_for_recovery(
@@ -61,7 +61,7 @@ pub(crate) async fn apply_job_recovery(
                 attempts,
             )
             .await?;
-            Ok(true)
+            Ok(JobRecoveryOutcome::Recovered)
         }
         JobRecoveryResult::FailWithBackoff => {
             fail_job(
@@ -73,9 +73,9 @@ pub(crate) async fn apply_job_recovery(
                 None,
             )
             .await?;
-            Ok(true)
+            Ok(JobRecoveryOutcome::FailedWithBackoff)
         }
-        JobRecoveryResult::Skip => Ok(false),
+        JobRecoveryResult::Skip => Ok(JobRecoveryOutcome::Skipped),
     }
 }
 

@@ -21,9 +21,8 @@ use graphile_worker_extensions::ReadOnlyExtensions;
 use graphile_worker_job::Job;
 use graphile_worker_lifecycle_hooks::{
     AfterJobRunContext, BeforeJobRunContext, FailureReason, HookRegistry, HookResult,
-    JobCompleteContext, JobFailContext, JobFetchContext, JobInterruptedContext,
-    JobPermanentlyFailContext, JobStartContext, ShutdownReason, WorkerShutdownContext,
-    WorkerStartContext,
+    JobCompleteContext, JobFailContext, JobFetchContext, JobPermanentlyFailContext,
+    JobStartContext, ShutdownReason, WorkerShutdownContext, WorkerStartContext,
 };
 use graphile_worker_runtime as runtime;
 use graphile_worker_shutdown_signal::ShutdownSignal;
@@ -33,11 +32,13 @@ use tracing::{debug, error, info, trace, warn, Instrument, Span};
 
 use crate::builder::WorkerOptions;
 use crate::recovery::WorkerRecoveryConfig;
-use crate::recovery::{apply_job_recovery, JobRecoveryRequest};
 use crate::recovery_tasks::{deregister_worker, register_worker, spawn_recovery_tasks};
 use crate::sql::complete_job::complete_job;
 use crate::tracing::link_to_job_create_span;
 use crate::{sql::fail_job::fail_job, streams::StreamSource};
+
+mod recovery_release;
+use recovery_release::recover_shutdown_aborted_job;
 
 /// Type alias for task handler functions.
 ///
@@ -1371,35 +1372,7 @@ async fn release_job(
         Err(e) => {
             if matches!(e, RunJobError::TaskAborted) {
                 let recovery_delay = worker.recovery_config.shutdown_recovery_delay;
-                let recovered = apply_job_recovery(
-                    &worker.database,
-                    &worker.escaped_schema,
-                    JobRecoveryRequest {
-                        hooks: Some(&worker.hooks),
-                        worker_id: &worker.worker_id,
-                        job: job.clone(),
-                        previous_worker_id: &worker.worker_id,
-                        reason: FailureReason::ShutdownAborted,
-                        recovery_delay,
-                    },
-                )
-                .await
-                .map_err(|source| ReleaseJobError {
-                    job_id: *job.id(),
-                    source,
-                })?;
-
-                if recovered && !worker.hooks.is_empty() {
-                    worker
-                        .hooks
-                        .emit(JobInterruptedContext {
-                            job,
-                            worker_id: worker.worker_id.clone(),
-                            reason: FailureReason::ShutdownAborted,
-                        })
-                        .await;
-                }
-
+                recover_shutdown_aborted_job(worker, job, recovery_delay).await?;
                 return Ok(());
             }
 

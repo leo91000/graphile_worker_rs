@@ -15,22 +15,21 @@ use crate::sql::worker_heartbeat::{
     list_stale_workers, try_acquire_sweep_lock, worker_holds_resilient_locks,
 };
 
-use super::config::{effective_sweep_threshold, WorkerRecoveryConfig};
+use super::config::WorkerRecoveryConfig;
 use super::job_recovery::apply_job_recovery;
-use super::types::{JobRecoveryRequest, SweepStaleWorkersOptions, SweepStaleWorkersResult};
+use super::types::{
+    JobRecoveryRequest, ResolvedSweepConfig, SweepStaleWorkersOptions, SweepStaleWorkersResult,
+};
 
 pub(crate) async fn sweep_stale_workers(
     database: &Database,
     escaped_schema: &str,
     hooks: Option<&Arc<HookRegistry>>,
     worker_id: &str,
+    defaults: &WorkerRecoveryConfig,
     options: SweepStaleWorkersOptions,
 ) -> Result<SweepStaleWorkersResult, GraphileWorkerError> {
-    let mut config = options.recovery_config.unwrap_or_default();
-    if let Some(sweep_threshold) = options.sweep_threshold {
-        config.sweep_threshold = sweep_threshold;
-    }
-    let recovery_delay = options.recovery_delay.unwrap_or(config.recovery_delay);
+    let config = options.resolve(defaults);
 
     let transaction = database.begin().await?;
     if !try_acquire_sweep_lock(&transaction).await? {
@@ -43,7 +42,7 @@ pub(crate) async fn sweep_stale_workers(
 
     let dead_worker_ids = find_dead_worker_ids(&transaction, escaped_schema, &config).await?;
 
-    if options.dry_run {
+    if config.dry_run {
         transaction.commit().await?;
         return Ok(SweepStaleWorkersResult {
             worker_ids: dead_worker_ids,
@@ -57,7 +56,7 @@ pub(crate) async fn sweep_stale_workers(
         hooks,
         worker_id,
         &dead_worker_ids,
-        recovery_delay,
+        config.recovery_delay,
     )
     .await?;
 
@@ -91,7 +90,7 @@ pub(crate) async fn sweep_stale_workers(
 async fn find_dead_worker_ids(
     mut executor: impl DbExecutorArg,
     escaped_schema: &str,
-    config: &WorkerRecoveryConfig,
+    config: &ResolvedSweepConfig,
 ) -> Result<Vec<String>, GraphileWorkerError> {
     let stale_worker_ids =
         list_stale_workers(&mut executor, escaped_schema, config.sweep_threshold).await?;
@@ -119,7 +118,7 @@ async fn should_recover_worker(
     mut executor: impl DbExecutorArg,
     escaped_schema: &str,
     worker_id: &str,
-    config: &WorkerRecoveryConfig,
+    config: &ResolvedSweepConfig,
 ) -> Result<bool, GraphileWorkerError> {
     let has_resilient_locks = worker_holds_resilient_locks(
         &mut executor,
@@ -139,7 +138,7 @@ async fn should_recover_worker(
         return Ok(true);
     };
 
-    let threshold = effective_sweep_threshold(config, true);
+    let threshold = config.effective_sweep_threshold(true);
     let elapsed = Utc::now()
         .signed_duration_since(last_heartbeat)
         .to_std()
@@ -174,7 +173,7 @@ async fn recover_jobs_from_workers(
             continue;
         };
 
-        let recovered = apply_job_recovery(
+        let outcome = apply_job_recovery(
             &mut executor,
             escaped_schema,
             JobRecoveryRequest {
@@ -188,7 +187,7 @@ async fn recover_jobs_from_workers(
         )
         .await?;
 
-        if recovered {
+        if outcome.was_handled() {
             recovered_count += 1;
             if let Some(hooks) = hooks {
                 hooks

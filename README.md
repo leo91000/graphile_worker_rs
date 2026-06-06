@@ -264,6 +264,11 @@ println!(
 );
 ```
 
+`sweep_stale_workers` uses the default recovery configuration for omitted
+thresholds. Use `sweep_stale_workers_with_config` when a manual sweep should
+reuse a custom `WorkerRecoveryConfig`, for example resilient job flags or a
+custom resilient threshold multiplier.
+
 Recovery can be customized with the `JobRecovery` hook:
 
 ```rust,ignore

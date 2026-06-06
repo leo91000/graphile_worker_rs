@@ -5,6 +5,7 @@ use indoc::formatdoc;
 
 use crate::errors::Result;
 use crate::sql::duration::duration_as_millis_i64;
+use crate::sql::dynamic::{DynamicSchema, PrivateTable};
 use graphile_worker_job::Job;
 
 pub async fn return_jobs(
@@ -27,10 +28,14 @@ pub async fn return_jobs(
         }
     }
 
+    let schema = DynamicSchema::new(escaped_schema);
+    let jobs_table = schema.private_table(PrivateTable::Jobs);
+    let job_queues_table = schema.private_table(PrivateTable::JobQueues);
+
     if queue_job_ids.is_empty() {
         let sql = formatdoc!(
             r#"
-                update {escaped_schema}._private_jobs as jobs
+                update {jobs_table} as jobs
                 set
                     attempts = GREATEST(0, attempts - 1),
                     locked_by = null,
@@ -54,7 +59,7 @@ pub async fn return_jobs(
         let sql = formatdoc!(
             r#"
                 with j as (
-                    update {escaped_schema}._private_jobs as jobs
+                    update {jobs_table} as jobs
                     set
                         attempts = GREATEST(0, attempts - 1),
                         locked_by = null,
@@ -63,7 +68,7 @@ pub async fn return_jobs(
                     and locked_by = $1::text
                     returning *
                 )
-                update {escaped_schema}._private_job_queues as job_queues
+                update {job_queues_table} as job_queues
                 set locked_by = null, locked_at = null
                 from j
                 where job_queues.id = j.job_queue_id
@@ -96,11 +101,15 @@ pub async fn return_job_for_recovery(
     recovery_delay: Option<Duration>,
     last_error: Option<&str>,
 ) -> Result<()> {
+    let schema = DynamicSchema::new(escaped_schema);
+    let jobs_table = schema.private_table(PrivateTable::Jobs);
+    let job_queues_table = schema.private_table(PrivateTable::JobQueues);
+
     if job.job_queue_id().is_some() {
         let sql = formatdoc!(
             r#"
                 with j as (
-                    update {escaped_schema}._private_jobs as jobs
+                    update {jobs_table} as jobs
                     set
                         attempts = GREATEST(0, attempts - 1),
                         locked_by = null,
@@ -115,7 +124,7 @@ pub async fn return_job_for_recovery(
                     and locked_by = $1::text
                     returning *
                 )
-                update {escaped_schema}._private_job_queues as job_queues
+                update {job_queues_table} as job_queues
                 set locked_by = null, locked_at = null
                 from j
                 where job_queues.id = j.job_queue_id
@@ -138,7 +147,7 @@ pub async fn return_job_for_recovery(
     } else {
         let sql = formatdoc!(
             r#"
-                update {escaped_schema}._private_jobs as jobs
+                update {jobs_table} as jobs
                 set
                         attempts = GREATEST(0, attempts - 1),
                         locked_by = null,
