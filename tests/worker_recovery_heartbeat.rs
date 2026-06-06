@@ -19,10 +19,7 @@ use graphile_worker::{
 };
 use graphile_worker_runtime::sleep as runtime_sleep;
 use serde::{Deserialize, Serialize};
-use tokio::{
-    task::spawn_local,
-    time::{sleep, Instant},
-};
+use tokio::time::{sleep, Instant};
 
 mod helpers;
 
@@ -121,7 +118,7 @@ async fn stale_worker_heartbeat_recovers_locked_jobs() {
 
         let worker_id = worker.worker_id().to_string();
         let worker_for_run = Arc::clone(&worker);
-        let worker_fut = spawn_local(async move {
+        let worker_fut = tokio::task::spawn(async move {
             let _ = worker_for_run.run().await;
         });
 
@@ -242,7 +239,7 @@ async fn default_recovery_config_does_not_register_worker() {
         );
 
         let worker_for_run = Arc::clone(&worker);
-        let worker_fut = spawn_local(async move { worker_for_run.run().await });
+        let worker_fut = tokio::task::spawn(async move { worker_for_run.run().await });
 
         sleep(Duration::from_millis(250)).await;
 
@@ -737,7 +734,7 @@ async fn background_sweeper_recovers_job_from_dead_worker() {
 
         let worker_a_id = worker_a.worker_id().to_string();
         let worker_a_for_run = Arc::clone(&worker_a);
-        let worker_a_fut = spawn_local(async move {
+        let worker_a_fut = tokio::task::spawn(async move {
             let _ = worker_a_for_run.run().await;
         });
 
@@ -776,7 +773,7 @@ async fn background_sweeper_recovers_job_from_dead_worker() {
         );
 
         let sweeper_for_run = Arc::clone(&sweeper);
-        let sweeper_fut = spawn_local(async move { sweeper_for_run.run().await });
+        let sweeper_fut = tokio::task::spawn(async move { sweeper_for_run.run().await });
 
         let start = Instant::now();
         loop {
