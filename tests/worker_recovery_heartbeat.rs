@@ -18,6 +18,7 @@ use graphile_worker::{
     WorkerUtils, INFRASTRUCTURE_RESILIENT_FLAG,
 };
 use graphile_worker_runtime::sleep as runtime_sleep;
+use indoc::formatdoc;
 use serde::{Deserialize, Serialize};
 use tokio::time::{sleep, Instant};
 
@@ -266,15 +267,16 @@ async fn list_active_workers_reports_registered_metadata_and_stale_state() {
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("failed to migrate");
 
-        sqlx::query(
+        let sql = formatdoc!(
             r#"
-                INSERT INTO graphile_worker._private_workers
-                    (id, last_heartbeat_at, started_at, metadata)
-                VALUES
-                    ('fresh_worker', now(), now() - interval '2 seconds', '{"pid": 100}'::jsonb),
-                    ('stale_worker', now() - interval '5 minutes', now() - interval '10 minutes', '{"pid": 200}'::jsonb)
-            "#,
-        )
+            INSERT INTO graphile_worker._private_workers
+                (id, last_heartbeat_at, started_at, metadata)
+            VALUES
+                ('fresh_worker', now(), now() - interval '2 seconds', '{{"pid": 100}}'::jsonb),
+                ('stale_worker', now() - interval '5 minutes', now() - interval '10 minutes', '{{"pid": 200}}'::jsonb)
+            "#
+        );
+        sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
         .execute(&test_db.test_pool)
         .await
         .expect("failed to insert workers");
@@ -335,15 +337,16 @@ async fn heartbeat_sql_helpers_register_list_detect_and_deregister_workers() {
             )
             .await
             .expect("failed to add resilient job");
-        sqlx::query(
+        let sql = formatdoc!(
             r#"
-                UPDATE graphile_worker._private_jobs
-                    SET attempts = 1,
-                        locked_by = 'fresh_helper',
-                        locked_at = now()
-                    WHERE id = $1
-            "#,
-        )
+            UPDATE graphile_worker._private_jobs
+                SET attempts = 1,
+                    locked_by = 'fresh_helper',
+                    locked_at = now()
+                WHERE id = $1
+            "#
+        );
+        sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
         .bind(*resilient_job.id())
         .execute(&test_db.test_pool)
         .await
@@ -455,19 +458,20 @@ async fn recover_worker_sql_helpers_fetch_and_recover_locked_jobs() {
             .add_job(LongJob { id: 11 }, JobSpec::default())
             .await
             .expect("failed to add recoverable job");
-        sqlx::query(
+        let sql = formatdoc!(
             r#"
-                UPDATE graphile_worker._private_jobs
-                    SET attempts = 1,
-                        locked_by = 'recover_helper',
-                        locked_at = now() - interval '10 minutes'
-                    WHERE id = $1
-            "#,
-        )
-        .bind(*job.id())
-        .execute(&test_db.test_pool)
-        .await
-        .expect("failed to lock recoverable job");
+            UPDATE graphile_worker._private_jobs
+                SET attempts = 1,
+                    locked_by = 'recover_helper',
+                    locked_at = now() - interval '10 minutes'
+                WHERE id = $1
+            "#
+        );
+        sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+            .bind(*job.id())
+            .execute(&test_db.test_pool)
+            .await
+            .expect("failed to lock recoverable job");
 
         let worker_ids = vec!["recover_helper".to_string()];
         let locked_jobs =
@@ -523,31 +527,33 @@ async fn return_job_for_recovery_unlocks_queued_job_with_delay() {
             .expect("failed to add queued recovery job");
         let queue_id = (*job.job_queue_id()).expect("queued job should have a queue id");
 
-        sqlx::query(
+        let sql = formatdoc!(
             r#"
-                UPDATE graphile_worker._private_jobs
-                    SET attempts = 1,
-                        locked_by = 'queued_recovery_worker',
-                        locked_at = now()
-                    WHERE id = $1
-            "#,
-        )
-        .bind(*job.id())
-        .execute(&test_db.test_pool)
-        .await
-        .expect("failed to lock queued recovery job");
-        sqlx::query(
+            UPDATE graphile_worker._private_jobs
+                SET attempts = 1,
+                    locked_by = 'queued_recovery_worker',
+                    locked_at = now()
+                WHERE id = $1
+            "#
+        );
+        sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+            .bind(*job.id())
+            .execute(&test_db.test_pool)
+            .await
+            .expect("failed to lock queued recovery job");
+        let sql = formatdoc!(
             r#"
-                UPDATE graphile_worker._private_job_queues
-                    SET locked_by = 'queued_recovery_worker',
-                        locked_at = now()
-                    WHERE id = $1
-            "#,
-        )
-        .bind(queue_id)
-        .execute(&test_db.test_pool)
-        .await
-        .expect("failed to lock queued recovery queue");
+            UPDATE graphile_worker._private_job_queues
+                SET locked_by = 'queued_recovery_worker',
+                    locked_at = now()
+                WHERE id = $1
+            "#
+        );
+        sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+            .bind(queue_id)
+            .execute(&test_db.test_pool)
+            .await
+            .expect("failed to lock queued recovery queue");
 
         let before_return = chrono::Utc::now();
         return_job_for_recovery(
@@ -835,15 +841,16 @@ async fn resilient_job_uses_extended_sweep_threshold() {
         .await
         .expect("failed to age resilient worker heartbeat");
 
-        sqlx::query(
+        let sql = formatdoc!(
             r#"
-                UPDATE graphile_worker._private_jobs
-                    SET attempts = 1,
-                        locked_by = $1::text,
-                        locked_at = now() - interval '2 minutes'
-                    WHERE id = $2::bigint
-            "#,
-        )
+            UPDATE graphile_worker._private_jobs
+                SET attempts = 1,
+                    locked_by = $1::text,
+                    locked_at = now() - interval '2 minutes'
+                WHERE id = $2::bigint
+            "#
+        );
+        sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
         .bind(worker_id)
         .bind(*job.id())
         .execute(&test_db.test_pool)
@@ -1032,33 +1039,35 @@ async fn queued_job_recovery_counts_jobs_and_unlocks_queue() {
             .await
             .expect("failed to add queued job");
 
-        sqlx::query(
+        let sql = formatdoc!(
             r#"
-                UPDATE graphile_worker._private_jobs
-                    SET attempts = 1,
-                        locked_by = $1::text,
-                        locked_at = now() - interval '10 minutes'
-                    WHERE id = $2::bigint
-            "#,
-        )
-        .bind("dead_queued_worker")
-        .bind(*job.id())
-        .execute(&test_db.test_pool)
-        .await
-        .expect("failed to create queued job recovery lock");
+            UPDATE graphile_worker._private_jobs
+                SET attempts = 1,
+                    locked_by = $1::text,
+                    locked_at = now() - interval '10 minutes'
+                WHERE id = $2::bigint
+            "#
+        );
+        sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+            .bind("dead_queued_worker")
+            .bind(*job.id())
+            .execute(&test_db.test_pool)
+            .await
+            .expect("failed to create queued job recovery lock");
 
-        sqlx::query(
+        let sql = formatdoc!(
             r#"
-                UPDATE graphile_worker._private_job_queues
-                    SET locked_by = $1::text,
-                        locked_at = now() - interval '10 minutes'
-                    WHERE queue_name = 'recovery_count_queue'
-            "#,
-        )
-        .bind("dead_queued_worker")
-        .execute(&test_db.test_pool)
-        .await
-        .expect("failed to create queued queue recovery lock");
+            UPDATE graphile_worker._private_job_queues
+                SET locked_by = $1::text,
+                    locked_at = now() - interval '10 minutes'
+                WHERE queue_name = 'recovery_count_queue'
+            "#
+        );
+        sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+            .bind("dead_queued_worker")
+            .execute(&test_db.test_pool)
+            .await
+            .expect("failed to create queued queue recovery lock");
 
         let sweep_utils = WorkerUtils::new(test_db.database.clone(), "graphile_worker".to_string());
         let result = sweep_utils
