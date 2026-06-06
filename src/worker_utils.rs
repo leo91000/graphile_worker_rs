@@ -31,7 +31,7 @@ pub struct SweepStaleWorkersOptions {
     pub dry_run: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SweepStaleWorkersResult {
     pub worker_ids: Vec<String>,
     pub recovered_count: i32,

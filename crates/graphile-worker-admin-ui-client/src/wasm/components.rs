@@ -212,6 +212,86 @@ pub(super) fn QueuesPanel(
 }
 
 #[component]
+pub(super) fn ActiveWorkersPanel(
+    config: AdminClientConfig,
+    token: RwSignal<String>,
+    overview: RwSignal<OverviewResponse>,
+    jobs: RwSignal<Vec<ListedJob>>,
+    selected_jobs: RwSignal<Vec<i64>>,
+    limit: RwSignal<i64>,
+    toast: RwSignal<Option<String>>,
+    refreshing: RwSignal<bool>,
+    refresh_pending: RwSignal<bool>,
+) -> impl IntoView {
+    view! {
+        <div id="active-workers" class="gw-panel">
+            <div class="flex items-center justify-between gap-2 border-b p-3" style="border-color: rgb(var(--border));">
+                <div class="flex items-center gap-2">
+                    <span class="i-lucide-heart-pulse h-4 w-4"></span>
+                    <h3 class="font-semibold">"Active workers"</h3>
+                </div>
+                <button class="gw-btn" type="button" disabled=config.read_only on:click={
+                    let config = config.clone();
+                    move |_| post_maintenance(
+                        config.clone(),
+                        token,
+                        MaintenanceRequest {
+                            action: MaintenanceAction::SweepStaleWorkers,
+                            cleanup_tasks: Vec::new(),
+                            worker_ids: Vec::new(),
+                            dry_run: false,
+                            sweep_threshold_secs: None,
+                            recovery_delay_secs: None,
+                        },
+                        overview,
+                        jobs,
+                        selected_jobs,
+                        limit,
+                        toast,
+                        refreshing,
+                        refresh_pending,
+                    )
+                }>
+                    <span class="i-lucide-radar h-4 w-4"></span>"Sweep stale"
+                </button>
+            </div>
+            <div class="divide-y" style="border-color: rgb(var(--border));">
+                {move || if overview.get().active_workers.is_empty() {
+                    view! { <div class="p-4 gw-muted">"No registered workers yet."</div> }.into_any()
+                } else {
+                    ().into_any()
+                }}
+                <For
+                    each=move || overview.get().active_workers
+                    key=|worker| worker.worker_id.clone()
+                    children=move |worker| {
+                        let worker_id = worker.worker_id.clone();
+                        view! {
+                            <div class="flex items-center justify-between gap-3 p-3">
+                                <div class="min-w-0">
+                                    <span class="block truncate font-mono text-sm">{worker_id.clone()}</span>
+                                    <p class="gw-muted text-xs">
+                                        {format!("started {}", format_date(worker.started_at))}
+                                        " · heartbeat "
+                                        {format_date(worker.last_heartbeat_at)}
+                                    </p>
+                                </div>
+                                <span class=format!(
+                                    "gw-pill {}",
+                                    if worker.is_stale { "text-amber-600 dark:text-amber-300" } else { "text-emerald-600 dark:text-emerald-300" }
+                                )>
+                                    {if worker.is_stale { "stale" } else { "healthy" }}
+                                </span>
+                            </div>
+                        }
+                    }
+                />
+            </div>
+        </div>
+    }
+}
+
+#[component]
 pub(super) fn WorkersPanel(
     config: AdminClientConfig,
     token: RwSignal<String>,
@@ -246,6 +326,9 @@ pub(super) fn WorkersPanel(
                                 action: MaintenanceAction::ForceUnlock,
                                 cleanup_tasks: Vec::new(),
                                 worker_ids,
+                                dry_run: false,
+                                sweep_threshold_secs: None,
+                                recovery_delay_secs: None,
                             },
                             overview,
                             jobs,

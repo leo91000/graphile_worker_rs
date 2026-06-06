@@ -79,6 +79,15 @@ pub(crate) struct LockedWorkerRow {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub(crate) struct ActiveWorkerRow {
+    pub(crate) worker_id: String,
+    pub(crate) last_heartbeat_at: DateTime<Utc>,
+    pub(crate) started_at: DateTime<Utc>,
+    pub(crate) metadata: Option<Value>,
+    pub(crate) is_stale: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct DbJobOutput {
     pub(crate) id: i64,
     pub(crate) task_id: i32,
@@ -209,6 +218,10 @@ pub(crate) struct MaintenanceRequest {
     pub(crate) cleanup_tasks: Vec<CleanupTaskName>,
     #[serde(default)]
     pub(crate) worker_ids: Vec<String>,
+    #[serde(default)]
+    pub(crate) dry_run: bool,
+    pub(crate) sweep_threshold_secs: Option<u64>,
+    pub(crate) recovery_delay_secs: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -217,6 +230,7 @@ pub(crate) enum MaintenanceAction {
     Migrate,
     Cleanup,
     ForceUnlock,
+    SweepStaleWorkers,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -262,6 +276,7 @@ pub(crate) struct OverviewResponse {
     pub(crate) stats: JobStats,
     pub(crate) queues: Vec<QueueRow>,
     pub(crate) workers: Vec<LockedWorkerRow>,
+    pub(crate) active_workers: Vec<ActiveWorkerRow>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

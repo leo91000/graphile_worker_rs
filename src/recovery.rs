@@ -204,7 +204,7 @@ pub(crate) fn effective_sweep_threshold(
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ActiveWorkerRow {
     pub worker_id: String,
     pub last_heartbeat_at: DateTime<Utc>,

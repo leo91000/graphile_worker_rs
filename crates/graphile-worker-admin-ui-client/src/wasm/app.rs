@@ -6,7 +6,9 @@ use leptos::prelude::*;
 
 use super::api::{post_job_action, post_maintenance, refresh_data};
 use super::browser::{apply_theme, copy_to_clipboard, storage_get, storage_remove, storage_set};
-use super::components::{ColumnFilter, JobRow, Overview, QueuesPanel, StateTab, WorkersPanel};
+use super::components::{
+    ActiveWorkersPanel, ColumnFilter, JobRow, Overview, QueuesPanel, StateTab, WorkersPanel,
+};
 use super::filters::{
     filter_values, job_search_text, job_state, matches_column, selected_csv, selected_rows,
 };
@@ -23,6 +25,7 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
         stats: Default::default(),
         queues: Vec::new(),
         workers: Vec::new(),
+        active_workers: Vec::new(),
     });
     let selected_jobs = RwSignal::new(Vec::<i64>::new());
     let selected_workers = RwSignal::new(Vec::<String>::new());
@@ -481,18 +484,31 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
 
                 <section id="queues-workers" class="mt-4 grid gap-4 lg:grid-cols-2">
                     <QueuesPanel overview=overview queue_filter=queue_filter />
-                    <WorkersPanel
-                        config=config.clone()
-                        token=token
-                        overview=overview
-                        jobs=jobs
-                        selected_jobs=selected_jobs
-                        selected_workers=selected_workers
-                        limit=limit
-                        toast=toast
-                        refreshing=refreshing
-                        refresh_pending=refresh_pending
-                    />
+                    <div class="grid gap-4">
+                        <ActiveWorkersPanel
+                            config=config.clone()
+                            token=token
+                            overview=overview
+                            jobs=jobs
+                            selected_jobs=selected_jobs
+                            limit=limit
+                            toast=toast
+                            refreshing=refreshing
+                            refresh_pending=refresh_pending
+                        />
+                        <WorkersPanel
+                            config=config.clone()
+                            token=token
+                            overview=overview
+                            jobs=jobs
+                            selected_jobs=selected_jobs
+                            selected_workers=selected_workers
+                            limit=limit
+                            toast=toast
+                            refreshing=refreshing
+                            refresh_pending=refresh_pending
+                        />
+                    </div>
                 </section>
 
                 <section id="maintenance" class="gw-panel mt-4 p-4">
@@ -511,6 +527,9 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
                                         action: MaintenanceAction::Migrate,
                                         cleanup_tasks: Vec::new(),
                                         worker_ids: Vec::new(),
+                                        dry_run: false,
+                                        sweep_threshold_secs: None,
+                                        recovery_delay_secs: None,
                                     },
                                     overview,
                                     jobs,
@@ -536,6 +555,9 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
                                             CleanupTaskName::GcJobQueues,
                                         ],
                                         worker_ids: Vec::new(),
+                                        dry_run: false,
+                                        sweep_threshold_secs: None,
+                                        recovery_delay_secs: None,
                                     },
                                     overview,
                                     jobs,
@@ -547,6 +569,30 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
                                 )
                             }>
                                 <span class="i-lucide-sparkles h-4 w-4"></span>"Cleanup"
+                            </button>
+                            <button class="gw-btn" type="button" disabled=config.read_only on:click={
+                                let config = config.clone();
+                                move |_| post_maintenance(
+                                    config.clone(),
+                                    token,
+                                    MaintenanceRequest {
+                                        action: MaintenanceAction::SweepStaleWorkers,
+                                        cleanup_tasks: Vec::new(),
+                                        worker_ids: Vec::new(),
+                                        dry_run: false,
+                                        sweep_threshold_secs: None,
+                                        recovery_delay_secs: None,
+                                    },
+                                    overview,
+                                    jobs,
+                                    selected_jobs,
+                                    limit,
+                                    toast,
+                                    refreshing,
+                                    refresh_pending,
+                                )
+                            }>
+                                <span class="i-lucide-radar h-4 w-4"></span>"Sweep stale workers"
                             </button>
                         </div>
                     </div>
