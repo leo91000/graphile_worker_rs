@@ -189,7 +189,7 @@ async fn aborts_if_database_is_more_up_to_date_than_current_worker() {
             matches!(
                 migration_result,
                 Err(MigrateError::IncompatbleRevision { latest_migration, latest_breaking_migration, highest_migration })
-                if latest_migration == 999999 && latest_breaking_migration == 999999 && highest_migration == 19
+                if latest_migration == 999999 && latest_breaking_migration == 999999 && highest_migration == 20
             ),
             "Expected migration to abort due to database being more up to date than current worker"
         );

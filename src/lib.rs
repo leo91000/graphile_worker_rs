@@ -87,8 +87,9 @@ pub use local_queue::{
     LocalQueue, LocalQueueConfig, LocalQueueError, LocalQueueMode, RefetchDelayConfig,
 };
 pub use recovery::{
-    ActiveWorkerRow, WorkerRecoveryConfig, INFRASTRUCTURE_RESILIENT_FLAG,
+    ActiveWorkerRow, SweepStaleWorkersOptions, SweepStaleWorkersResult, WorkerRecoveryConfig,
+    INFRASTRUCTURE_RESILIENT_FLAG,
 };
 pub use runner::Worker;
 pub use sql::add_job::RawJobSpec;
-pub use worker_utils::{SweepStaleWorkersOptions, SweepStaleWorkersResult, WorkerUtils};
+pub use worker_utils::WorkerUtils;

@@ -6,10 +6,7 @@ use indoc::formatdoc;
 
 use crate::errors::Result;
 use crate::recovery::ActiveWorkerRow;
-
-fn duration_to_interval(duration: Duration) -> String {
-    format!("{} seconds", duration.as_secs())
-}
+use crate::sql::duration::duration_as_millis_i64;
 
 pub async fn worker_heartbeat(
     mut executor: impl DbExecutorArg,
@@ -63,14 +60,14 @@ pub async fn list_stale_workers(
     let sql = formatdoc!(
         r#"
             SELECT worker_id
-            FROM {escaped_schema}.list_stale_workers($1::interval);
+            FROM {escaped_schema}.list_stale_workers($1::bigint * interval '1 millisecond');
         "#
     );
 
     let rows = executor
         .fetch_all(
             &sql,
-            DbParams::from(vec![DbValue::Text(duration_to_interval(stale_threshold))]),
+            DbParams::from(vec![DbValue::I64(duration_as_millis_i64(stale_threshold))]),
         )
         .await?;
 
@@ -87,14 +84,14 @@ pub async fn list_orphan_locked_workers(
     let sql = formatdoc!(
         r#"
             SELECT worker_id
-            FROM {escaped_schema}.list_orphan_locked_workers($1::interval);
+            FROM {escaped_schema}.list_orphan_locked_workers($1::bigint * interval '1 millisecond');
         "#
     );
 
     let rows = executor
         .fetch_all(
             &sql,
-            DbParams::from(vec![DbValue::Text(duration_to_interval(stale_threshold))]),
+            DbParams::from(vec![DbValue::I64(duration_as_millis_i64(stale_threshold))]),
         )
         .await?;
 
@@ -217,10 +214,7 @@ pub async fn delete_stale_workers(
     );
 
     executor
-        .execute(
-            &sql,
-            vec![DbValue::TextArray(worker_ids.to_vec())].into(),
-        )
+        .execute(&sql, vec![DbValue::TextArray(worker_ids.to_vec())].into())
         .await?;
 
     Ok(())
@@ -229,7 +223,7 @@ pub async fn delete_stale_workers(
 pub async fn try_acquire_sweep_lock(mut executor: impl DbExecutorArg) -> Result<bool> {
     let row = executor
         .fetch_optional(
-            "SELECT pg_try_advisory_lock($1::bigint) AS acquired",
+            "SELECT pg_try_advisory_xact_lock($1::bigint) AS acquired",
             DbParams::from(vec![DbValue::I64(87_301)]),
         )
         .await?;
@@ -238,14 +232,4 @@ pub async fn try_acquire_sweep_lock(mut executor: impl DbExecutorArg) -> Result<
         .map(|row| row.try_get::<bool>("acquired"))
         .transpose()?
         .unwrap_or(false))
-}
-
-pub async fn release_sweep_lock(mut executor: impl DbExecutorArg) -> Result<()> {
-    executor
-        .execute(
-            "SELECT pg_advisory_unlock($1::bigint)",
-            DbParams::from(vec![DbValue::I64(87_301)]),
-        )
-        .await?;
-    Ok(())
 }

@@ -375,9 +375,7 @@ impl WorkerOptions {
             ))
         });
 
-        let recovery_config = self
-            .worker_recovery_config
-            .unwrap_or_default();
+        let recovery_config = self.worker_recovery_config.unwrap_or_default();
 
         let worker = Worker {
             worker_id,
@@ -962,6 +960,7 @@ impl WorkerOptions {
     pub fn heartbeat_interval(mut self, interval: Duration) -> Self {
         let mut config = self.worker_recovery_config.unwrap_or_default();
         config.heartbeat_interval = interval;
+        config.enabled = true;
         self.worker_recovery_config = Some(config);
         self
     }
@@ -970,6 +969,7 @@ impl WorkerOptions {
     pub fn sweep_interval(mut self, interval: Duration) -> Self {
         let mut config = self.worker_recovery_config.unwrap_or_default();
         config.sweep_interval = interval;
+        config.enabled = true;
         self.worker_recovery_config = Some(config);
         self
     }
@@ -978,6 +978,7 @@ impl WorkerOptions {
     pub fn sweep_threshold(mut self, threshold: Duration) -> Self {
         let mut config = self.worker_recovery_config.unwrap_or_default();
         config.sweep_threshold = threshold;
+        config.enabled = true;
         self.worker_recovery_config = Some(config);
         self
     }
@@ -986,6 +987,7 @@ impl WorkerOptions {
     pub fn recovery_delay(mut self, delay: Duration) -> Self {
         let mut config = self.worker_recovery_config.unwrap_or_default();
         config.recovery_delay = delay;
+        config.enabled = true;
         self.worker_recovery_config = Some(config);
         self
     }
@@ -994,6 +996,7 @@ impl WorkerOptions {
     pub fn shutdown_grace_period(mut self, period: Duration) -> Self {
         let mut config = self.worker_recovery_config.unwrap_or_default();
         config.shutdown_grace_period = period;
+        config.enabled = true;
         self.worker_recovery_config = Some(config);
         self
     }
@@ -1002,6 +1005,7 @@ impl WorkerOptions {
     pub fn shutdown_recovery_delay(mut self, delay: Duration) -> Self {
         let mut config = self.worker_recovery_config.unwrap_or_default();
         config.shutdown_recovery_delay = delay;
+        config.enabled = true;
         self.worker_recovery_config = Some(config);
         self
     }

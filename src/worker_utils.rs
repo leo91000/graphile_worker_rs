@@ -2,14 +2,10 @@ use std::sync::Arc;
 
 use std::time::Duration;
 
-use crate::recovery::{effective_sweep_threshold, ActiveWorkerRow, WorkerRecoveryConfig};
+use crate::recovery::{sweep_stale_workers, ActiveWorkerRow};
 use crate::sql::add_job::{add_job, add_jobs, JobToAdd, RawJobSpec};
-use crate::sql::recover_workers::recover_dead_worker_jobs;
-use crate::sql::worker_heartbeat::{
-    delete_stale_workers, get_worker_last_heartbeat, list_active_workers,
-    list_orphan_locked_workers, list_stale_workers, worker_holds_resilient_locks,
-};
 use crate::sql::task_identifiers::{get_tasks_details, SharedTaskDetails};
+use crate::sql::worker_heartbeat::list_active_workers;
 use crate::tracing::add_tracing_info;
 use crate::{errors::GraphileWorkerError, DbJob, Job, JobSpec};
 use graphile_worker_database::{Database, DbExecutor, DbExecutorArg, DbValue};
@@ -23,19 +19,7 @@ use tracing::{debug, Span};
 
 const BULK_INSERT_ANALYZE_THRESHOLD: usize = 10_000;
 
-#[derive(Debug, Clone, Default)]
-pub struct SweepStaleWorkersOptions {
-    pub sweep_threshold: Option<Duration>,
-    pub recovery_delay: Option<Duration>,
-    pub recovery_config: Option<WorkerRecoveryConfig>,
-    pub dry_run: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct SweepStaleWorkersResult {
-    pub worker_ids: Vec<String>,
-    pub recovered_count: i32,
-}
+pub use crate::recovery::{SweepStaleWorkersOptions, SweepStaleWorkersResult};
 
 /// Types of database cleanup tasks that can be performed on the Graphile Worker schema.
 ///
@@ -792,16 +776,6 @@ impl WorkerUtils {
         Ok(jobs)
     }
 
-    /// Force unlocks worker records in the database.
-    ///
-    /// Useful for recovering from situations where workers crashed without
-    /// properly releasing their locks, allowing their jobs to be picked up by other workers.
-    ///
-    /// # Arguments
-    /// * `worker_ids` - Array of worker IDs to force unlock
-    ///
-    /// # Returns
-    /// * `Result<(), GraphileWorkerError>` - Ok if workers were successfully unlocked
     /// Lists workers registered in the heartbeat table.
     pub async fn list_active_workers(
         &self,
@@ -815,96 +789,26 @@ impl WorkerUtils {
         &self,
         options: SweepStaleWorkersOptions,
     ) -> Result<SweepStaleWorkersResult, GraphileWorkerError> {
-        let config = options
-            .recovery_config
-            .unwrap_or_default();
-        let sweep_threshold = options
-            .sweep_threshold
-            .unwrap_or(config.sweep_threshold);
-        let recovery_delay = options
-            .recovery_delay
-            .unwrap_or(config.recovery_delay);
-
-        let stale_worker_ids =
-            list_stale_workers(&self.database, &self.escaped_schema, sweep_threshold).await?;
-
-        let mut dead_worker_ids = Vec::new();
-        for worker_id in stale_worker_ids {
-            let has_resilient_locks = worker_holds_resilient_locks(
-                &self.database,
-                &self.escaped_schema,
-                &worker_id,
-                &config.resilient_job_flags,
-            )
-            .await?;
-
-            let should_recover = if !has_resilient_locks {
-                true
-            } else {
-                match get_worker_last_heartbeat(
-                    &self.database,
-                    &self.escaped_schema,
-                    &worker_id,
-                )
-                .await?
-                {
-                    None => true,
-                    Some(last_heartbeat) => {
-                        let threshold = effective_sweep_threshold(&config, true);
-                        let elapsed = chrono::Utc::now()
-                            .signed_duration_since(last_heartbeat)
-                            .to_std()
-                            .unwrap_or_default();
-                        elapsed >= threshold
-                    }
-                }
-            };
-
-            if should_recover {
-                dead_worker_ids.push(worker_id);
-            }
-        }
-
-        let orphan_worker_ids = list_orphan_locked_workers(
+        sweep_stale_workers(
             &self.database,
             &self.escaped_schema,
-            sweep_threshold,
+            self.hooks.as_ref(),
+            "worker_utils",
+            options,
         )
-        .await?;
-
-        for worker_id in orphan_worker_ids {
-            if !dead_worker_ids.iter().any(|id| id == &worker_id) {
-                dead_worker_ids.push(worker_id);
-            }
-        }
-
-        if options.dry_run {
-            return Ok(SweepStaleWorkersResult {
-                worker_ids: dead_worker_ids,
-                recovered_count: 0,
-            });
-        }
-
-        let recovered_count = if dead_worker_ids.is_empty() {
-            0
-        } else {
-            recover_dead_worker_jobs(
-                &self.database,
-                &self.escaped_schema,
-                &dead_worker_ids,
-                recovery_delay,
-            )
-            .await?
-        };
-
-        delete_stale_workers(&self.database, &self.escaped_schema, &dead_worker_ids).await?;
-
-        Ok(SweepStaleWorkersResult {
-            worker_ids: dead_worker_ids,
-            recovered_count,
-        })
+        .await
     }
 
+    /// Force unlocks worker records in the database.
+    ///
+    /// Useful for recovering from situations where workers crashed without
+    /// properly releasing their locks, allowing their jobs to be picked up by other workers.
+    ///
+    /// # Arguments
+    /// * `worker_ids` - Array of worker IDs to force unlock
+    ///
+    /// # Returns
+    /// * `Result<(), GraphileWorkerError>` - Ok if workers were successfully unlocked
     pub async fn force_unlock_workers(
         &self,
         worker_ids: &[&str],

@@ -15,6 +15,10 @@ pub const M000020_MIGRATION: GraphileWorkerMigration = GraphileWorkerMigration {
             );
         "#},
         indoc! {r#"
+            CREATE INDEX _private_workers_last_heartbeat_at_idx
+                ON :GRAPHILE_WORKER_SCHEMA._private_workers (last_heartbeat_at);
+        "#},
+        indoc! {r#"
             CREATE FUNCTION :GRAPHILE_WORKER_SCHEMA.worker_heartbeat(
                 worker_id text,
                 metadata json DEFAULT NULL::json
@@ -81,7 +85,6 @@ pub const M000020_MIGRATION: GraphileWorkerMigration = GraphileWorkerMigration {
             AS $$
             DECLARE
                 recovered_count integer := 0;
-                queue_count integer := 0;
             BEGIN
                 WITH j AS (
                     UPDATE :GRAPHILE_WORKER_SCHEMA._private_jobs AS jobs
@@ -90,7 +93,7 @@ pub const M000020_MIGRATION: GraphileWorkerMigration = GraphileWorkerMigration {
                         locked_by = NULL,
                         locked_at = NULL,
                         run_at = GREATEST(jobs.run_at, now() + recovery_delay),
-                        last_error = COALESCE(jobs.last_error, 'Job recovered after worker interruption'),
+                        last_error = 'Job recovered after worker interruption',
                         updated_at = now()
                     WHERE jobs.locked_by = ANY(worker_ids)
                     RETURNING jobs.job_queue_id
@@ -101,8 +104,7 @@ pub const M000020_MIGRATION: GraphileWorkerMigration = GraphileWorkerMigration {
                 SET locked_by = NULL, locked_at = NULL
                 WHERE job_queues.locked_by = ANY(worker_ids);
 
-                GET DIAGNOSTICS queue_count = ROW_COUNT;
-                RETURN recovered_count + queue_count;
+                RETURN recovered_count;
             END;
             $$;
         "#},
