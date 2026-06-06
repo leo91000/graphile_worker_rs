@@ -347,7 +347,7 @@ impl CleanupTaskArg {
 impl From<CleanupTaskArg> for CleanupTask {
     fn from(value: CleanupTaskArg) -> Self {
         match value {
-            CleanupTaskArg::DeletePermanentlyFailedJobs => CleanupTask::DeletePermenantlyFailedJobs,
+            CleanupTaskArg::DeletePermanentlyFailedJobs => CleanupTask::DeletePermanentlyFailedJobs,
             CleanupTaskArg::GcTaskIdentifiers => CleanupTask::GcTaskIdentifiers,
             CleanupTaskArg::GcJobQueues => CleanupTask::GcJobQueues,
         }

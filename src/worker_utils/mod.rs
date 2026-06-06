@@ -2,20 +2,21 @@ use std::sync::Arc;
 
 use std::time::Duration;
 
-use crate::recovery::{sweep_stale_workers, ActiveWorkerRow, WorkerRecoveryConfig};
-use crate::sql::add_job::{add_job, add_jobs, JobToAdd, RawJobSpec};
-use crate::sql::task_identifiers::{get_tasks_details, SharedTaskDetails};
-use crate::sql::worker_heartbeat::list_active_workers;
-use crate::tracing::add_tracing_info;
+use crate::recovery::{ActiveWorkerRow, WorkerRecoveryConfig};
+use crate::sql::add_job::RawJobSpec;
+use crate::sql::dynamic::{DynamicSchema, PrivateTable};
+use crate::sql::task_identifiers::SharedTaskDetails;
 use crate::{errors::GraphileWorkerError, DbJob, Job, JobSpec};
-use graphile_worker_database::{Database, DbExecutor, DbExecutorArg, DbValue};
-use graphile_worker_lifecycle_hooks::{BeforeJobScheduleContext, HookRegistry, JobScheduleResult};
-use graphile_worker_migrations::{migrate, MigrateError};
+use graphile_worker_database::{Database, DbExecutorArg, DbValue};
+use graphile_worker_lifecycle_hooks::HookRegistry;
+use graphile_worker_migrations::MigrateError;
 use graphile_worker_task_handler::{BatchTaskHandler, TaskHandler};
 use indoc::formatdoc;
 use serde::Serialize;
-use std::collections::HashSet;
-use tracing::{debug, Span};
+
+mod actions;
+mod add;
+mod maintenance;
 
 const BULK_INSERT_ANALYZE_THRESHOLD: usize = 10_000;
 
@@ -40,10 +41,18 @@ pub enum CleanupTask {
 
     /// Removes jobs that have reached their maximum retry attempts and are no longer locked.
     /// This helps clean up permanently failed jobs that will never be processed again.
+    DeletePermanentlyFailedJobs,
+
+    /// Deprecated misspelling retained for source compatibility.
+    #[deprecated(
+        since = "0.13.2",
+        note = "use CleanupTask::DeletePermanentlyFailedJobs instead"
+    )]
     DeletePermenantlyFailedJobs,
 }
 
 impl CleanupTask {
+    #[allow(deprecated)]
     pub(crate) async fn execute(
         &self,
         mut executor: impl DbExecutorArg,
@@ -51,10 +60,11 @@ impl CleanupTask {
         task_identifiers_to_keep: &[String],
     ) -> Result<(), GraphileWorkerError> {
         match self {
-            CleanupTask::DeletePermenantlyFailedJobs => {
+            CleanupTask::DeletePermanentlyFailedJobs | CleanupTask::DeletePermenantlyFailedJobs => {
+                let jobs = DynamicSchema::new(escaped_schema).private_table(PrivateTable::Jobs);
                 let sql = formatdoc!(
                     r#"
-                        delete from {escaped_schema}._private_jobs jobs
+                        delete from {jobs} jobs
                             where attempts = max_attempts
                             and locked_at is null;
                     "#
@@ -64,11 +74,13 @@ impl CleanupTask {
                     .await?;
             }
             CleanupTask::GcTaskIdentifiers => {
+                let jobs = DynamicSchema::new(escaped_schema).private_table(PrivateTable::Jobs);
+                let tasks = DynamicSchema::new(escaped_schema).private_table(PrivateTable::Tasks);
                 let sql = formatdoc!(
                     r#"
-                        delete from {escaped_schema}._private_tasks tasks
+                        delete from {tasks} tasks
                         where tasks.id not in (
-                            select jobs.task_id from {escaped_schema}._private_jobs jobs
+                            select jobs.task_id from {jobs} jobs
                         )
                         and tasks.identifier <> all ($1::text[]);
                     "#
@@ -81,11 +93,14 @@ impl CleanupTask {
                     .await?;
             }
             CleanupTask::GcJobQueues => {
+                let jobs = DynamicSchema::new(escaped_schema).private_table(PrivateTable::Jobs);
+                let job_queues =
+                    DynamicSchema::new(escaped_schema).private_table(PrivateTable::JobQueues);
                 let sql = formatdoc!(
                     r#"
-                        delete from {escaped_schema}._private_job_queues job_queues
+                        delete from {job_queues} job_queues
                         where job_queues.id not in (
-                            select jobs.job_queue_id from {escaped_schema}._private_jobs jobs
+                            select jobs.job_queue_id from {jobs} jobs
                         );
                     "#
                 );
@@ -189,79 +204,6 @@ impl WorkerUtils {
         self
     }
 
-    async fn invoke_before_job_schedule(
-        &self,
-        identifier: &str,
-        payload: serde_json::Value,
-        spec: &JobSpec,
-    ) -> Result<serde_json::Value, GraphileWorkerError> {
-        let Some(hooks) = &self.hooks else {
-            return Ok(payload);
-        };
-
-        let ctx = BeforeJobScheduleContext {
-            identifier: identifier.to_string(),
-            payload,
-            spec: spec.clone(),
-        };
-
-        match hooks.intercept(ctx).await {
-            JobScheduleResult::Continue(payload) => Ok(payload),
-            JobScheduleResult::Skip => Err(GraphileWorkerError::JobScheduleSkipped),
-            JobScheduleResult::Fail(msg) => Err(GraphileWorkerError::JobScheduleFailed(msg)),
-        }
-    }
-
-    async fn prepare_batch_jobs<'a>(
-        &self,
-        jobs: Vec<(&'a str, serde_json::Value, &'a JobSpec)>,
-    ) -> Result<(Vec<JobToAdd<'a>>, bool), GraphileWorkerError> {
-        let mut jobs_to_add = Vec::with_capacity(jobs.len());
-        let mut job_key_preserve_run_at = false;
-
-        for (identifier, mut payload, spec) in jobs {
-            add_tracing_info(&mut payload);
-
-            let payload = self
-                .invoke_before_job_schedule(identifier, payload, spec)
-                .await?;
-
-            job_key_preserve_run_at |= spec
-                .job_key_mode()
-                .as_ref()
-                .is_some_and(|m| matches!(m, crate::JobKeyMode::PreserveRunAt));
-
-            jobs_to_add.push(JobToAdd {
-                identifier,
-                payload,
-                spec,
-            });
-        }
-
-        Ok((jobs_to_add, job_key_preserve_run_at))
-    }
-
-    async fn analyze_jobs_after_large_batch(&self, job_count: usize) {
-        if job_count < BULK_INSERT_ANALYZE_THRESHOLD {
-            return;
-        }
-
-        let sql = formatdoc!(
-            r#"
-                analyze {escaped_schema}._private_jobs;
-            "#,
-            escaped_schema = self.escaped_schema
-        );
-
-        if let Err(error) = self
-            .database
-            .execute(&sql, graphile_worker_database::DbParams::new())
-            .await
-        {
-            debug!(?error, "Failed to analyze jobs after large batch insert");
-        }
-    }
-
     /// Adds a job to the queue with type safety.
     ///
     /// Uses the TaskHandler trait to ensure that the job identifier
@@ -308,26 +250,7 @@ impl WorkerUtils {
         payload: T,
         spec: JobSpec,
     ) -> Result<Job, GraphileWorkerError> {
-        let identifier = T::IDENTIFIER;
-        let mut payload = serde_json::to_value(payload)?;
-        add_tracing_info(&mut payload);
-
-        let span = Span::current();
-        span.record("otel.name", identifier);
-        span.record("messaging.destination.name", identifier);
-
-        let payload = self
-            .invoke_before_job_schedule(identifier, payload, &spec)
-            .await?;
-        add_job(
-            &self.database,
-            &self.escaped_schema,
-            identifier,
-            payload,
-            spec,
-            self.use_local_time,
-        )
-        .await
+        add::add_job(self, payload, spec).await
     }
 
     /// Adds a job to the queue with a raw identifier and payload.
@@ -377,21 +300,7 @@ impl WorkerUtils {
     where
         P: Serialize,
     {
-        let mut payload = serde_json::to_value(payload)?;
-        add_tracing_info(&mut payload);
-
-        let payload = self
-            .invoke_before_job_schedule(identifier, payload, &spec)
-            .await?;
-        add_job(
-            &self.database,
-            &self.escaped_schema,
-            identifier,
-            payload,
-            spec,
-            self.use_local_time,
-        )
-        .await
+        add::add_raw_job(self, identifier, payload, spec).await
     }
 
     /// Adds multiple jobs of the same type to the queue in a single batch operation.
@@ -448,35 +357,7 @@ impl WorkerUtils {
         &self,
         jobs: &[(T, &JobSpec)],
     ) -> Result<Vec<Job>, GraphileWorkerError> {
-        if jobs.is_empty() {
-            return Ok(vec![]);
-        }
-
-        let identifier = T::IDENTIFIER;
-        let mut job_inputs = Vec::with_capacity(jobs.len());
-        for (payload, spec) in jobs {
-            let payload_value = serde_json::to_value(payload)?;
-            job_inputs.push((identifier, payload_value, *spec));
-        }
-
-        let (jobs_to_add, job_key_preserve_run_at) = self.prepare_batch_jobs(job_inputs).await?;
-
-        let task_details = self.task_details.read().await;
-
-        let added_jobs = add_jobs(
-            &self.database,
-            &self.escaped_schema,
-            &jobs_to_add,
-            &task_details,
-            job_key_preserve_run_at,
-            self.use_local_time,
-        )
-        .await?;
-        drop(task_details);
-
-        self.analyze_jobs_after_large_batch(jobs.len()).await;
-
-        Ok(added_jobs)
+        add::add_jobs(self, jobs).await
     }
 
     /// Adds multiple jobs with raw identifiers and payloads in a single batch operation.
@@ -531,42 +412,7 @@ impl WorkerUtils {
         )
     )]
     pub async fn add_raw_jobs(&self, jobs: &[RawJobSpec]) -> Result<Vec<Job>, GraphileWorkerError> {
-        if jobs.is_empty() {
-            return Ok(vec![]);
-        }
-
-        let job_inputs: Vec<_> = jobs
-            .iter()
-            .map(|job| (job.identifier.as_str(), job.payload.clone(), &job.spec))
-            .collect();
-
-        let (jobs_to_add, job_key_preserve_run_at) = self.prepare_batch_jobs(job_inputs).await?;
-
-        let mut seen_identifiers = HashSet::with_capacity(jobs.len());
-        let mut unique_identifiers = Vec::new();
-        for job in jobs {
-            if seen_identifiers.insert(job.identifier.as_str()) {
-                unique_identifiers.push(job.identifier.clone());
-            }
-        }
-
-        let task_details =
-            get_tasks_details(&self.database, &self.escaped_schema, unique_identifiers).await?;
-
-        let added_jobs = add_jobs(
-            &self.database,
-            &self.escaped_schema,
-            &jobs_to_add,
-            &task_details,
-            job_key_preserve_run_at,
-            self.use_local_time,
-        )
-        .await?;
-        drop(task_details);
-
-        self.analyze_jobs_after_large_batch(jobs.len()).await;
-
-        Ok(added_jobs)
+        add::add_raw_jobs(self, jobs).await
     }
 
     /// Adds a batch job to the queue with type safety.
@@ -591,51 +437,7 @@ impl WorkerUtils {
         payloads: Vec<T>,
         spec: JobSpec,
     ) -> Result<Job, GraphileWorkerError> {
-        let span = Span::current();
-        span.record("messaging.batch.message_count", payloads.len());
-
-        if payloads.is_empty() {
-            return Err(GraphileWorkerError::JobScheduleFailed(
-                "batch job payload must contain at least one item".to_string(),
-            ));
-        }
-
-        let identifier = T::IDENTIFIER;
-        span.record("otel.name", identifier);
-        span.record("messaging.destination.name", identifier);
-
-        let mut payload = serde_json::to_value(payloads)?;
-        if let Some(items) = payload.as_array_mut() {
-            for item in items {
-                add_tracing_info(item);
-            }
-        }
-
-        let payload = self
-            .invoke_before_job_schedule(identifier, payload, &spec)
-            .await?;
-
-        let serde_json::Value::Array(payloads) = payload else {
-            return Err(GraphileWorkerError::JobScheduleFailed(
-                "before_job_schedule must return a JSON array for batch jobs".to_string(),
-            ));
-        };
-
-        if payloads.is_empty() {
-            return Err(GraphileWorkerError::JobScheduleFailed(
-                "batch job payload must contain at least one item".to_string(),
-            ));
-        }
-
-        add_job(
-            &self.database,
-            &self.escaped_schema,
-            identifier,
-            serde_json::Value::Array(payloads),
-            spec,
-            self.use_local_time,
-        )
-        .await
+        add::add_batch_job(self, payloads, spec).await
     }
 
     /// Removes a job from the queue by its job key.
@@ -648,18 +450,7 @@ impl WorkerUtils {
     /// # Returns
     /// * `Result<(), GraphileWorkerError>` - Ok if the job was removed successfully
     pub async fn remove_job(&self, job_key: &str) -> Result<(), GraphileWorkerError> {
-        let sql = formatdoc!(
-            r#"
-                select * from {escaped_schema}.remove_job($1::text);
-            "#,
-            escaped_schema = self.escaped_schema
-        );
-
-        self.database
-            .execute(&sql, vec![DbValue::Text(job_key.to_string())].into())
-            .await?;
-
-        Ok(())
+        actions::remove_job(self, job_key).await
     }
 
     /// Marks multiple jobs as completed.
@@ -670,22 +461,7 @@ impl WorkerUtils {
     /// # Returns
     /// * `Result<Vec<DbJob>, GraphileWorkerError>` - The updated job records
     pub async fn complete_jobs(&self, ids: &[i64]) -> Result<Vec<DbJob>, GraphileWorkerError> {
-        let sql = formatdoc!(
-            r#"
-                select * from {escaped_schema}.complete_jobs($1::bigint[]);
-            "#,
-            escaped_schema = self.escaped_schema
-        );
-
-        let jobs = self
-            .database
-            .fetch_all(&sql, vec![DbValue::I64Array(ids.to_vec())].into())
-            .await?
-            .iter()
-            .map(crate::sql::rows::db_job_from_row)
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-
-        Ok(jobs)
+        actions::complete_jobs(self, ids).await
     }
 
     /// Marks multiple jobs as permanently failed with a reason.
@@ -701,29 +477,7 @@ impl WorkerUtils {
         ids: &[i64],
         reason: &str,
     ) -> Result<Vec<DbJob>, GraphileWorkerError> {
-        let sql = formatdoc!(
-            r#"
-                select * from {escaped_schema}.permanently_fail_jobs($1::bigint[], $2::text);
-            "#,
-            escaped_schema = self.escaped_schema
-        );
-
-        let jobs = self
-            .database
-            .fetch_all(
-                &sql,
-                vec![
-                    DbValue::I64Array(ids.to_vec()),
-                    DbValue::Text(reason.to_string()),
-                ]
-                .into(),
-            )
-            .await?
-            .iter()
-            .map(crate::sql::rows::db_job_from_row)
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-
-        Ok(jobs)
+        actions::permanently_fail_jobs(self, ids, reason).await
     }
 
     /// Reschedules multiple jobs with new parameters.
@@ -742,38 +496,7 @@ impl WorkerUtils {
         ids: &[i64],
         options: RescheduleJobOptions,
     ) -> Result<Vec<DbJob>, GraphileWorkerError> {
-        let sql = formatdoc!(
-            r#"
-                select * from {escaped_schema}.reschedule_jobs(
-                    $1::bigint[],
-                    run_at := $2::timestamptz,
-                    priority := $3::int,
-                    attempts := $4::int,
-                    max_attempts := $5::int
-                );
-            "#,
-            escaped_schema = self.escaped_schema
-        );
-
-        let jobs = self
-            .database
-            .fetch_all(
-                &sql,
-                vec![
-                    DbValue::I64Array(ids.to_vec()),
-                    DbValue::TimestampTzOpt(options.run_at),
-                    DbValue::I32Opt(options.priority.map(i32::from)),
-                    DbValue::I32Opt(options.attempts.map(i32::from)),
-                    DbValue::I32Opt(options.max_attempts.map(i32::from)),
-                ]
-                .into(),
-            )
-            .await?
-            .iter()
-            .map(crate::sql::rows::db_job_from_row)
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-
-        Ok(jobs)
+        actions::reschedule_jobs(self, ids, options).await
     }
 
     /// Lists workers registered in the heartbeat table.
@@ -781,7 +504,7 @@ impl WorkerUtils {
         &self,
         sweep_threshold: Duration,
     ) -> Result<Vec<ActiveWorkerRow>, GraphileWorkerError> {
-        list_active_workers(&self.database, &self.escaped_schema, sweep_threshold).await
+        maintenance::list_active_workers(self, sweep_threshold).await
     }
 
     /// Sweeps inactive workers and orphan locks, recovering their jobs.
@@ -789,9 +512,7 @@ impl WorkerUtils {
         &self,
         options: SweepStaleWorkersOptions,
     ) -> Result<SweepStaleWorkersResult, GraphileWorkerError> {
-        let recovery_config = WorkerRecoveryConfig::default();
-        self.sweep_stale_workers_with_config(&recovery_config, options)
-            .await
+        maintenance::sweep_stale_workers(self, options).await
     }
 
     /// Sweeps inactive workers with an explicit recovery configuration.
@@ -800,15 +521,7 @@ impl WorkerUtils {
         recovery_config: &WorkerRecoveryConfig,
         options: SweepStaleWorkersOptions,
     ) -> Result<SweepStaleWorkersResult, GraphileWorkerError> {
-        sweep_stale_workers(
-            &self.database,
-            &self.escaped_schema,
-            self.hooks.as_ref(),
-            "worker_utils",
-            recovery_config,
-            options,
-        )
-        .await
+        maintenance::sweep_stale_workers_with_config(self, recovery_config, options).await
     }
 
     /// Force unlocks worker records in the database.
@@ -825,27 +538,7 @@ impl WorkerUtils {
         &self,
         worker_ids: &[&str],
     ) -> Result<(), GraphileWorkerError> {
-        let sql = formatdoc!(
-            r#"
-                select * from {escaped_schema}.force_unlock_workers($1::text[]);
-            "#,
-            escaped_schema = self.escaped_schema
-        );
-
-        self.database
-            .execute(
-                &sql,
-                vec![DbValue::TextArray(
-                    worker_ids
-                        .iter()
-                        .map(|worker_id| worker_id.to_string())
-                        .collect(),
-                )]
-                .into(),
-            )
-            .await?;
-
-        Ok(())
+        actions::force_unlock_workers(self, worker_ids).await
     }
 
     /// Runs database cleanup tasks to maintain performance.
@@ -871,7 +564,7 @@ impl WorkerUtils {
     /// # use graphile_worker::errors::GraphileWorkerError;
     /// # async fn example(utils: &WorkerUtils) -> Result<(), GraphileWorkerError> {
     /// utils.cleanup(&[
-    ///     CleanupTask::DeletePermenantlyFailedJobs,
+    ///     CleanupTask::DeletePermanentlyFailedJobs,
     ///     CleanupTask::GcTaskIdentifiers,
     ///     CleanupTask::GcJobQueues,
     /// ]).await?;
@@ -879,31 +572,7 @@ impl WorkerUtils {
     /// # }
     /// ```
     pub async fn cleanup(&self, tasks: &[CleanupTask]) -> Result<(), GraphileWorkerError> {
-        let should_refresh_task_identifiers = tasks
-            .iter()
-            .any(|t| matches!(t, CleanupTask::GcTaskIdentifiers));
-
-        if should_refresh_task_identifiers {
-            let mut guard = self.task_details.write().await;
-            let task_names = guard.task_names();
-
-            for task in tasks {
-                task.execute(&self.database, &self.escaped_schema, &task_names)
-                    .await?;
-            }
-
-            let refreshed =
-                get_tasks_details(&self.database, &self.escaped_schema, task_names).await?;
-            *guard = refreshed;
-            return Ok(());
-        }
-
-        for task in tasks {
-            task.execute(&self.database, &self.escaped_schema, &[])
-                .await?;
-        }
-
-        Ok(())
+        maintenance::cleanup(self, tasks).await
     }
 
     /// Runs database migrations to ensure the schema is up to date.
@@ -914,7 +583,6 @@ impl WorkerUtils {
     /// # Returns
     /// * `Result<(), MigrateError>` - Ok if migrations completed successfully
     pub async fn migrate(&self) -> Result<(), MigrateError> {
-        migrate(&self.database, &self.escaped_schema).await?;
-        Ok(())
+        maintenance::migrate(self).await
     }
 }

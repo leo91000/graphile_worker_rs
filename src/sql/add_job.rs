@@ -5,6 +5,7 @@ use graphile_worker_job::Job;
 use indoc::formatdoc;
 use tracing::info;
 
+use super::dynamic::{DynamicSchema, WorkerFunction};
 use super::task_identifiers::TaskDetails;
 
 #[derive(Debug, Clone)]
@@ -30,9 +31,10 @@ pub async fn add_job(
     spec: JobSpec,
     use_local_time: bool,
 ) -> Result<Job, GraphileWorkerError> {
+    let add_job = DynamicSchema::new(escaped_schema).function(WorkerFunction::AddJob);
     let sql = formatdoc!(
         r#"
-            select * from {escaped_schema}.add_job(
+            select * from {add_job}(
                 identifier => $1::text,
                 payload => $2::json,
                 queue_name => $3::text,
@@ -142,9 +144,10 @@ fn build_batch_specs_json<'a>(
 }
 
 fn add_jobs_sql(escaped_schema: &str) -> String {
+    let add_jobs = DynamicSchema::new(escaped_schema).function(WorkerFunction::AddJobs);
     formatdoc!(
         r#"
-            SELECT * FROM {escaped_schema}.add_jobs(
+            SELECT * FROM {add_jobs}(
                 array(
                     SELECT json_populate_recordset(null::{escaped_schema}.job_spec, $1::json)
                 ),

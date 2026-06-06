@@ -30,7 +30,8 @@ use crate::sql::task_identifiers::SharedTaskDetails;
 
 mod config;
 pub use config::{
-    LocalQueueConfig, LocalQueueConfigBuilder, RefetchDelayConfig, RefetchDelayConfigBuilder,
+    LocalQueueConfig, LocalQueueConfigBuilder, LocalQueueConfigError, RefetchDelayConfig,
+    RefetchDelayConfigBuilder,
 };
 
 #[derive(Debug, Error)]
@@ -206,30 +207,10 @@ impl LocalQueue {
     }
 
     pub fn new(params: LocalQueueParams) -> Self {
-        if let Some(ref refetch_delay) = params.config.refetch_delay {
-            if refetch_delay.duration > params.poll_interval {
-                panic!(
-                    "refetch_delay.duration ({:?}) must not be larger than poll_interval ({:?})",
-                    refetch_delay.duration, params.poll_interval
-                );
-            }
-        }
-
-        if params.config.size == 0 {
-            panic!("local_queue.size must be greater than 0");
-        }
-
-        if params.config.queue_count == 0 {
-            panic!("local_queue.queue_count must be greater than 0");
-        }
-
-        if params.config.size > i32::MAX as usize {
-            panic!(
-                "local_queue.size ({}) must not exceed i32::MAX ({})",
-                params.config.size,
-                i32::MAX
-            );
-        }
+        params
+            .config
+            .validate(params.poll_interval)
+            .expect("invalid local queue config");
 
         let shutdown_signal = params.shutdown_signal.clone();
         let queue: LocalQueue = params.into();
@@ -777,5 +758,29 @@ mod tests {
         assert_eq!(built_config.ttl, Duration::from_secs(4));
         assert!(built_config.refetch_delay.is_some());
         assert_eq!(built_config.queue_count, 2);
+    }
+
+    #[test]
+    fn local_queue_config_validation_rejects_invalid_values() {
+        assert_eq!(
+            LocalQueueConfig::default()
+                .with_size(0)
+                .validate(Duration::from_secs(1)),
+            Err(LocalQueueConfigError::EmptySize)
+        );
+        assert_eq!(
+            LocalQueueConfig::default()
+                .with_queue_count(0)
+                .validate(Duration::from_secs(1)),
+            Err(LocalQueueConfigError::EmptyQueueCount)
+        );
+        assert!(matches!(
+            LocalQueueConfig::default()
+                .with_refetch_delay(
+                    RefetchDelayConfig::default().with_duration(Duration::from_secs(2))
+                )
+                .validate(Duration::from_secs(1)),
+            Err(LocalQueueConfigError::RefetchDelayExceedsPollInterval { .. })
+        ));
     }
 }

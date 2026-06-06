@@ -637,7 +637,9 @@ mod tests {
 
     #[tokio::test]
     async fn completion_batcher_falls_back_after_shutdown() {
-        let pg_pool = database_pool().expect("DATABASE_URL is required for fallback tests");
+        let Some(pg_pool) = database_pool() else {
+            return;
+        };
         let schema = setup_schema(&pg_pool, "completion_fallback").await;
         let utils = crate::worker_utils::WorkerUtils::new(pg_pool.clone(), schema.clone());
         let job = utils
@@ -686,7 +688,9 @@ mod tests {
 
     #[tokio::test]
     async fn failure_batcher_falls_back_after_shutdown() {
-        let pg_pool = database_pool().expect("DATABASE_URL is required for fallback tests");
+        let Some(pg_pool) = database_pool() else {
+            return;
+        };
         let schema = setup_schema(&pg_pool, "failure_fallback").await;
         let utils = crate::worker_utils::WorkerUtils::new(pg_pool.clone(), schema.clone());
         let job = utils

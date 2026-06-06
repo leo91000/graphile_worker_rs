@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use derive_builder::Builder;
 use rand::RngExt;
+use thiserror::Error;
 
 pub(super) const DEFAULT_LOCAL_QUEUE_SIZE: usize = 100;
 pub(super) const DEFAULT_LOCAL_QUEUE_TTL: Duration = Duration::from_secs(5 * 60);
@@ -25,6 +26,21 @@ pub(super) fn calculate_retry_delay(attempt: u32, options: &RetryOptions) -> Dur
     let capped = base.min(options.max_delay_ms as f64);
     let jittered = capped * (0.5 + rand::rng().random::<f64>() * 0.5);
     Duration::from_millis(jittered as u64)
+}
+
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum LocalQueueConfigError {
+    #[error("local_queue.refetch_delay.duration ({duration:?}) must not be larger than poll_interval ({poll_interval:?})")]
+    RefetchDelayExceedsPollInterval {
+        duration: Duration,
+        poll_interval: Duration,
+    },
+    #[error("local_queue.size must be greater than 0")]
+    EmptySize,
+    #[error("local_queue.queue_count must be greater than 0")]
+    EmptyQueueCount,
+    #[error("local_queue.size ({size}) must not exceed i32::MAX ({max})")]
+    SizeTooLarge { size: usize, max: i32 },
 }
 
 #[derive(Debug, Clone, Builder)]
@@ -117,6 +133,34 @@ impl Default for LocalQueueConfig {
 impl LocalQueueConfig {
     pub fn builder() -> LocalQueueConfigBuilder {
         LocalQueueConfigBuilder::default()
+    }
+
+    pub fn validate(&self, poll_interval: Duration) -> Result<(), LocalQueueConfigError> {
+        if let Some(refetch_delay) = self.refetch_delay.as_ref() {
+            if refetch_delay.duration > poll_interval {
+                return Err(LocalQueueConfigError::RefetchDelayExceedsPollInterval {
+                    duration: refetch_delay.duration,
+                    poll_interval,
+                });
+            }
+        }
+
+        if self.size == 0 {
+            return Err(LocalQueueConfigError::EmptySize);
+        }
+
+        if self.queue_count == 0 {
+            return Err(LocalQueueConfigError::EmptyQueueCount);
+        }
+
+        if self.size > i32::MAX as usize {
+            return Err(LocalQueueConfigError::SizeTooLarge {
+                size: self.size,
+                max: i32::MAX,
+            });
+        }
+
+        Ok(())
     }
 
     pub fn with_size(self, size: usize) -> Self {

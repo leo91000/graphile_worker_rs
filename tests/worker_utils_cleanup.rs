@@ -41,7 +41,7 @@ async fn cleanup_with_delete_permafailed_jobs() {
 
         // Cleanup permanently failed jobs
         worker_utils
-            .cleanup(&[CleanupTask::DeletePermenantlyFailedJobs])
+            .cleanup(&[CleanupTask::DeletePermanentlyFailedJobs])
             .await
             .expect("Failed to cleanup permanently failed jobs");
 

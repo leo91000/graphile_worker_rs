@@ -11,7 +11,7 @@ use crate::local_queue::LocalQueue;
 use crate::sql::{get_job::get_job, task_identifiers::SharedTaskDetails};
 use crate::streams::{job_signal_stream, job_signal_stream_with_receiver, job_stream};
 use crate::worker_utils::WorkerUtils;
-use futures::{stream::FuturesUnordered, try_join, FutureExt, Stream, StreamExt};
+use futures::{stream::FuturesUnordered, try_join, FutureExt, StreamExt};
 use getset::Getters;
 use graphile_worker_crontab_runner::{cron_main, ScheduleCronJobError};
 use graphile_worker_crontab_types::Crontab;
@@ -38,6 +38,9 @@ use crate::tracing::link_to_job_create_span;
 use crate::{sql::fail_job::fail_job, streams::StreamSource};
 
 mod recovery_release;
+mod sources;
+#[cfg(test)]
+mod tests;
 use recovery_release::recover_shutdown_aborted_job;
 
 /// Type alias for task handler functions.
@@ -386,33 +389,7 @@ impl Worker {
     /// - `Ok(())` if the job runner shuts down gracefully
     /// - `Err(WorkerRuntimeError)` if an error occurs during execution
     fn create_local_queues(&self) -> Option<(Vec<LocalQueue>, crate::streams::JobSignalReceiver)> {
-        if let Some(ref config) = self.local_queue_config {
-            let (tx, rx) = runtime::channel(self.concurrency * 2);
-            if config.queue_count == 0 {
-                panic!("local_queue.queue_count must be greater than 0");
-            }
-            let queue_count = config.queue_count.min(self.concurrency);
-            let queues = (0..queue_count)
-                .map(|_| {
-                    LocalQueue::new(crate::local_queue::LocalQueueParams {
-                        config: config.clone(),
-                        database: self.database.clone(),
-                        escaped_schema: self.escaped_schema.clone(),
-                        worker_id: self.worker_id.clone(),
-                        task_details: self.task_details.clone(),
-                        poll_interval: self.poll_interval,
-                        continuous: true,
-                        shutdown_signal: Some(self.shutdown_signal.clone()),
-                        hooks: self.hooks.clone(),
-                        job_signal_sender: tx.clone(),
-                        use_local_time: self.use_local_time,
-                    })
-                })
-                .collect();
-            Some((queues, rx))
-        } else {
-            None
-        }
+        sources::create_local_queues(self)
     }
 
     fn runner(&self) -> WorkerRunner {
@@ -470,7 +447,8 @@ impl Worker {
             let source_rx = source_rx.clone();
             worker_handles.push(runtime::spawn(async move {
                 while let Ok(source) = source_rx.recv().await {
-                    process_local_queue_source(&runner, &local_queues, index, source).await?;
+                    sources::process_local_queue_source(&runner, &local_queues, index, source)
+                        .await?;
                 }
 
                 Ok::<(), ProcessJobError>(())
@@ -479,7 +457,8 @@ impl Worker {
         drop(source_rx);
 
         let dispatch_result =
-            dispatch_job_signals(job_signal, source_tx, worker_handles, self.concurrency).await;
+            sources::dispatch_job_signals(job_signal, source_tx, worker_handles, self.concurrency)
+                .await;
 
         for local_queue in local_queues.iter() {
             if let Err(e) = local_queue.release().await {
@@ -523,7 +502,8 @@ impl Worker {
         }
         drop(source_rx);
 
-        dispatch_job_signals(job_signal, source_tx, worker_handles, self.concurrency).await?;
+        sources::dispatch_job_signals(job_signal, source_tx, worker_handles, self.concurrency)
+            .await?;
 
         Ok(())
     }
@@ -601,133 +581,6 @@ pub enum ProcessJobError {
     /// Error occurred when trying to fetch a job from the database
     #[error("An error occured while fetching a job to run : '{0}'")]
     GetJobError(#[from] GraphileWorkerError),
-}
-
-async fn dispatch_job_signals<S>(
-    job_signal: S,
-    source_tx: runtime::Sender<StreamSource>,
-    mut worker_handles: FuturesUnordered<runtime::JoinHandle<Result<(), ProcessJobError>>>,
-    fanout: usize,
-) -> Result<(), WorkerRuntimeError>
-where
-    S: Stream<Item = StreamSource>,
-{
-    let job_signal = job_signal.fuse();
-    futures::pin_mut!(job_signal);
-
-    loop {
-        let next_source = job_signal.next().fuse();
-        let worker_done = worker_handles.next().fuse();
-        futures::pin_mut!(next_source, worker_done);
-
-        futures::select_biased! {
-            worker_result = worker_done => {
-                match worker_result {
-                    Some(Ok(Ok(()))) => {
-                        if worker_handles.is_empty() {
-                            break;
-                        }
-                    }
-                    Some(Ok(Err(e))) => {
-                        source_tx.close();
-                        return Err(e.into());
-                    }
-                    Some(Err(e)) => {
-                        source_tx.close();
-                        return Err(e.into());
-                    }
-                    None => break,
-                }
-            }
-            source = next_source => {
-                let Some(source) = source else {
-                    break;
-                };
-
-                let mut closed = false;
-                for _ in 0..fanout {
-                    if source_tx.try_send(source).is_err() && source_tx.send(source).await.is_err() {
-                        closed = true;
-                        break;
-                    }
-                }
-                if closed {
-                    break;
-                }
-            }
-        }
-    }
-
-    drop(source_tx);
-
-    while let Some(result) = worker_handles.next().await {
-        result??;
-    }
-
-    Ok(())
-}
-
-async fn process_local_queue_source(
-    worker: &WorkerRunner,
-    local_queues: &[LocalQueue],
-    start_index: usize,
-    source: StreamSource,
-) -> Result<(), ProcessJobError> {
-    if matches!(source, StreamSource::PgListener) {
-        local_queues[start_index % local_queues.len()]
-            .pulse(1)
-            .await;
-    }
-
-    let mut source = source;
-    loop {
-        let job = get_job_from_local_queues(worker, local_queues, start_index).await;
-
-        let Some(job) = job else {
-            break;
-        };
-
-        let job = Arc::new(job);
-
-        if !worker.hooks.is_empty() {
-            worker
-                .hooks
-                .emit(JobFetchContext {
-                    job: job.clone(),
-                    worker_id: worker.worker_id.clone(),
-                })
-                .await;
-        }
-
-        run_and_release_job(job.clone(), worker, &source).await?;
-        source = StreamSource::Internal;
-    }
-
-    Ok(())
-}
-
-async fn get_job_from_local_queues(
-    worker: &WorkerRunner,
-    local_queues: &[LocalQueue],
-    start_index: usize,
-) -> Option<Job> {
-    if !worker.forbidden_flags.is_empty() {
-        return local_queues[start_index % local_queues.len()]
-            .get_job(&worker.forbidden_flags)
-            .await;
-    }
-
-    for offset in 0..local_queues.len() {
-        let queue_index = (start_index + offset) % local_queues.len();
-        if let Some(job) = local_queues[queue_index]
-            .get_job(&worker.forbidden_flags)
-            .await
-        {
-            return Some(job);
-        }
-    }
-
-    None
 }
 
 /// Fetches and processes a single job from the queue.
@@ -968,194 +821,6 @@ fn panic_payload_to_string(payload: Box<dyn std::any::Any + Send>) -> String {
     }
 
     "task panicked".to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use std::any::Any;
-    use std::collections::HashMap;
-    use std::sync::Arc;
-    use std::time::Duration;
-
-    use futures::FutureExt;
-    use graphile_worker_database::{
-        BoxFuture, Database, DatabaseDriver, DbError, DbExecutor, DbParams, DbRow, DbTransaction,
-        NotificationStream,
-    };
-    use graphile_worker_extensions::{Extensions, ReadOnlyExtensions};
-    use graphile_worker_job::Job;
-    use graphile_worker_lifecycle_hooks::HookRegistry;
-    use graphile_worker_shutdown_signal::ShutdownSignal;
-
-    use crate::streams::StreamSource;
-
-    use super::{panic_payload_to_string, release_job, Redacted, RunJobError, WorkerRunner};
-
-    #[derive(Debug)]
-    struct FailingDriver;
-
-    impl DbExecutor for FailingDriver {
-        fn execute<'a>(
-            &'a self,
-            _sql: &'a str,
-            _params: DbParams,
-        ) -> BoxFuture<'a, Result<u64, DbError>> {
-            Box::pin(async { Err(DbError::new("forced failure")) })
-        }
-
-        fn fetch_all<'a>(
-            &'a self,
-            _sql: &'a str,
-            _params: DbParams,
-        ) -> BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
-            Box::pin(async { Ok(Vec::new()) })
-        }
-    }
-
-    impl DatabaseDriver for FailingDriver {
-        fn as_any(&self) -> &dyn Any {
-            self
-        }
-
-        fn begin<'a>(&'a self) -> BoxFuture<'a, Result<DbTransaction, DbError>> {
-            Box::pin(async { Err(DbError::new("transactions are unavailable")) })
-        }
-
-        fn listen<'a>(
-            &'a self,
-            _channel: &'a str,
-        ) -> BoxFuture<'a, Result<Option<NotificationStream>, DbError>> {
-            Box::pin(async { Ok(None) })
-        }
-    }
-
-    fn pending_shutdown_signal() -> ShutdownSignal {
-        futures::future::pending::<()>().boxed().shared()
-    }
-
-    #[tokio::test]
-    async fn failing_driver_contract_is_exercised() {
-        let driver = FailingDriver;
-
-        assert!(driver.as_any().is::<FailingDriver>());
-        assert!(driver
-            .execute("", DbParams::new())
-            .await
-            .expect_err("execute should fail")
-            .to_string()
-            .contains("forced failure"));
-        assert!(driver
-            .fetch_all("", DbParams::new())
-            .await
-            .expect("fetch_all should return an empty result")
-            .is_empty());
-        assert!(driver.begin().await.is_err());
-        assert!(driver
-            .listen("")
-            .await
-            .expect("listen should succeed without a stream")
-            .is_none());
-    }
-
-    #[test]
-    fn panic_payload_to_string_handles_static_str() {
-        assert_eq!(
-            panic_payload_to_string(Box::new("static panic")),
-            "static panic"
-        );
-    }
-
-    #[test]
-    fn run_job_error_debug_redacts_replacement_payload() {
-        let payload = serde_json::json!({ "secret": "token" });
-        let error = RunJobError::TaskErrorWithReplacement {
-            message: "failed".to_string(),
-            replacement_payload: Redacted::new(payload.clone()),
-        };
-
-        let debug = format!("{error:?}");
-
-        assert!(debug.contains("[redacted]"));
-        assert!(!debug.contains("token"));
-        assert_eq!(format!("{}", Redacted::new(payload.clone())), "[redacted]");
-        assert_eq!(error.persisted_error(), "TaskError(\"failed\")");
-        assert_eq!(error.replacement_payload(), Some(&payload));
-    }
-
-    #[test]
-    fn panic_payload_to_string_handles_unknown_payload() {
-        assert_eq!(panic_payload_to_string(Box::new(1usize)), "task panicked");
-    }
-
-    #[test]
-    fn panic_payload_to_string_handles_string_payload() {
-        assert_eq!(
-            panic_payload_to_string(Box::new(String::from("dynamic panic"))),
-            "dynamic panic"
-        );
-    }
-
-    #[test]
-    fn stream_source_is_copy_for_worker_fanout() {
-        fn assert_copy<T: Copy>() {}
-
-        assert_copy::<StreamSource>();
-    }
-
-    #[tokio::test]
-    async fn release_job_returns_error_when_replacement_payload_cannot_be_persisted() {
-        let database = Database::new(FailingDriver);
-        let hooks = Arc::new(HookRegistry::default());
-        let shutdown_signal = pending_shutdown_signal();
-        let failure_batcher = Arc::new(crate::batcher::FailureBatcher::new(
-            Duration::from_secs(60),
-            database.clone(),
-            "graphile_worker".to_string(),
-            "worker".to_string(),
-            hooks.clone(),
-            shutdown_signal.clone(),
-        ));
-        let worker = WorkerRunner {
-            worker_id: "worker".to_string(),
-            jobs: HashMap::new(),
-            database,
-            escaped_schema: "graphile_worker".to_string(),
-            task_details: Default::default(),
-            forbidden_flags: Vec::new(),
-            use_local_time: false,
-            shutdown_signal,
-            extensions: ReadOnlyExtensions::from(Extensions::new()),
-            hooks,
-            completion_batcher: None,
-            failure_batcher: Some(failure_batcher),
-            recovery_config: crate::recovery::WorkerRecoveryConfig::default(),
-        };
-        let job = Arc::new(
-            Job::builder()
-                .id(42)
-                .attempts(1)
-                .max_attempts(1)
-                .locked_by("worker".to_string())
-                .task_identifier("batch")
-                .payload(serde_json::json!({ "items": [1] }))
-                .build(),
-        );
-
-        let error = release_job(
-            Err(RunJobError::TaskErrorWithReplacement {
-                message: "failed".to_string(),
-                replacement_payload: Redacted::new(serde_json::json!({ "items": [2] })),
-            }),
-            job,
-            &worker,
-            Duration::from_millis(5),
-        )
-        .await
-        .expect_err("release should surface the failed persistence query");
-
-        assert_eq!(error.job_id, 42);
-        assert!(error.source.to_string().contains("forced failure"));
-    }
 }
 
 /// Executes a job's task handler function.
