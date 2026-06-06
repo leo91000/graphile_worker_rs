@@ -2,15 +2,15 @@ use futures::future::BoxFuture;
 
 use crate::context::{
     AfterJobRunContext, BeforeJobRunContext, BeforeJobScheduleContext, CronJobScheduledContext,
-    CronTickContext, JobCompleteContext, JobFailContext, JobFetchContext,
-    JobPermanentlyFailContext, JobStartContext, LocalQueueGetJobsCompleteContext,
-    LocalQueueInitContext, LocalQueueRefetchDelayAbortContext,
+    CronTickContext, JobCompleteContext, JobFailContext, JobFetchContext, JobInterruptedContext,
+    JobPermanentlyFailContext, JobRecoveryContext, JobStartContext,
+    LocalQueueGetJobsCompleteContext, LocalQueueInitContext, LocalQueueRefetchDelayAbortContext,
     LocalQueueRefetchDelayExpiredContext, LocalQueueRefetchDelayStartContext,
     LocalQueueReturnJobsContext, LocalQueueSetModeContext, WorkerInitContext,
-    WorkerShutdownContext, WorkerStartContext,
+    WorkerRecoveredContext, WorkerShutdownContext, WorkerStartContext,
 };
 use crate::event::{Event, HookOutput, Interceptable};
-use crate::result::{HookResult, JobScheduleResult};
+use crate::result::{HookResult, JobRecoveryResult, JobScheduleResult};
 use crate::TypeErasedHooks;
 
 #[doc(hidden)]
@@ -139,6 +139,8 @@ define_observer_event!(JobStart, JobStartContext);
 define_observer_event!(JobComplete, JobCompleteContext);
 define_observer_event!(JobFail, JobFailContext);
 define_observer_event!(JobPermanentlyFail, JobPermanentlyFailContext);
+define_observer_event!(JobInterrupted, JobInterruptedContext);
+define_observer_event!(WorkerRecovered, WorkerRecoveredContext);
 define_observer_event!(CronTick, CronTickContext);
 define_observer_event!(CronJobScheduled, CronJobScheduledContext);
 define_observer_event!(LocalQueueInit, LocalQueueInitContext);
@@ -166,3 +168,36 @@ define_interceptor_event!(
     JobScheduleResult,
     payload
 );
+
+pub struct JobRecovery;
+
+impl Event for JobRecovery {
+    type Context = JobRecoveryContext;
+    type Output = JobRecoveryResult;
+
+    fn register_boxed(
+        hooks: &mut TypeErasedHooks,
+        handler: Box<dyn Fn(Self::Context) -> BoxFuture<'static, Self::Output> + Send + Sync>,
+    ) {
+        hooks.get_handlers_mut::<Self>().push(handler);
+    }
+}
+
+impl Interceptable for JobRecoveryContext {
+    type Output = JobRecoveryResult;
+
+    fn intercept_with(self, hooks: &TypeErasedHooks) -> BoxFuture<'_, Self::Output> {
+        Box::pin(async move {
+            let Some(handlers) = hooks.get_handlers::<JobRecovery>() else {
+                return JobRecoveryResult::default();
+            };
+            for handler in handlers {
+                let result = handler(self.clone()).await;
+                if result.is_terminal() {
+                    return result;
+                }
+            }
+            JobRecoveryResult::default()
+        })
+    }
+}

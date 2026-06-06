@@ -29,7 +29,7 @@ async fn migration_install_schema_and_second_migration_does_not_harm() {
 
         let migrations = test_db.get_migrations().await;
 
-        assert_eq!(migrations.len(), 19);
+        assert_eq!(migrations.len(), 20);
         let m0 = &migrations[0];
         assert_eq!(m0.id, 1);
 

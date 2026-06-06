@@ -4,6 +4,8 @@ pub mod complete_job;
 pub mod fail_job;
 pub mod get_job;
 mod job_query_helpers;
+pub mod recover_workers;
 pub mod return_jobs;
+pub mod worker_heartbeat;
 pub mod rows;
 pub mod task_identifiers;

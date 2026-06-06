@@ -20,9 +20,10 @@ use graphile_worker_database::Database;
 use graphile_worker_extensions::ReadOnlyExtensions;
 use graphile_worker_job::Job;
 use graphile_worker_lifecycle_hooks::{
-    AfterJobRunContext, BeforeJobRunContext, HookRegistry, HookResult, JobCompleteContext,
-    JobFailContext, JobFetchContext, JobPermanentlyFailContext, JobStartContext, ShutdownReason,
-    WorkerShutdownContext, WorkerStartContext,
+    AfterJobRunContext, BeforeJobRunContext, FailureReason, HookRegistry, HookResult,
+    JobCompleteContext, JobFailContext, JobFetchContext, JobInterruptedContext,
+    JobPermanentlyFailContext, JobStartContext, ShutdownReason, WorkerShutdownContext,
+    WorkerStartContext,
 };
 use graphile_worker_runtime as runtime;
 use graphile_worker_shutdown_signal::ShutdownSignal;
@@ -31,6 +32,9 @@ use thiserror::Error;
 use tracing::{debug, error, info, trace, warn, Instrument, Span};
 
 use crate::builder::WorkerOptions;
+use crate::recovery::apply_job_recovery;
+use crate::recovery::WorkerRecoveryConfig;
+use crate::recovery_tasks::{deregister_worker, register_worker, spawn_recovery_tasks};
 use crate::sql::complete_job::complete_job;
 use crate::tracing::link_to_job_create_span;
 use crate::{sql::fail_job::fail_job, streams::StreamSource};
@@ -91,6 +95,8 @@ pub struct Worker {
     /// Optional failure batcher for batching job failures
     #[getset(skip)]
     pub(crate) failure_batcher: Option<Arc<crate::batcher::FailureBatcher>>,
+    /// Worker crash and shutdown recovery configuration
+    pub(crate) recovery_config: WorkerRecoveryConfig,
 }
 
 #[derive(Clone)]
@@ -107,6 +113,7 @@ struct WorkerRunner {
     hooks: Arc<HookRegistry>,
     completion_batcher: Option<Arc<crate::batcher::CompletionBatcher>>,
     failure_batcher: Option<Arc<crate::batcher::FailureBatcher>>,
+    recovery_config: WorkerRecoveryConfig,
 }
 
 /// Errors that can occur during worker runtime.
@@ -205,6 +212,8 @@ impl Worker {
     /// - `Ok(())` if the worker shuts down gracefully
     /// - `Err(WorkerRuntimeError)` if an error occurs during worker execution
     pub async fn run(&self) -> Result<(), WorkerRuntimeError> {
+        register_worker(self, None).await?;
+
         self.hooks
             .emit(WorkerStartContext {
                 database: self.database.clone(),
@@ -212,6 +221,8 @@ impl Worker {
                 extensions: self.extensions.clone(),
             })
             .await;
+
+        spawn_recovery_tasks(Arc::new(self.clone_for_recovery()));
 
         let local_queue = self.create_local_queues();
         let job_runner = self.job_runner_internal(local_queue);
@@ -239,9 +250,34 @@ impl Worker {
             })
             .await;
 
+        deregister_worker(self).await?;
+
         result?;
 
         Ok(())
+    }
+
+    fn clone_for_recovery(&self) -> Self {
+        Self {
+            worker_id: self.worker_id.clone(),
+            concurrency: self.concurrency,
+            poll_interval: self.poll_interval,
+            jobs: self.jobs.clone(),
+            database: self.database.clone(),
+            escaped_schema: self.escaped_schema.clone(),
+            task_details: self.task_details.clone(),
+            forbidden_flags: self.forbidden_flags.clone(),
+            crontabs: self.crontabs.clone(),
+            use_local_time: self.use_local_time,
+            shutdown_signal: self.shutdown_signal.clone(),
+            shutdown_notifier: self.shutdown_notifier.clone(),
+            extensions: self.extensions.clone(),
+            hooks: self.hooks.clone(),
+            local_queue_config: self.local_queue_config.clone(),
+            completion_batcher: self.completion_batcher.clone(),
+            failure_batcher: self.failure_batcher.clone(),
+            recovery_config: self.recovery_config.clone(),
+        }
     }
 
     /// Runs the worker once and processes all available jobs, then returns.
@@ -381,6 +417,7 @@ impl Worker {
             hooks: self.hooks.clone(),
             completion_batcher: self.completion_batcher.clone(),
             failure_batcher: self.failure_batcher.clone(),
+            recovery_config: self.recovery_config.clone(),
         }
     }
 
@@ -1079,6 +1116,7 @@ mod tests {
             hooks,
             completion_batcher: None,
             failure_batcher: Some(failure_batcher),
+            recovery_config: crate::recovery::WorkerRecoveryConfig::default(),
         };
         let job = Arc::new(
             Job::builder()
@@ -1178,11 +1216,12 @@ async fn run_job(
     let start = Instant::now();
 
     // Set up a shutdown handler that waits for the shutdown signal
-    // and then gives tasks 5 seconds to complete before aborting them
+    // and then gives tasks time to complete before aborting them
     let mut shutdown_signal = worker.shutdown_signal.clone();
+    let grace_period = worker.recovery_config.shutdown_grace_period;
     let shutdown_timeout = async {
         (&mut shutdown_signal).await;
-        runtime::sleep(Duration::from_secs(5)).await;
+        runtime::sleep(grace_period).await;
     };
 
     let job_task = std::panic::AssertUnwindSafe(task_fut.instrument(span))
@@ -1212,7 +1251,14 @@ async fn run_job(
         }
         _ = shutdown_timeout => {
             let payload = job.payload().to_string();
-            warn!(task_identifier, payload, job_id = job.id(), "Job interrupted by shutdown signal after 5 seconds timeout");
+            warn!(
+                task_identifier,
+                payload,
+                job_id = job.id(),
+                grace_period_ms = grace_period.as_millis(),
+                reason = ?FailureReason::ShutdownAborted,
+                "Job interrupted by shutdown signal"
+            );
             Err(RunJobError::TaskAborted)
         }
     }?;
@@ -1312,6 +1358,38 @@ async fn release_job(
             }
         }
         Err(e) => {
+            if matches!(e, RunJobError::TaskAborted) {
+                let recovery_delay = worker.recovery_config.shutdown_recovery_delay;
+                apply_job_recovery(
+                    &worker.database,
+                    &worker.escaped_schema,
+                    &worker.hooks,
+                    &worker.worker_id,
+                    job.clone(),
+                    &worker.worker_id,
+                    FailureReason::ShutdownAborted,
+                    recovery_delay,
+                )
+                .await
+                .map_err(|source| ReleaseJobError {
+                    job_id: *job.id(),
+                    source,
+                })?;
+
+                if !worker.hooks.is_empty() {
+                    worker
+                        .hooks
+                        .emit(JobInterruptedContext {
+                            job,
+                            worker_id: worker.worker_id.clone(),
+                            reason: FailureReason::ShutdownAborted,
+                        })
+                        .await;
+                }
+
+                return Ok(());
+            }
+
             let error_str = e.persisted_error();
             let will_retry = job.attempts() < job.max_attempts();
             let replacement_payload = e.replacement_payload().cloned();
