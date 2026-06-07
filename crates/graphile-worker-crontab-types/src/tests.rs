@@ -119,6 +119,21 @@ fn crontab_timer_constructors_validate_values() {
 }
 
 #[test]
+fn crontab_fields_display_names_and_bounds() {
+    let cases = [
+        (CrontabField::Minute, "minute", (0, 59)),
+        (CrontabField::Hour, "hour", (0, 23)),
+        (CrontabField::Day, "day", (1, 31)),
+        (CrontabField::Month, "month", (1, 12)),
+    ];
+
+    for (field, name, bounds) in cases {
+        assert_eq!(field.to_string(), name);
+        assert_eq!(field.bounds(), bounds);
+    }
+}
+
+#[test]
 fn crontab_value_match_value() {
     assert!(CrontabValue::Number(30).match_value(30, 0));
     assert!(CrontabValue::Range(8, 10).match_value(8, 0));

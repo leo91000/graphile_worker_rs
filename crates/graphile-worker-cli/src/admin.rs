@@ -90,3 +90,129 @@ pub(crate) fn print_admin_startup(args: &AdminArgs, auth: &AdminAuthConfig) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(auth: AdminAuthModeArg) -> AdminArgs {
+        AdminArgs {
+            listen: "127.0.0.1:5678".parse().unwrap(),
+            auth,
+            username: "admin".to_string(),
+            password: None,
+            bearer_token: None,
+            header_token: None,
+            header_name: "x-test-token".to_string(),
+            read_only: false,
+        }
+    }
+
+    #[test]
+    fn builds_admin_auth_modes() {
+        let mut basic = args(AdminAuthModeArg::Basic);
+        basic.password = Some("secret".to_string());
+        assert!(matches!(
+            build_admin_auth(&basic).unwrap(),
+            AdminAuthConfig::Basic {
+                generated_password: false,
+                ..
+            }
+        ));
+
+        assert!(matches!(
+            build_admin_auth(&args(AdminAuthModeArg::Basic)).unwrap(),
+            AdminAuthConfig::Basic {
+                generated_password: true,
+                ..
+            }
+        ));
+
+        let mut bearer = args(AdminAuthModeArg::Bearer);
+        bearer.bearer_token = Some("bearer-token".to_string());
+        assert!(matches!(
+            build_admin_auth(&bearer).unwrap(),
+            AdminAuthConfig::Bearer {
+                generated_token: false,
+                ..
+            }
+        ));
+        assert!(matches!(
+            build_admin_auth(&args(AdminAuthModeArg::Bearer)).unwrap(),
+            AdminAuthConfig::Bearer {
+                generated_token: true,
+                ..
+            }
+        ));
+
+        let mut header = args(AdminAuthModeArg::Header);
+        header.header_token = Some("header-token".to_string());
+        assert!(matches!(
+            build_admin_auth(&header).unwrap(),
+            AdminAuthConfig::Header {
+                generated_token: false,
+                ..
+            }
+        ));
+        assert!(matches!(
+            build_admin_auth(&args(AdminAuthModeArg::Header)).unwrap(),
+            AdminAuthConfig::Header {
+                generated_token: true,
+                ..
+            }
+        ));
+
+        assert!(matches!(
+            build_admin_auth(&args(AdminAuthModeArg::None)).unwrap(),
+            AdminAuthConfig::None
+        ));
+    }
+
+    #[test]
+    fn rejects_unsafe_or_invalid_admin_auth_config() {
+        let mut non_loopback = args(AdminAuthModeArg::None);
+        non_loopback.listen = "0.0.0.0:5678".parse().unwrap();
+        assert!(build_admin_auth(&non_loopback)
+            .unwrap_err()
+            .to_string()
+            .contains("loopback"));
+
+        let mut invalid_header = args(AdminAuthModeArg::Header);
+        invalid_header.header_name = "not a header".to_string();
+        assert!(build_admin_auth(&invalid_header).is_err());
+    }
+
+    #[test]
+    fn prints_admin_startup_for_each_auth_mode() {
+        let mut basic = args(AdminAuthModeArg::Basic);
+        basic.password = Some("secret".to_string());
+        let basic_auth = build_admin_auth(&basic).unwrap();
+        print_admin_startup(&basic, &basic_auth);
+
+        let generated_basic = args(AdminAuthModeArg::Basic);
+        let generated_basic_auth = build_admin_auth(&generated_basic).unwrap();
+        print_admin_startup(&generated_basic, &generated_basic_auth);
+
+        let mut bearer = args(AdminAuthModeArg::Bearer);
+        bearer.bearer_token = Some("bearer-token".to_string());
+        let bearer_auth = build_admin_auth(&bearer).unwrap();
+        print_admin_startup(&bearer, &bearer_auth);
+
+        let generated_bearer = args(AdminAuthModeArg::Bearer);
+        let generated_bearer_auth = build_admin_auth(&generated_bearer).unwrap();
+        print_admin_startup(&generated_bearer, &generated_bearer_auth);
+
+        let mut header = args(AdminAuthModeArg::Header);
+        header.header_token = Some("header-token".to_string());
+        let header_auth = build_admin_auth(&header).unwrap();
+        print_admin_startup(&header, &header_auth);
+
+        let generated_header = args(AdminAuthModeArg::Header);
+        let generated_header_auth = build_admin_auth(&generated_header).unwrap();
+        print_admin_startup(&generated_header, &generated_header_auth);
+
+        let none = args(AdminAuthModeArg::None);
+        let none_auth = build_admin_auth(&none).unwrap();
+        print_admin_startup(&none, &none_auth);
+    }
+}

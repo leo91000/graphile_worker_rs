@@ -124,3 +124,133 @@ fn pg_listener_result_to_signal(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use futures::stream;
+
+    use super::*;
+
+    fn pending_shutdown_signal() -> ShutdownSignal {
+        futures::future::pending::<()>().boxed().shared()
+    }
+
+    fn ready_shutdown_signal() -> ShutdownSignal {
+        futures::future::ready(()).boxed().shared()
+    }
+
+    async fn delayed_interval() -> runtime::Interval {
+        let mut interval = runtime::interval(Duration::from_secs(60));
+        interval.tick().await;
+        interval
+    }
+
+    #[tokio::test]
+    async fn polling_only_returns_shutdown_or_polling() {
+        let mut interval = runtime::interval(Duration::from_secs(60));
+        let mut shutdown = ready_shutdown_signal();
+        assert!(matches!(
+            next_signal_polling_only(&mut interval, &mut shutdown).await,
+            NextSignal::Shutdown
+        ));
+
+        let mut interval = runtime::interval(Duration::from_millis(1));
+        let mut shutdown = pending_shutdown_signal();
+        assert!(matches!(
+            next_signal_polling_only(&mut interval, &mut shutdown).await,
+            NextSignal::Source(StreamSource::Polling)
+        ));
+    }
+
+    #[tokio::test]
+    async fn internal_signal_returns_internal_or_closed() {
+        let mut interval = delayed_interval().await;
+        let mut shutdown = pending_shutdown_signal();
+        let (tx, rx) = runtime::channel(1);
+        tx.send(()).await.expect("internal send should succeed");
+
+        assert!(matches!(
+            next_signal_with_internal(&mut interval, None, &mut shutdown, &rx).await,
+            NextSignal::Source(StreamSource::Internal)
+        ));
+
+        drop(tx);
+        assert!(matches!(
+            next_signal_with_internal(&mut interval, None, &mut shutdown, &rx).await,
+            NextSignal::InternalClosed
+        ));
+    }
+
+    #[tokio::test]
+    async fn internal_signal_with_listener_still_accepts_internal_source() {
+        let mut interval = delayed_interval().await;
+        let mut shutdown = pending_shutdown_signal();
+        let (tx, rx) = runtime::channel(1);
+        let mut listener: NotificationStream = Box::pin(stream::pending());
+        tx.send(()).await.expect("internal send should succeed");
+
+        assert!(matches!(
+            next_signal_with_internal(&mut interval, Some(&mut listener), &mut shutdown, &rx).await,
+            NextSignal::Source(StreamSource::Internal)
+        ));
+    }
+
+    #[tokio::test]
+    async fn listener_signal_maps_notifications_and_errors() {
+        let mut interval = delayed_interval().await;
+        let mut shutdown = pending_shutdown_signal();
+        let notification = Notification {
+            channel: "jobs:insert".to_string(),
+            payload: String::new(),
+        };
+        let mut listener: NotificationStream = Box::pin(stream::once(async { Ok(notification) }));
+
+        assert!(matches!(
+            next_signal_with_listener(&mut interval, &mut listener, &mut shutdown).await,
+            NextSignal::Source(StreamSource::PgListener)
+        ));
+
+        let mut interval = delayed_interval().await;
+        let mut shutdown = pending_shutdown_signal();
+        let mut listener: NotificationStream =
+            Box::pin(stream::once(async { Err(DbError::new("listener failed")) }));
+
+        assert!(matches!(
+            next_signal_with_listener(&mut interval, &mut listener, &mut shutdown).await,
+            NextSignal::PgListenerClosed
+        ));
+
+        let mut interval = delayed_interval().await;
+        let mut shutdown = pending_shutdown_signal();
+        let mut listener: NotificationStream =
+            Box::pin(stream::empty::<std::result::Result<Notification, DbError>>());
+
+        assert!(matches!(
+            next_signal_with_listener(&mut interval, &mut listener, &mut shutdown).await,
+            NextSignal::PgListenerClosed
+        ));
+    }
+
+    #[test]
+    fn maps_raw_listener_results_to_signals() {
+        let notification = Notification {
+            channel: "jobs:insert".to_string(),
+            payload: String::new(),
+        };
+
+        assert!(matches!(
+            pg_listener_result_to_signal(Some(Ok(notification))),
+            NextSignal::Source(StreamSource::PgListener)
+        ));
+        assert!(matches!(
+            pg_listener_result_to_signal(Some(Err(DbError::new("listener failed")))),
+            NextSignal::PgListenerClosed
+        ));
+        assert!(matches!(
+            pg_listener_result_to_signal(None),
+            NextSignal::PgListenerClosed
+        ));
+    }
+}
