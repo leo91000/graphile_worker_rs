@@ -7,15 +7,24 @@ use super::filters::{filter_values, job_search_text, job_state, matches_column};
 use super::modals::ModalView;
 use super::types::{AdminClientConfig, JobState};
 
-mod panels;
+mod auth;
+mod jobs;
+mod maintenance;
+mod sidebar;
 mod signals;
 mod state;
-use panels::{AuthTokenPanel, JobsPanel, MaintenancePanel, Sidebar, Topbar};
+mod topbar;
+use auth::AuthTokenPanel;
+use jobs::JobsPanel;
+use maintenance::MaintenancePanel;
+use sidebar::Sidebar;
 use signals::AdminSignals;
+use topbar::Topbar;
 
 #[component]
 pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
     let signals = AdminSignals::new();
+    let refresh = signals.refresh();
     let jobs = signals.jobs;
     let overview = signals.overview;
     let selected_jobs = signals.selected_jobs;
@@ -26,17 +35,13 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
     let queue_filter = signals.queue_filter;
     let key_filter = signals.key_filter;
     let worker_filter = signals.worker_filter;
-    let limit = signals.limit;
     let modal = signals.modal;
     let toast = signals.toast;
-    let token = signals.token;
-    let refreshing = signals.refreshing;
-    let refresh_pending = signals.refresh_pending;
     let theme = signals.theme;
     let accent = signals.accent;
     let compact = signals.compact;
     let auto_refresh_enabled = signals.auto_refresh_enabled;
-    let auto_refresh_timer = signals.auto_refresh_timer;
+    let auto_refresh_timer = signals.auto_refresh_timer.clone();
 
     let filtered_jobs = Memo::new(move |_| {
         let search = search.get().trim().to_lowercase();
@@ -76,17 +81,7 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
         apply_theme(&theme.get(), &accent.get(), compact.get());
     });
 
-    refresh_data(
-        config.clone(),
-        token,
-        limit,
-        overview,
-        jobs,
-        selected_jobs,
-        toast,
-        refreshing,
-        refresh_pending,
-    );
+    refresh_data(config.clone(), refresh);
 
     view! {
         <Sidebar config=config.clone() />
@@ -94,14 +89,7 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
         <main class="gw-main">
             <Topbar
                 config=config.clone()
-                token=token
-                limit=limit
-                overview=overview
-                jobs=jobs
-                selected_jobs=selected_jobs
-                toast=toast
-                refreshing=refreshing
-                refresh_pending=refresh_pending
+                refresh=refresh
                 theme=theme
                 accent=accent
                 compact=compact
@@ -113,26 +101,15 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
                 <AuthTokenPanel
                     show_token_login=show_token_login
                     config=config.clone()
-                    token=token
-                    limit=limit
-                    overview=overview
-                    jobs=jobs
-                    selected_jobs=selected_jobs
-                    toast=toast
-                    refreshing=refreshing
-                    refresh_pending=refresh_pending
+                    refresh=refresh
                 />
 
                 <Overview stats=move || overview.get().stats />
 
                 <JobsPanel
                     config=config.clone()
-                    token=token
-                    limit=limit
-                    overview=overview
-                    jobs=jobs
+                    refresh=refresh
                     filtered_jobs=filtered_jobs
-                    selected_jobs=selected_jobs
                     selected_count=selected_count
                     all_visible_selected=all_visible_selected
                     active_state=active_state
@@ -142,9 +119,6 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
                     key_filter=key_filter
                     worker_filter=worker_filter
                     modal=modal
-                    toast=toast
-                    refreshing=refreshing
-                    refresh_pending=refresh_pending
                 />
 
                 <section id="queues-workers" class="mt-4 grid gap-4 lg:grid-cols-2">
@@ -152,40 +126,19 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
                     <div class="grid gap-4">
                         <ActiveWorkersPanel
                             config=config.clone()
-                            token=token
-                            overview=overview
-                            jobs=jobs
-                            selected_jobs=selected_jobs
-                            limit=limit
-                            toast=toast
-                            refreshing=refreshing
-                            refresh_pending=refresh_pending
+                            refresh=refresh
                         />
                         <WorkersPanel
                             config=config.clone()
-                            token=token
-                            overview=overview
-                            jobs=jobs
-                            selected_jobs=selected_jobs
                             selected_workers=selected_workers
-                            limit=limit
-                            toast=toast
-                            refreshing=refreshing
-                            refresh_pending=refresh_pending
+                            refresh=refresh
                         />
                     </div>
                 </section>
 
                 <MaintenancePanel
                     config=config.clone()
-                    token=token
-                    limit=limit
-                    overview=overview
-                    jobs=jobs
-                    selected_jobs=selected_jobs
-                    toast=toast
-                    refreshing=refreshing
-                    refresh_pending=refresh_pending
+                    refresh=refresh
                 />
             </div>
         </main>
@@ -193,14 +146,7 @@ pub(super) fn AdminApp(config: AdminClientConfig) -> impl IntoView {
         <ModalView
             modal=modal
             config=config
-            token=token
-            overview=overview
-            jobs=jobs
-            selected_jobs=selected_jobs
-            limit=limit
-            toast=toast
-            refreshing=refreshing
-            refresh_pending=refresh_pending
+            refresh=refresh
         />
         <div class="gw-toast" data-open=move || toast.get().is_some().to_string()>{move || toast.get().unwrap_or_default()}</div>
     }

@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use super::WorkerOptions;
+use graphile_worker_database::Schema;
 
 impl WorkerOptions {
     /// Sets the PostgreSQL schema name for Graphile Worker tables.
@@ -14,7 +15,7 @@ impl WorkerOptions {
     ///
     /// # Default
     /// If not specified, the schema name defaults to "graphile_worker".
-    pub fn schema(mut self, value: &str) -> Self {
+    pub fn schema(mut self, value: impl Into<Schema>) -> Self {
         self.schema = Some(value.into());
         self
     }

@@ -1,4 +1,4 @@
-use graphile_worker::{sql::return_jobs::return_jobs, JobSpec, JobSpecBuilder};
+use graphile_worker::{sql::return_jobs::batch::return_jobs, JobSpec, JobSpecBuilder};
 
 mod helpers;
 
@@ -50,7 +50,7 @@ async fn return_jobs_unlocks_mixed_queue_jobs() {
         return_jobs(
             &test_db.database,
             &[queued, regular],
-            "graphile_worker",
+            &graphile_worker::Schema::default(),
             "return-worker",
         )
         .await

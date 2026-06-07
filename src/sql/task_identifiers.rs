@@ -1,4 +1,4 @@
-use graphile_worker_database::{DbExecutorArg, DbValue};
+use graphile_worker_database::{DbExecutorArg, DbValue, Schema};
 use indoc::formatdoc;
 
 use crate::errors::Result;
@@ -20,14 +20,17 @@ fn task_rows_to_details(tasks: Vec<TaskRow>) -> TaskDetails {
 #[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn get_tasks_details(
     mut executor: impl DbExecutorArg,
-    escaped_schema: &str,
+    schema: &Schema,
     task_names: Vec<String>,
 ) -> Result<TaskDetails> {
     if task_names.is_empty() {
         return Ok(TaskDetails::new());
     }
 
-    let insert_tasks_query = format!("insert into {escaped_schema}._private_tasks as tasks (identifier) select unnest($1::text[]) on conflict do nothing");
+    let tasks = schema.private_table("tasks");
+    let insert_tasks_query = format!(
+        "insert into {tasks} as tasks (identifier) select unnest($1::text[]) on conflict do nothing"
+    );
     executor
         .execute(
             &insert_tasks_query,
@@ -36,7 +39,7 @@ pub async fn get_tasks_details(
         .await?;
 
     let select_tasks_query = formatdoc!(
-        "select id, identifier from {escaped_schema}._private_tasks as tasks where identifier = any($1::text[])"
+        "select id, identifier from {tasks} as tasks where identifier = any($1::text[])"
     );
     let tasks: Vec<TaskRow> = executor
         .fetch_all(

@@ -1,5 +1,5 @@
 use graphile_worker::{
-    worker_utils::CleanupTask, IntoTaskHandlerResult, JobSpec, TaskHandler, WorkerContext,
+    worker_utils::types::CleanupTask, IntoTaskHandlerResult, JobSpec, TaskHandler, WorkerContext,
     WorkerContextExt,
 };
 use serde::{Deserialize, Serialize};
@@ -19,7 +19,8 @@ async fn ctx_cleanup_refreshes_task_identifiers_and_jobs_run() {
         const IDENTIFIER: &'static str = "cleanup";
 
         async fn run(self, ctx: WorkerContext) -> impl IntoTaskHandlerResult {
-            ctx.cleanup(&[CleanupTask::GcTaskIdentifiers])
+            ctx.utils()
+                .cleanup(&[CleanupTask::GcTaskIdentifiers])
                 .await
                 .map_err(|e| e.to_string())?;
             Ok::<(), String>(())

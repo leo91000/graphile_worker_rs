@@ -5,11 +5,14 @@ use std::time::Duration;
 use graphile_worker::recovery::job_has_resilient_flag;
 use graphile_worker::sql::{
     recover_workers::{get_locked_jobs_for_recovery, recover_dead_worker_jobs},
-    return_jobs::return_job_for_recovery,
+    return_jobs::recovery::return_job_for_recovery,
     worker_heartbeat::{
+        lock::try_acquire_sweep_lock,
+        registration::{worker_deregister, worker_heartbeat},
+        stale::{
         delete_stale_workers, get_worker_last_heartbeat, list_orphan_locked_workers,
-        list_stale_workers, try_acquire_sweep_lock, worker_deregister, worker_heartbeat,
-        worker_holds_resilient_locks,
+            list_stale_workers, worker_holds_resilient_locks,
+        },
     },
 };
 use graphile_worker::{

@@ -16,8 +16,8 @@ use graphile_worker_shutdown_signal::ShutdownSignal;
 use crate::streams::StreamSource;
 
 use super::errors::{Redacted, RunJobError};
-use super::job_execution::panic_payload_to_string;
 use super::release::release_job;
+use super::task_execution::panic_payload_to_string;
 use super::WorkerRunner;
 
 #[derive(Debug)]
@@ -148,7 +148,7 @@ async fn release_job_returns_error_when_replacement_payload_cannot_be_persisted(
         worker_id: "worker".to_string(),
         jobs: HashMap::new(),
         database,
-        escaped_schema: "graphile_worker".to_string(),
+        schema: graphile_worker_database::Schema::new("graphile_worker"),
         task_details: Default::default(),
         forbidden_flags: Vec::new(),
         use_local_time: false,

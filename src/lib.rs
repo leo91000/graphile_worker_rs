@@ -36,9 +36,6 @@ pub mod builder;
 /// Error types used throughout the crate
 pub mod errors;
 
-/// Job specification and builder for configuring jobs
-pub mod job_spec;
-
 /// Worker crash and shutdown recovery
 pub mod recovery;
 
@@ -61,16 +58,12 @@ pub mod sql;
 /// Job stream management for processing jobs
 pub mod streams;
 
-/// General utility functions
-pub mod utils;
-
 pub mod context_ext;
 pub mod cron;
 mod tracing;
 /// Utility functions for job management
 pub mod worker_utils;
 
-pub use crate::job_spec::*;
 pub use cron::{Cron, CronBuilder};
 pub use graphile_worker_crontab_parser::parse_crontab;
 pub use graphile_worker_crontab_types::JobKeyMode as CronJobKeyMode;
@@ -80,6 +73,7 @@ pub use graphile_worker_crontab_types::{
 pub use graphile_worker_ctx::*;
 pub use graphile_worker_database::*;
 pub use graphile_worker_job::*;
+pub use graphile_worker_job_spec::*;
 pub use graphile_worker_lifecycle_hooks::*;
 pub use graphile_worker_task_handler::*;
 
@@ -93,5 +87,5 @@ pub use recovery::{
     INFRASTRUCTURE_RESILIENT_FLAG,
 };
 pub use runner::Worker;
-pub use sql::add_job::RawJobSpec;
-pub use worker_utils::WorkerUtils;
+pub use sql::add_job::types::RawJobSpec;
+pub use worker_utils::client::WorkerUtils;

@@ -10,7 +10,7 @@ mod nom_crontab_timer;
 mod nom_task_identifier;
 
 #[derive(Error, Debug)]
-#[error("An error occured while parsing crontab : \n{msg}")]
+#[error("An error occurred while parsing crontab : \n{msg}")]
 pub struct CrontabParseError {
     pub msg: String,
     pub input: String,

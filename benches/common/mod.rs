@@ -37,7 +37,7 @@ impl BenchDatabase {
     }
 
     pub fn worker_utils(&self) -> WorkerUtils {
-        WorkerUtils::new(self.database.clone(), "graphile_worker".into())
+        WorkerUtils::new(self.database.clone(), "graphile_worker")
     }
 
     pub async fn clear_jobs(&self) {

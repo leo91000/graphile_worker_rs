@@ -1,17 +1,18 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use graphile_worker_database::{DbExecutorArg, DbParams, DbValue};
+use graphile_worker_database::{DbExecutorArg, DbParams, DbValue, Schema};
 use graphile_worker_job::Job;
 use indoc::formatdoc;
 
 use crate::errors::Result;
 use crate::sql::duration::duration_as_millis_i64;
-use crate::sql::dynamic::{get_required, DynamicSchema, PrivateTable, WorkerFunction};
+use crate::sql::rows::get_required;
+use crate::sql::schema_names::{PrivateTable, WorkerFunction};
 
 pub async fn recover_dead_worker_jobs(
     mut executor: impl DbExecutorArg,
-    escaped_schema: &str,
+    schema: &Schema,
     worker_ids: &[String],
     recovery_delay: Duration,
 ) -> Result<i32> {
@@ -19,8 +20,7 @@ pub async fn recover_dead_worker_jobs(
         return Ok(0);
     }
 
-    let recover_dead_worker_jobs =
-        DynamicSchema::new(escaped_schema).function(WorkerFunction::RecoverDeadWorkerJobs);
+    let recover_dead_worker_jobs = WorkerFunction::RecoverDeadWorkerJobs.qualified(schema);
     let sql = formatdoc!(
         r#"
             SELECT {recover_dead_worker_jobs}(
@@ -45,16 +45,15 @@ pub async fn recover_dead_worker_jobs(
 
 pub async fn get_locked_jobs_for_recovery(
     mut executor: impl DbExecutorArg,
-    escaped_schema: &str,
+    schema: &Schema,
     worker_ids: &[String],
 ) -> Result<Vec<Arc<Job>>> {
     if worker_ids.is_empty() {
         return Ok(Vec::new());
     }
 
-    let schema = DynamicSchema::new(escaped_schema);
-    let jobs = schema.private_table(PrivateTable::Jobs);
-    let tasks = schema.private_table(PrivateTable::Tasks);
+    let jobs = PrivateTable::Jobs.qualified(schema);
+    let tasks = PrivateTable::Tasks.qualified(schema);
     let sql = formatdoc!(
         r#"
             SELECT jobs.*, tasks.identifier AS task_identifier
