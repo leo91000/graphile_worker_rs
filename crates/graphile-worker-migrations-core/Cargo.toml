@@ -1,0 +1,13 @@
+[package]
+name = "graphile_worker_migrations_core"
+version = "0.1.0"
+edition = "2021"
+license-file = "LICENSE.md"
+description = "Core migration types for graphile_worker_migrations"
+homepage = "https://docs.rs/graphile_worker_migrations"
+documentation = "https://docs.rs/graphile_worker_migrations"
+repository = "https://github.com/leo91000/graphile_worker_rs"
+keywords = []
+categories = []
+
+[dependencies]

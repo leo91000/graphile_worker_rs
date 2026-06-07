@@ -1,3 +1,5 @@
+-- graphile-worker-rs:breaking
+
 create table :GRAPHILE_WORKER_SCHEMA.job_queues (
     queue_name text not null primary key,
     job_count int not null,

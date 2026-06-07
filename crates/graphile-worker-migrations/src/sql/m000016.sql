@@ -1,3 +1,5 @@
+-- graphile-worker-rs:breaking
+
 ALTER TABLE :GRAPHILE_WORKER_SCHEMA.jobs RENAME TO _private_jobs;
 
 -- graphile-worker-rs:statement

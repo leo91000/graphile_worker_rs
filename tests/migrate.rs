@@ -2,12 +2,7 @@
 use graphile_worker::{DbExecutor, DbParams, DbValue};
 use graphile_worker_migrations::{
     migrate,
-    sql::{
-        m000001::M000001_MIGRATION, m000002::M000002_MIGRATION, m000003::M000003_MIGRATION,
-        m000004::M000004_MIGRATION, m000005::M000005_MIGRATION, m000006::M000006_MIGRATION,
-        m000007::M000007_MIGRATION, m000008::M000008_MIGRATION, m000009::M000009_MIGRATION,
-        m000010::M000010_MIGRATION, GraphileWorkerMigration, MigrationStatements,
-    },
+    sql::{GraphileWorkerMigration, MigrationExecuteExt, GRAPHILE_WORKER_MIGRATIONS},
     MigrateError,
 };
 use helpers::with_test_db;

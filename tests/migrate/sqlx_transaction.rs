@@ -16,10 +16,10 @@ async fn migration_execute_supports_sqlx_transaction() {
         let migration = GraphileWorkerMigration {
             name: "m000001_sqlx_transaction",
             is_breaking: false,
-            stmts: MigrationStatements::Static(&[
+            stmts: &[
                 "CREATE TABLE :GRAPHILE_WORKER_SCHEMA.sqlx_transaction_migration_test(id INT PRIMARY KEY)",
                 "INSERT INTO :GRAPHILE_WORKER_SCHEMA.sqlx_transaction_migration_test(id) VALUES (1)",
-            ]),
+            ],
         };
 
         let mut tx = test_db.test_pool.begin().await.unwrap();

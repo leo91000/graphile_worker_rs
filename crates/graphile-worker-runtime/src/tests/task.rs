@@ -1,3 +1,4 @@
+#[cfg(all(feature = "runtime-tokio", not(feature = "runtime-async-std")))]
 use std::time::Duration;
 
 use crate::{spawn, JoinError};
