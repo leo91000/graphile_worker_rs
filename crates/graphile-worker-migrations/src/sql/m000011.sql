@@ -1,3 +1,5 @@
+-- graphile-worker-rs:breaking
+
 lock table :GRAPHILE_WORKER_SCHEMA.jobs;
 
 -- graphile-worker-rs:statement

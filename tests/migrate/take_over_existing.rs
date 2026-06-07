@@ -15,7 +15,7 @@ async fn migration_can_take_over_from_pre_existing_migrations_table() {
         for stmt in initial_stmts {
             tx.execute(stmt, DbParams::new()).await.unwrap();
         }
-        M000001_MIGRATION
+        GRAPHILE_WORKER_MIGRATIONS[0]
             .execute(&mut tx, "graphile_worker")
             .await
             .expect("Failed to execute migration");

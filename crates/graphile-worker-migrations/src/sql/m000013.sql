@@ -1,3 +1,5 @@
+-- graphile-worker-rs:breaking
+
 alter type :GRAPHILE_WORKER_SCHEMA.job_spec alter attribute max_attempts type smallint;
 
 -- graphile-worker-rs:statement

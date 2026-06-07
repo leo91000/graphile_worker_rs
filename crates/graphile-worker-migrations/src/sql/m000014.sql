@@ -1,3 +1,5 @@
+-- graphile-worker-rs:breaking
+
 DROP FUNCTION :GRAPHILE_WORKER_SCHEMA.add_job;
 
 -- graphile-worker-rs:statement

@@ -14,18 +14,7 @@ async fn throws_helpful_error_message_in_migration_11() {
             .unwrap();
 
         // Manually run the first 10 migrations
-        let migrations = &[
-            M000001_MIGRATION,
-            M000002_MIGRATION,
-            M000003_MIGRATION,
-            M000004_MIGRATION,
-            M000005_MIGRATION,
-            M000006_MIGRATION,
-            M000007_MIGRATION,
-            M000008_MIGRATION,
-            M000009_MIGRATION,
-            M000010_MIGRATION,
-        ];
+        let migrations = &GRAPHILE_WORKER_MIGRATIONS[..10];
         let mut tx = test_db.database.begin().await.unwrap();
         for migration in migrations {
             migration.execute(&mut tx, "graphile_worker").await.unwrap();

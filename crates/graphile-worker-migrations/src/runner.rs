@@ -3,7 +3,7 @@ use tracing::{info, warn};
 
 use crate::error::MigrateError;
 use crate::pg_version::check_postgres_version;
-use crate::sql::GRAPHILE_WORKER_MIGRATIONS;
+use crate::sql::{MigrationExecuteExt, GRAPHILE_WORKER_MIGRATIONS};
 use crate::state::get_last_migration;
 
 /// Runs the migrations against the database.

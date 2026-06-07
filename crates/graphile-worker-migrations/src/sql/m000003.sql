@@ -1,3 +1,5 @@
+-- graphile-worker-rs:breaking
+
 alter table :GRAPHILE_WORKER_SCHEMA.jobs alter column queue_name drop not null;
 
 -- graphile-worker-rs:statement

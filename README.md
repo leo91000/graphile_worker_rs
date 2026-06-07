@@ -161,23 +161,20 @@ owns the shutdown lifecycle, disable the built-in listeners and call
 `Worker::request_shutdown()` when your orchestrator asks the worker to stop:
 
 ```rust,ignore
-use futures::FutureExt;
-
 let worker = graphile_worker::WorkerOptions::default()
     .listen_os_shutdown_signals(false) // prevent installing Ctrl+C handlers
     // ... other configuration
     .init()
     .await?;
 
-let run_loop = worker.run().fuse();
-let shutdown = on_shutdown().fuse();
-futures::pin_mut!(run_loop, shutdown);
+let run_loop = worker.run();
+tokio::pin!(run_loop);
 
-futures::select_biased! {
+tokio::select! {
     // Main worker loop
-    result = run_loop => result?,
+    result = &mut run_loop => result?,
     // Notify the worker when the host framework wants to stop
-    () = shutdown => {
+    () = on_shutdown() => {
         worker.request_shutdown();
         run_loop.await?; // drain gracefully before returning
     }

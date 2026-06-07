@@ -43,26 +43,25 @@ async fn fetch_all_with_client(
     rows.into_iter().map(tokio_row_to_db_row).collect()
 }
 
-macro_rules! impl_executor_arg_for_generic_client {
-    ($target:ty, $client:expr) => {
-        impl DbExecutorArg for $target {
-            fn execute<'a>(
-                &'a mut self,
-                sql: &'a str,
-                params: DbParams,
-            ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
-                Box::pin(async move { execute_with_client($client, sql, params).await })
-            }
+async fn execute_with_deadpool_client(
+    client: &deadpool_postgres::Client,
+    sql: &str,
+    params: DbParams,
+) -> Result<u64, DbError> {
+    let params = boxed_params(params);
+    let refs = param_refs(&params);
+    (**client).execute(sql, &refs).await.map_err(Into::into)
+}
 
-            fn fetch_all<'a>(
-                &'a mut self,
-                sql: &'a str,
-                params: DbParams,
-            ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
-                Box::pin(async move { fetch_all_with_client($client, sql, params).await })
-            }
-        }
-    };
+async fn fetch_all_with_deadpool_client(
+    client: &deadpool_postgres::Client,
+    sql: &str,
+    params: DbParams,
+) -> Result<Vec<DbRow>, DbError> {
+    let params = boxed_params(params);
+    let refs = param_refs(&params);
+    let rows = (**client).query(sql, &refs).await?;
+    rows.into_iter().map(tokio_row_to_db_row).collect()
 }
 
 impl DbExecutor for TokioPostgresDatabase {
@@ -73,7 +72,7 @@ impl DbExecutor for TokioPostgresDatabase {
     ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
         Box::pin(async move {
             let client = self.pool.get().await?;
-            execute_with_client(&*client, sql, params).await
+            execute_with_deadpool_client(&client, sql, params).await
         })
     }
 
@@ -84,15 +83,82 @@ impl DbExecutor for TokioPostgresDatabase {
     ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
         Box::pin(async move {
             let client = self.pool.get().await?;
-            fetch_all_with_client(&*client, sql, params).await
+            fetch_all_with_deadpool_client(&client, sql, params).await
         })
     }
 }
 
-impl_executor_arg_for_generic_client!(&Client, *self);
-impl_executor_arg_for_generic_client!(&Transaction<'_>, *self);
-impl_executor_arg_for_generic_client!(&mut Transaction<'_>, &**self);
-impl_executor_arg_for_generic_client!(&deadpool_postgres::Client, &**self);
+impl DbExecutorArg for &Client {
+    fn execute<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
+        Box::pin(async move { execute_with_client(*self, sql, params).await })
+    }
+
+    fn fetch_all<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
+        Box::pin(async move { fetch_all_with_client(*self, sql, params).await })
+    }
+}
+
+impl DbExecutorArg for &Transaction<'_> {
+    fn execute<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
+        Box::pin(async move { execute_with_client(*self, sql, params).await })
+    }
+
+    fn fetch_all<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
+        Box::pin(async move { fetch_all_with_client(*self, sql, params).await })
+    }
+}
+
+impl DbExecutorArg for &mut Transaction<'_> {
+    fn execute<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
+        Box::pin(async move { execute_with_client(&**self, sql, params).await })
+    }
+
+    fn fetch_all<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
+        Box::pin(async move { fetch_all_with_client(&**self, sql, params).await })
+    }
+}
+
+impl DbExecutorArg for &deadpool_postgres::Client {
+    fn execute<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
+        Box::pin(async move { execute_with_deadpool_client(*self, sql, params).await })
+    }
+
+    fn fetch_all<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
+        Box::pin(async move { fetch_all_with_deadpool_client(*self, sql, params).await })
+    }
+}
 
 impl DbExecutorArg for &Pool {
     fn execute<'a>(
@@ -102,7 +168,7 @@ impl DbExecutorArg for &Pool {
     ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
         Box::pin(async move {
             let client = self.get().await?;
-            execute_with_client(&*client, sql, params).await
+            execute_with_deadpool_client(&client, sql, params).await
         })
     }
 
@@ -113,7 +179,7 @@ impl DbExecutorArg for &Pool {
     ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
         Box::pin(async move {
             let client = self.get().await?;
-            fetch_all_with_client(&*client, sql, params).await
+            fetch_all_with_deadpool_client(&client, sql, params).await
         })
     }
 }
