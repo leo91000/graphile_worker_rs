@@ -58,3 +58,21 @@ impl CronInput for &String {
         self.as_str().append_to(options)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn string_reference_input_appends_parsed_crontabs() {
+        let input = String::from("0 8 * * * send_digest");
+        let options = (&input)
+            .append_to(WorkerOptions::default())
+            .expect("valid crontab");
+
+        let crontabs = options.crontabs.expect("crontabs should be set");
+
+        assert_eq!(crontabs.len(), 1);
+        assert_eq!(crontabs[0].task_identifier, "send_digest");
+    }
+}

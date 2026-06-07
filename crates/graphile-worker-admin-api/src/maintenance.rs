@@ -39,3 +39,36 @@ impl CleanupTaskName {
         ]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cleanup_task_name_all_lists_every_cleanup_task() {
+        let tasks = CleanupTaskName::all();
+
+        assert_eq!(tasks.len(), 3);
+        assert!(matches!(
+            tasks.as_slice(),
+            [
+                CleanupTaskName::DeletePermanentlyFailedJobs,
+                CleanupTaskName::GcTaskIdentifiers,
+                CleanupTaskName::GcJobQueues
+            ]
+        ));
+    }
+
+    #[test]
+    fn maintenance_request_deserializes_defaults() {
+        let request: MaintenanceRequest =
+            serde_json::from_value(serde_json::json!({ "action": "cleanup" })).unwrap();
+
+        assert!(matches!(request.action, MaintenanceAction::Cleanup));
+        assert!(request.cleanup_tasks.is_empty());
+        assert!(request.worker_ids.is_empty());
+        assert!(!request.dry_run);
+        assert!(request.sweep_threshold_secs.is_none());
+        assert!(request.recovery_delay_secs.is_none());
+    }
+}

@@ -55,6 +55,13 @@ fn test_query_with_invalid_fill() {
 }
 
 #[test]
+fn test_query_with_invalid_query_string() {
+    let input = "?max=not-a-number foo";
+
+    assert!(nom_crontab_opts.parse(input).is_err());
+}
+
+#[test]
 fn parse_job_key() {
     let input = "?job_key=foo";
     assert_eq!(

@@ -76,3 +76,62 @@ pub async fn get_job(pool: &PgPool, schema: &Schema, id: i64) -> Result<ListedJo
             error => error.into(),
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use sqlx::postgres::PgPoolOptions;
+
+    use super::*;
+    use crate::jobs::JobState;
+
+    fn lazy_pool() -> PgPool {
+        PgPoolOptions::new()
+            .connect_lazy("postgres://postgres:postgres@localhost/postgres")
+            .expect("valid database url")
+    }
+
+    fn params(limit: i64, offset: i64) -> ListJobsParams {
+        ListJobsParams {
+            state: JobState::All,
+            identifier: None,
+            queue: None,
+            search: None,
+            limit,
+            offset,
+        }
+    }
+
+    #[tokio::test]
+    async fn rejects_negative_pagination_before_querying() {
+        let pool = lazy_pool();
+        let schema = Schema::default();
+
+        let limit_error = list_jobs(
+            &pool,
+            &schema,
+            &params(-1, 0),
+            ListJobsQueryOptions::default(),
+        )
+        .await
+        .expect_err("negative limit should fail");
+        assert!(matches!(limit_error, AdminQueryError::BadRequest(_)));
+        assert_eq!(
+            limit_error.to_string(),
+            "limit must be greater than or equal to 0"
+        );
+
+        let offset_error = list_jobs(
+            &pool,
+            &schema,
+            &params(50, -1),
+            ListJobsQueryOptions::default(),
+        )
+        .await
+        .expect_err("negative offset should fail");
+        assert!(matches!(offset_error, AdminQueryError::BadRequest(_)));
+        assert_eq!(
+            offset_error.to_string(),
+            "offset must be greater than or equal to 0"
+        );
+    }
+}

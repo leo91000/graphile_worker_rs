@@ -153,3 +153,21 @@ impl From<JobKeyModeArg> for JobKeyMode {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn job_key_mode_arg_maps_to_worker_mode() {
+        let cases = [
+            (JobKeyModeArg::Replace, JobKeyMode::Replace),
+            (JobKeyModeArg::PreserveRunAt, JobKeyMode::PreserveRunAt),
+            (JobKeyModeArg::UnsafeDedupe, JobKeyMode::UnsafeDedupe),
+        ];
+
+        for (arg, expected) in cases {
+            assert_eq!(JobKeyMode::from(arg), expected);
+        }
+    }
+}

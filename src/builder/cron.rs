@@ -83,3 +83,24 @@ impl WorkerOptions {
         self.with_cron(input)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn with_crons_appends_multiple_crontabs() {
+        let options = WorkerOptions::default().with_crons([
+            Crontab::new(Default::default(), "send_digest"),
+            Crontab::new(Default::default(), "sync_metrics"),
+        ]);
+
+        let crontabs = options.crontabs.expect("crontabs should be set");
+        let identifiers = crontabs
+            .into_iter()
+            .map(|crontab| crontab.task_identifier)
+            .collect::<Vec<_>>();
+
+        assert_eq!(identifiers, ["send_digest", "sync_metrics"]);
+    }
+}

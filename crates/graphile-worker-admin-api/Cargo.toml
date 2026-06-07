@@ -22,3 +22,7 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 sqlx = { workspace = true, optional = true, features = ["postgres"] }
+
+[dev-dependencies]
+sqlx = { workspace = true, features = ["postgres", "runtime-tokio"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
