@@ -101,10 +101,6 @@ pub struct WorkerOptions {
     /// Lifecycle hooks for observing and intercepting worker events
     hooks: HookRegistry,
 
-    /// Whether to automatically install OS-level shutdown signal listeners.
-    /// Defaults to `true` when not explicitly configured.
-    listen_os_shutdown_signals: Option<bool>,
-
     /// Configuration for the local queue (batch-fetching jobs).
     /// When set, enables LocalQueue for improved throughput.
     local_queue_config: Option<LocalQueueConfig>,
@@ -119,8 +115,11 @@ pub struct WorkerOptions {
     /// Retryable failures are still processed individually.
     fail_job_batch_delay: Option<Duration>,
 
-    /// Worker crash and shutdown recovery configuration.
+    /// Dead worker recovery configuration.
     worker_recovery_config: Option<crate::recovery::WorkerRecoveryConfig>,
+
+    /// Worker shutdown behavior.
+    worker_shutdown_config: Option<crate::WorkerShutdownConfig>,
 }
 
 impl WorkerOptions {

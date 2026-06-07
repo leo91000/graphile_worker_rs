@@ -6,7 +6,7 @@ use graphile_worker_job::Job;
 /// longer sweep threshold before being recovered from a seemingly-dead worker.
 pub const INFRASTRUCTURE_RESILIENT_FLAG: &str = "infrastructure_resilient";
 
-/// Worker crash/shutdown recovery configuration.
+/// Dead worker recovery configuration.
 ///
 /// Timing options align with [Graphile Worker Pro](https://worker.graphile.org/docs/pro/recovery):
 /// - `heartbeat_interval` — `heartbeatInterval`
@@ -20,12 +20,8 @@ pub struct WorkerRecoveryConfig {
     pub sweep_interval: Duration,
     /// Time since last heartbeat before a worker is deemed inactive (`sweepThreshold`).
     pub sweep_threshold: Duration,
-    /// Delay before recovered jobs are eligible to run again.
+    /// Delay before jobs recovered from dead workers are eligible to run again.
     pub recovery_delay: Duration,
-    /// Time to let in-flight tasks finish after a shutdown signal.
-    pub shutdown_grace_period: Duration,
-    /// Delay before shutdown-aborted jobs are retried.
-    pub shutdown_recovery_delay: Duration,
     /// Multiplier applied to `sweep_threshold` when a worker holds jobs with resilient flags.
     pub resilient_sweep_threshold_multiplier: u32,
     /// Job flags that trigger the extended sweep threshold.
@@ -41,8 +37,6 @@ impl Default for WorkerRecoveryConfig {
             sweep_interval: Duration::from_secs(60),
             sweep_threshold: Duration::from_secs(5 * 60),
             recovery_delay: Duration::from_secs(30),
-            shutdown_grace_period: Duration::from_secs(5),
-            shutdown_recovery_delay: Duration::from_secs(30),
             resilient_sweep_threshold_multiplier: 3,
             resilient_job_flags: vec![INFRASTRUCTURE_RESILIENT_FLAG.to_string()],
             enabled: false,
@@ -71,18 +65,6 @@ impl WorkerRecoveryConfig {
 
     pub fn recovery_delay(mut self, value: Duration) -> Self {
         self.recovery_delay = value;
-        self.enabled = true;
-        self
-    }
-
-    pub fn shutdown_grace_period(mut self, value: Duration) -> Self {
-        self.shutdown_grace_period = value;
-        self.enabled = true;
-        self
-    }
-
-    pub fn shutdown_recovery_delay(mut self, value: Duration) -> Self {
-        self.shutdown_recovery_delay = value;
         self.enabled = true;
         self
     }

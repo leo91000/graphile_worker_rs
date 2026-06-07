@@ -161,8 +161,11 @@ owns the shutdown lifecycle, disable the built-in listeners and call
 `Worker::request_shutdown()` when your orchestrator asks the worker to stop:
 
 ```rust,ignore
+let shutdown = graphile_worker::WorkerShutdownConfig::default()
+    .listen_os_shutdown_signals(false);
+
 let worker = graphile_worker::WorkerOptions::default()
-    .listen_os_shutdown_signals(false) // prevent installing Ctrl+C handlers
+    .worker_shutdown(shutdown) // prevent installing Ctrl+C handlers
     // ... other configuration
     .init()
     .await?;
@@ -190,7 +193,7 @@ background sweeper recovers jobs locked by workers that have stopped
 heartbeating.
 
 ```rust,ignore
-use graphile_worker::{WorkerOptions, WorkerRecoveryConfig};
+use graphile_worker::{WorkerOptions, WorkerRecoveryConfig, WorkerShutdownConfig};
 use std::time::Duration;
 
 let recovery = WorkerRecoveryConfig::default()
@@ -198,12 +201,16 @@ let recovery = WorkerRecoveryConfig::default()
     .heartbeat_interval(Duration::from_secs(30))
     .sweep_interval(Duration::from_secs(60))
     .sweep_threshold(Duration::from_secs(300))
-    .recovery_delay(Duration::from_secs(30))
-    .shutdown_grace_period(Duration::from_secs(5))
-    .shutdown_recovery_delay(Duration::from_secs(30));
+    .recovery_delay(Duration::from_secs(30));
+
+let shutdown = WorkerShutdownConfig::default()
+    .listen_os_shutdown_signals(true)
+    .grace_period(Duration::from_secs(5))
+    .interrupted_job_retry_delay(Duration::from_secs(30));
 
 let worker = WorkerOptions::default()
     .worker_recovery(recovery)
+    .worker_shutdown(shutdown)
     .define_job::<SendEmail>()
     .pg_pool(pg_pool)
     .init()
@@ -236,9 +243,9 @@ Recovery behavior:
   performs recovery at a time.
 - Recovered jobs are unlocked, their attempt count is decremented back, their
   queue lock is released, and their `run_at` is delayed by `recovery_delay`.
-- Jobs aborted during graceful shutdown use `shutdown_grace_period` and
-  `shutdown_recovery_delay` instead of normal failure backoff, so shutdown does
-  not consume a retry attempt.
+- Jobs aborted during graceful shutdown use `WorkerShutdownConfig` instead of
+  normal failure backoff, so shutdown does not consume a retry attempt. This
+  shutdown behavior is available even when automatic worker recovery is disabled.
 - Jobs with the `infrastructure_resilient` flag use the resilient threshold
   multiplier before being considered stale, which is useful for long-running
   infrastructure jobs.

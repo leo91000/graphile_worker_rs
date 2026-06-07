@@ -80,7 +80,7 @@ pub(super) async fn run_job(
     let start = Instant::now();
 
     let mut shutdown_signal = worker.shutdown_signal.clone();
-    let grace_period = worker.recovery_config.shutdown_grace_period;
+    let grace_period = worker.shutdown_config.grace_period;
     let shutdown_timeout = async {
         (&mut shutdown_signal).await;
         runtime::sleep(grace_period).await;

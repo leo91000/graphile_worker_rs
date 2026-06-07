@@ -36,11 +36,13 @@ pub mod builder;
 /// Error types used throughout the crate
 pub mod errors;
 
-/// Worker crash and shutdown recovery
+/// Dead worker recovery
 pub mod recovery;
 
 /// Core worker implementation for running the job queue
 pub mod runner;
+
+mod shutdown;
 
 mod recovery_tasks;
 
@@ -87,5 +89,6 @@ pub use recovery::{
     INFRASTRUCTURE_RESILIENT_FLAG,
 };
 pub use runner::Worker;
+pub use shutdown::WorkerShutdownConfig;
 pub use sql::add_job::types::RawJobSpec;
 pub use worker_utils::client::WorkerUtils;

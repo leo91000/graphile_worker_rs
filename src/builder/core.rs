@@ -81,17 +81,4 @@ impl WorkerOptions {
         self.use_local_time = value;
         self
     }
-
-    /// Controls whether the worker installs OS-level shutdown signal handlers.
-    ///
-    /// By default Graphile Worker listens to signals like SIGINT/SIGTERM to
-    /// trigger a graceful shutdown. Embedding applications that already manage
-    /// signal handling can disable this behavior by setting the value to `false`.
-    ///
-    /// # Arguments
-    /// * `value` - `true` to install the default OS signal listeners, `false` to skip them
-    pub fn listen_os_shutdown_signals(mut self, value: bool) -> Self {
-        self.listen_os_shutdown_signals = Some(value);
-        self
-    }
 }

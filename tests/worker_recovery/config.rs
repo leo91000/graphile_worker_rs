@@ -7,8 +7,6 @@ fn recovery_config_builders_enable_recovery_and_store_values() {
         .sweep_interval(Duration::from_millis(20))
         .sweep_threshold(Duration::from_millis(30))
         .recovery_delay(Duration::from_millis(40))
-        .shutdown_grace_period(Duration::from_millis(50))
-        .shutdown_recovery_delay(Duration::from_millis(60))
         .resilient_sweep_threshold_multiplier(7)
         .resilient_job_flags(vec!["custom_resilient".to_string()]);
 
@@ -17,13 +15,26 @@ fn recovery_config_builders_enable_recovery_and_store_values() {
     assert_eq!(config.sweep_interval, Duration::from_millis(20));
     assert_eq!(config.sweep_threshold, Duration::from_millis(30));
     assert_eq!(config.recovery_delay, Duration::from_millis(40));
-    assert_eq!(config.shutdown_grace_period, Duration::from_millis(50));
-    assert_eq!(config.shutdown_recovery_delay, Duration::from_millis(60));
     assert_eq!(config.resilient_sweep_threshold_multiplier, 7);
     assert_eq!(config.resilient_job_flags, vec!["custom_resilient"]);
 
     let disabled = config.enabled(false);
     assert!(!disabled.enabled);
+}
+
+#[test]
+fn shutdown_config_builders_store_values_without_recovery() {
+    let config = WorkerShutdownConfig::default()
+        .listen_os_shutdown_signals(false)
+        .grace_period(Duration::from_millis(50))
+        .interrupted_job_retry_delay(Duration::from_millis(60));
+
+    assert!(!config.listen_os_shutdown_signals);
+    assert_eq!(config.grace_period, Duration::from_millis(50));
+    assert_eq!(
+        config.interrupted_job_retry_delay,
+        Duration::from_millis(60)
+    );
 }
 
 #[test]

@@ -12,6 +12,7 @@ use graphile_worker_shutdown_signal::ShutdownSignal;
 
 use crate::recovery::WorkerRecoveryConfig;
 use crate::sql::task_identifiers::SharedTaskDetails;
+use crate::WorkerShutdownConfig;
 
 /// Type alias for task handler functions.
 ///
@@ -70,8 +71,10 @@ pub struct Worker {
     /// Optional failure batcher for batching job failures
     #[getset(skip)]
     pub(crate) failure_batcher: Option<Arc<crate::batcher::FailureBatcher>>,
-    /// Worker crash and shutdown recovery configuration
+    /// Dead worker recovery configuration
     pub(crate) recovery_config: WorkerRecoveryConfig,
+    /// Worker shutdown behavior
+    pub(crate) shutdown_config: WorkerShutdownConfig,
 }
 
 #[derive(Clone)]
@@ -88,5 +91,5 @@ pub(crate) struct WorkerRunner {
     pub(crate) hooks: Arc<HookRegistry>,
     pub(crate) completion_batcher: Option<Arc<crate::batcher::CompletionBatcher>>,
     pub(crate) failure_batcher: Option<Arc<crate::batcher::FailureBatcher>>,
-    pub(crate) recovery_config: WorkerRecoveryConfig,
+    pub(crate) shutdown_config: WorkerShutdownConfig,
 }

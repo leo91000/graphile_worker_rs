@@ -3,7 +3,7 @@ use std::time::Duration;
 use super::WorkerOptions;
 
 impl WorkerOptions {
-    /// Configures worker crash and shutdown recovery.
+    /// Configures dead worker recovery.
     ///
     /// See [`crate::WorkerRecoveryConfig`] for Pro-aligned options such as
     /// `heartbeat_interval` (`heartbeatInterval`), `sweep_interval` (`sweepInterval`),
@@ -40,28 +40,10 @@ impl WorkerOptions {
         self
     }
 
-    /// Sets the delay before recovered jobs become eligible again.
+    /// Sets the delay before jobs recovered from dead workers become eligible again.
     pub fn recovery_delay(mut self, delay: Duration) -> Self {
         let mut config = self.worker_recovery_config.unwrap_or_default();
         config.recovery_delay = delay;
-        config.enabled = true;
-        self.worker_recovery_config = Some(config);
-        self
-    }
-
-    /// Sets how long in-flight jobs may continue after a shutdown signal.
-    pub fn shutdown_grace_period(mut self, period: Duration) -> Self {
-        let mut config = self.worker_recovery_config.unwrap_or_default();
-        config.shutdown_grace_period = period;
-        config.enabled = true;
-        self.worker_recovery_config = Some(config);
-        self
-    }
-
-    /// Sets the delay before shutdown-aborted jobs are retried.
-    pub fn shutdown_recovery_delay(mut self, delay: Duration) -> Self {
-        let mut config = self.worker_recovery_config.unwrap_or_default();
-        config.shutdown_recovery_delay = delay;
         config.enabled = true;
         self.worker_recovery_config = Some(config);
         self

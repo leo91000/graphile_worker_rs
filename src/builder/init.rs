@@ -54,7 +54,7 @@ impl WorkerOptions {
     /// # }
     /// ```
     pub async fn init(self) -> Result<Worker, WorkerBuildError> {
-        let listen_os_shutdown_signals = self.listen_os_shutdown_signals.unwrap_or(true);
+        let shutdown_config = self.worker_shutdown_config.unwrap_or_default();
 
         let database = match self.database {
             Some(database) => database,
@@ -80,7 +80,7 @@ impl WorkerOptions {
         rand::rng().fill_bytes(&mut random_bytes);
 
         let (manual_signal, shutdown_notifier) = manual_shutdown_signal_pair();
-        let shutdown_signal = if listen_os_shutdown_signals {
+        let shutdown_signal = if shutdown_config.listen_os_shutdown_signals {
             combine_shutdown_signals(manual_signal, shutdown_signal())
         } else {
             manual_signal
@@ -145,6 +145,7 @@ impl WorkerOptions {
             completion_batcher,
             failure_batcher,
             recovery_config,
+            shutdown_config,
         })
     }
 }

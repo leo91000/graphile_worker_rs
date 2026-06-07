@@ -1,5 +1,5 @@
 mod execute;
-mod types;
+mod registry;
 
-pub use execute::{MigrationExecuteExt, MigrationExecutor};
-pub use types::{GraphileWorkerMigration, GRAPHILE_WORKER_MIGRATIONS};
+pub use execute::MigrationExecuteExt;
+pub use registry::{GraphileWorkerMigration, GRAPHILE_WORKER_MIGRATIONS};
