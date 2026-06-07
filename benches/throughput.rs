@@ -115,8 +115,29 @@ fn bench_job_execution_throughput(c: &mut Criterion) {
                         let worker_handle = tokio::spawn(async move { worker_clone.run().await });
 
                         let start = std::time::Instant::now();
+                        let wait_started = std::time::Instant::now();
 
                         while completed.load(Ordering::SeqCst) < expected {
+                            if worker_handle.is_finished() {
+                                let completed_count = completed.load(Ordering::SeqCst);
+                                let worker_result =
+                                    worker_handle.await.expect("Worker task panicked");
+                                panic!(
+                                    "Worker exited before processing all jobs: {worker_result:?}; completed {completed_count}/{expected}"
+                                );
+                            }
+
+                            if wait_started.elapsed() > Duration::from_secs(30) {
+                                let completed_count = completed.load(Ordering::SeqCst);
+                                worker.request_shutdown();
+                                let _ =
+                                    tokio::time::timeout(Duration::from_secs(10), worker_handle)
+                                        .await;
+                                panic!(
+                                    "Timed out waiting for worker to process jobs: completed {completed_count}/{expected}"
+                                );
+                            }
+
                             tokio::time::sleep(Duration::from_millis(10)).await;
                         }
 
