@@ -11,12 +11,12 @@ async fn migration_can_take_over_from_pre_existing_migrations_table() {
             "INSERT INTO graphile_worker.migrations (id) VALUES (1)",
         ];
 
-        let mut tx = test_db.database.begin().await.unwrap();
+        let tx = test_db.database.begin().await.unwrap();
         for stmt in initial_stmts {
             tx.execute(stmt, DbParams::new()).await.unwrap();
         }
         GRAPHILE_WORKER_MIGRATIONS[0]
-            .execute(&mut tx, "graphile_worker")
+            .execute(&tx, "graphile_worker")
             .await
             .expect("Failed to execute migration");
         tx.commit().await.unwrap();

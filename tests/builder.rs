@@ -1,6 +1,6 @@
 use graphile_worker::{
     Cron, IntoTaskHandlerResult, JobDefinition, JobSpec, JobStart, TaskHandler, WorkerContext,
-    WorkerOptions, WorkerRecoveryConfig,
+    WorkerOptions, WorkerRecoveryConfig, WorkerShutdownConfig,
 };
 use serde::{Deserialize, Serialize};
 use std::time::Duration;

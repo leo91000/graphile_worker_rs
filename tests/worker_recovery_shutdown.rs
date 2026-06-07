@@ -80,14 +80,14 @@ async fn shutdown_aborted_job_is_returned_without_backoff() {
 
         let hooks_plugin = RecoveryHooksPlugin::new();
         let counters = hooks_plugin.counters.clone();
-        let shutdown_recovery_delay = Duration::from_secs(2);
+        let interrupted_job_retry_delay = Duration::from_secs(2);
 
         let worker = Arc::new(
             Worker::options()
                 .database(test_db.database.clone())
                 .concurrency(1)
                 .shutdown_grace_period(Duration::from_millis(50))
-                .shutdown_recovery_delay(shutdown_recovery_delay)
+                .shutdown_interrupted_job_retry_delay(interrupted_job_retry_delay)
                 .listen_os_shutdown_signals(false)
                 .define_job::<SlowJob>()
                 .add_plugin(hooks_plugin)
@@ -134,8 +134,8 @@ async fn shutdown_aborted_job_is_returned_without_backoff() {
         assert_eq!(recovered.attempts, 0, "attempts should be decremented back");
         assert!(recovered.locked_by.is_none(), "job should be unlocked");
         let expected_run_at = shutdown_requested_at.expect("shutdown should have been requested")
-            + chrono::Duration::from_std(shutdown_recovery_delay)
-                .expect("shutdown recovery delay should convert to chrono duration")
+            + chrono::Duration::from_std(interrupted_job_retry_delay)
+                .expect("interrupted job retry delay should convert to chrono duration")
             - chrono::Duration::milliseconds(500);
         assert!(
             recovered.run_at >= expected_run_at,

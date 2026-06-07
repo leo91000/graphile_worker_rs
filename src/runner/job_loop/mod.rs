@@ -26,7 +26,7 @@ impl Worker {
             hooks: self.hooks.clone(),
             completion_batcher: self.completion_batcher.clone(),
             failure_batcher: self.failure_batcher.clone(),
-            recovery_config: self.recovery_config.clone(),
+            shutdown_config: self.shutdown_config.clone(),
         }
     }
 

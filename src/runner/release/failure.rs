@@ -18,7 +18,7 @@ pub(super) async fn release_failed_job(
     worker: &WorkerRunner,
 ) -> Result<(), ReleaseJobError> {
     if matches!(error, RunJobError::TaskAborted) {
-        let recovery_delay = worker.recovery_config.shutdown_recovery_delay;
+        let recovery_delay = worker.shutdown_config.interrupted_job_retry_delay;
         recover_shutdown_aborted_job(worker, job, recovery_delay).await?;
         return Ok(());
     }

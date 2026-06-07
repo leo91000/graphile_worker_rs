@@ -15,9 +15,9 @@ async fn throws_helpful_error_message_in_migration_11() {
 
         // Manually run the first 10 migrations
         let migrations = &GRAPHILE_WORKER_MIGRATIONS[..10];
-        let mut tx = test_db.database.begin().await.unwrap();
+        let tx = test_db.database.begin().await.unwrap();
         for migration in migrations {
-            migration.execute(&mut tx, "graphile_worker").await.unwrap();
+            migration.execute(&tx, "graphile_worker").await.unwrap();
             let sql = "insert into graphile_worker.migrations (id, breaking) values ($1, $2)";
             tx.execute(
                 sql,

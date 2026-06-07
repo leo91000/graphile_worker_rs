@@ -157,7 +157,7 @@ async fn release_job_returns_error_when_replacement_payload_cannot_be_persisted(
         hooks,
         completion_batcher: None,
         failure_batcher: Some(failure_batcher),
-        recovery_config: crate::recovery::WorkerRecoveryConfig::default(),
+        shutdown_config: crate::WorkerShutdownConfig::default(),
     };
     let job = Arc::new(
         Job::builder()

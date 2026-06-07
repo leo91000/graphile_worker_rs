@@ -42,8 +42,8 @@ pub async fn migrate(
                 },
                 migration.name(),
             );
-            let mut tx = database.begin().await?;
-            let result = migration.execute(&mut tx, &schema).await;
+            let tx = database.begin().await?;
+            let result = migration.execute(&tx, &schema).await;
             check_migration_error(migration_number, result)?;
             let migrations = schema.identifier("migrations");
             let sql = format!("insert into {migrations} (id, breaking) values ($1, $2)");
