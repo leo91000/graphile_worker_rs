@@ -15,7 +15,7 @@ pub(super) async fn recover_shutdown_aborted_job(
 ) -> Result<(), ReleaseJobError> {
     let outcome = apply_job_recovery(
         &worker.database,
-        &worker.escaped_schema,
+        &worker.schema,
         JobRecoveryRequest {
             hooks: Some(&worker.hooks),
             worker_id: &worker.worker_id,

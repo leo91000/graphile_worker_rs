@@ -1,5 +1,5 @@
 use chrono::{DateTime, Local, Utc};
-use graphile_worker::DbJob;
+use graphile_worker::{DbJob, DbJobData};
 use graphile_worker_crontab_runner::KnownCrontab;
 use sqlx::postgres::{PgArguments, PgRow};
 use sqlx::query::{Query, QueryAs, QueryScalar};
@@ -26,24 +26,24 @@ where
 }
 
 pub(super) fn db_job_from_sqlx_row(row: PgRow) -> DbJob {
-    DbJob::new(
-        row.get("id"),
-        row.get("job_queue_id"),
-        row.get("payload"),
-        row.get("priority"),
-        row.get("run_at"),
-        row.get("attempts"),
-        row.get("max_attempts"),
-        row.get("last_error"),
-        row.get("created_at"),
-        row.get("updated_at"),
-        row.get("key"),
-        row.get("revision"),
-        row.get("locked_at"),
-        row.get("locked_by"),
-        row.get("flags"),
-        row.get("task_id"),
-    )
+    DbJob::from_data(DbJobData {
+        id: row.get("id"),
+        job_queue_id: row.get("job_queue_id"),
+        payload: row.get("payload"),
+        priority: row.get("priority"),
+        run_at: row.get("run_at"),
+        attempts: row.get("attempts"),
+        max_attempts: row.get("max_attempts"),
+        last_error: row.get("last_error"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+        key: row.get("key"),
+        revision: row.get("revision"),
+        locked_at: row.get("locked_at"),
+        locked_by: row.get("locked_by"),
+        flags: row.get("flags"),
+        task_id: row.get("task_id"),
+    })
 }
 
 pub(super) fn known_crontab_from_sqlx_row(row: PgRow) -> KnownCrontab {

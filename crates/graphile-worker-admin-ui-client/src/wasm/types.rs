@@ -1,8 +1,12 @@
-pub(crate) use graphile_worker_admin_api::{
-    AddJobRequest, CleanupTaskName, ErrorResponse, JobAction, JobActionRequest, JobActionResponse,
-    JobKeyModeRequest, JobState, JobStats, ListJobsResponse, ListedJob, MaintenanceAction,
-    MaintenanceRequest, MessageResponse, OverviewResponse, RemoveJobByKeyRequest,
+pub(crate) use graphile_worker_admin_api::jobs::{
+    AddJobRequest, JobAction, JobActionRequest, JobActionResponse, JobKeyModeRequest, JobState,
+    ListJobsResponse, ListedJob, RemoveJobByKeyRequest,
 };
+pub(crate) use graphile_worker_admin_api::maintenance::{
+    CleanupTaskName, MaintenanceAction, MaintenanceRequest,
+};
+pub(crate) use graphile_worker_admin_api::overview::{JobStats, OverviewResponse};
+pub(crate) use graphile_worker_admin_api::responses::{ErrorResponse, MessageResponse};
 
 #[derive(Clone, Debug)]
 pub(crate) struct AdminClientConfig {

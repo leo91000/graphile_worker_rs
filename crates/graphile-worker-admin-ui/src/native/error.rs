@@ -3,7 +3,7 @@ use std::fmt;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use graphile_worker_admin_api::queries::AdminQueryError;
+use graphile_worker_admin_api::queries::error::AdminQueryError;
 use thiserror::Error;
 
 use super::types::ErrorResponse;
@@ -29,8 +29,6 @@ pub(crate) fn json_error_response(status: StatusCode, message: &str) -> Response
     )
         .into_response()
 }
-
-pub(crate) type Result<T, E = ApiError> = core::result::Result<T, E>;
 
 #[derive(Debug, thiserror::Error)]
 #[error("{message}")]

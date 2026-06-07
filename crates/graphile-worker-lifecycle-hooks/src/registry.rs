@@ -2,7 +2,8 @@ use std::future::Future;
 
 use futures::future::BoxFuture;
 
-use crate::event::Event;
+use crate::event::{Event, Interceptable};
+use crate::events::Emittable;
 use crate::plugin::Plugin;
 use crate::TypeErasedHooks;
 
@@ -34,5 +35,17 @@ impl HookRegistry {
     pub fn with_plugin<P: Plugin>(mut self, plugin: P) -> Self {
         plugin.register(&mut self);
         self
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    pub async fn emit<C: Emittable>(&self, ctx: C) {
+        self.inner.emit(ctx).await
+    }
+
+    pub async fn intercept<C: Interceptable>(&self, ctx: C) -> C::Output {
+        self.inner.intercept(ctx).await
     }
 }

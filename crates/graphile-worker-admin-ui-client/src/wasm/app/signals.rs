@@ -4,9 +4,11 @@ use std::rc::Rc;
 use gloo_timers::callback::Interval;
 use leptos::prelude::*;
 
+use super::super::api::RefreshSignals;
 use super::state::{empty_overview, stored_accent, stored_compact_density, stored_theme};
 use crate::wasm::types::{JobState, ListedJob, Modal};
 
+#[derive(Clone)]
 pub(super) struct AdminSignals {
     pub(super) jobs: RwSignal<Vec<ListedJob>>,
     pub(super) overview: RwSignal<crate::wasm::types::OverviewResponse>,
@@ -57,6 +59,19 @@ impl AdminSignals {
             compact: RwSignal::new(stored_compact_density()),
             auto_refresh_enabled: RwSignal::new(false),
             auto_refresh_timer: Rc::new(RefCell::new(None)),
+        }
+    }
+
+    pub(super) fn refresh(&self) -> RefreshSignals {
+        RefreshSignals {
+            token: self.token,
+            limit: self.limit,
+            overview: self.overview,
+            jobs: self.jobs,
+            selected_jobs: self.selected_jobs,
+            toast: self.toast,
+            refreshing: self.refreshing,
+            refresh_pending: self.refresh_pending,
         }
     }
 }

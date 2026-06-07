@@ -5,7 +5,7 @@ use tracing::{debug, error, warn};
 
 use crate::background_tasks::BackgroundTasks;
 use crate::recovery::{sweep_stale_workers, SweepStaleWorkersOptions};
-use crate::sql::worker_heartbeat::{worker_deregister, worker_heartbeat};
+use crate::sql::worker_heartbeat::registration::{worker_deregister, worker_heartbeat};
 use crate::Worker;
 use graphile_worker_runtime as runtime;
 
@@ -19,7 +19,7 @@ pub(crate) async fn register_worker(
 
     worker_heartbeat(
         &worker.database,
-        &worker.escaped_schema,
+        &worker.schema,
         &worker.worker_id,
         metadata,
     )
@@ -33,7 +33,7 @@ pub(crate) async fn deregister_worker(
         return Ok(());
     }
 
-    worker_deregister(&worker.database, &worker.escaped_schema, &worker.worker_id).await
+    worker_deregister(&worker.database, &worker.schema, &worker.worker_id).await
 }
 
 pub(crate) struct RecoveryTasks {
@@ -89,7 +89,7 @@ async fn run_heartbeat_loop(worker: Arc<Worker>) -> Result<(), crate::errors::Gr
             _ = interval.tick().fuse() => {
                 worker_heartbeat(
                     &worker.database,
-                    &worker.escaped_schema,
+                    &worker.schema,
                     &worker.worker_id,
                     worker_recovery_metadata(),
                 )
@@ -122,7 +122,7 @@ async fn run_sweeper_loop(worker: Arc<Worker>) -> Result<(), crate::errors::Grap
 async fn sweep_once(worker: Arc<Worker>) -> Result<(), crate::errors::GraphileWorkerError> {
     let result = sweep_stale_workers(
         &worker.database,
-        &worker.escaped_schema,
+        &worker.schema,
         Some(&worker.hooks),
         &worker.worker_id,
         &worker.recovery_config,

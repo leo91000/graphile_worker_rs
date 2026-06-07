@@ -1,10 +1,9 @@
 use anyhow::Result;
 use chrono::Utc;
-use graphile_worker::DbJob;
-use graphile_worker_admin_api::{ListedJob, LockedWorkerRow, QueueRow};
+use graphile_worker::{DbJob, Job};
+use graphile_worker_admin_api::jobs::{DbJobOutput, ListedJob};
+use graphile_worker_admin_api::overview::{LockedWorkerRow, QueueRow};
 use serde::Serialize;
-
-use crate::db_job_output_from_db_job;
 
 pub(crate) fn print_db_job_result(json: bool, action: &str, jobs: &[DbJob]) -> Result<()> {
     if json {
@@ -100,4 +99,48 @@ fn state_for(job: &ListedJob) -> &'static str {
 pub(crate) fn print_json(value: &impl Serialize) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(value)?);
     Ok(())
+}
+
+fn db_job_output_from_db_job(job: &DbJob) -> DbJobOutput {
+    DbJobOutput {
+        id: *job.id(),
+        task_id: *job.task_id(),
+        task_identifier: None,
+        job_queue_id: *job.job_queue_id(),
+        payload: job.payload().clone(),
+        priority: *job.priority(),
+        run_at: *job.run_at(),
+        attempts: *job.attempts(),
+        max_attempts: *job.max_attempts(),
+        last_error: job.last_error().clone(),
+        created_at: *job.created_at(),
+        updated_at: *job.updated_at(),
+        key: job.key().clone(),
+        revision: *job.revision(),
+        locked_at: *job.locked_at(),
+        locked_by: job.locked_by().clone(),
+        flags: job.flags().clone(),
+    }
+}
+
+pub(crate) fn db_job_output_from_job(job: &Job) -> DbJobOutput {
+    DbJobOutput {
+        id: *job.id(),
+        task_id: *job.task_id(),
+        task_identifier: Some(job.task_identifier().clone()),
+        job_queue_id: *job.job_queue_id(),
+        payload: job.payload().clone(),
+        priority: *job.priority(),
+        run_at: *job.run_at(),
+        attempts: *job.attempts(),
+        max_attempts: *job.max_attempts(),
+        last_error: job.last_error().clone(),
+        created_at: *job.created_at(),
+        updated_at: *job.updated_at(),
+        key: job.key().clone(),
+        revision: *job.revision(),
+        locked_at: *job.locked_at(),
+        locked_by: job.locked_by().clone(),
+        flags: job.flags().clone(),
+    }
 }

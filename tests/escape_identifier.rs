@@ -1,4 +1,4 @@
-use graphile_worker::utils::escape_identifier;
+use graphile_worker::escape_identifier;
 
 mod helpers;
 

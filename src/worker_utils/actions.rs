@@ -1,15 +1,16 @@
 use graphile_worker_database::{DbExecutor, DbValue};
 use indoc::formatdoc;
 
-use super::{RescheduleJobOptions, WorkerUtils};
-use crate::sql::dynamic::{DynamicSchema, WorkerFunction};
+use super::client::WorkerUtils;
+use super::types::RescheduleJobOptions;
+use crate::sql::schema_names::WorkerFunction;
 use crate::{errors::GraphileWorkerError, DbJob};
 
 pub(super) async fn remove_job(
     utils: &WorkerUtils,
     job_key: &str,
 ) -> Result<(), GraphileWorkerError> {
-    let remove_job = DynamicSchema::new(&utils.escaped_schema).function(WorkerFunction::RemoveJob);
+    let remove_job = WorkerFunction::RemoveJob.qualified(&utils.schema);
     let sql = formatdoc!(
         r#"
             select * from {remove_job}($1::text);
@@ -28,8 +29,7 @@ pub(super) async fn complete_jobs(
     utils: &WorkerUtils,
     ids: &[i64],
 ) -> Result<Vec<DbJob>, GraphileWorkerError> {
-    let complete_jobs =
-        DynamicSchema::new(&utils.escaped_schema).function(WorkerFunction::CompleteJobs);
+    let complete_jobs = WorkerFunction::CompleteJobs.qualified(&utils.schema);
     let sql = formatdoc!(
         r#"
             select * from {complete_jobs}($1::bigint[]);
@@ -44,8 +44,7 @@ pub(super) async fn permanently_fail_jobs(
     ids: &[i64],
     reason: &str,
 ) -> Result<Vec<DbJob>, GraphileWorkerError> {
-    let permanently_fail_jobs =
-        DynamicSchema::new(&utils.escaped_schema).function(WorkerFunction::PermanentlyFailJobs);
+    let permanently_fail_jobs = WorkerFunction::PermanentlyFailJobs.qualified(&utils.schema);
     let sql = formatdoc!(
         r#"
             select * from {permanently_fail_jobs}($1::bigint[], $2::text);
@@ -68,8 +67,7 @@ pub(super) async fn reschedule_jobs(
     ids: &[i64],
     options: RescheduleJobOptions,
 ) -> Result<Vec<DbJob>, GraphileWorkerError> {
-    let reschedule_jobs =
-        DynamicSchema::new(&utils.escaped_schema).function(WorkerFunction::RescheduleJobs);
+    let reschedule_jobs = WorkerFunction::RescheduleJobs.qualified(&utils.schema);
     let sql = formatdoc!(
         r#"
             select * from {reschedule_jobs}(
@@ -100,8 +98,7 @@ pub(super) async fn force_unlock_workers(
     utils: &WorkerUtils,
     worker_ids: &[&str],
 ) -> Result<(), GraphileWorkerError> {
-    let force_unlock_workers =
-        DynamicSchema::new(&utils.escaped_schema).function(WorkerFunction::ForceUnlockWorkers);
+    let force_unlock_workers = WorkerFunction::ForceUnlockWorkers.qualified(&utils.schema);
     let sql = formatdoc!(
         r#"
             select * from {force_unlock_workers}($1::text[]);

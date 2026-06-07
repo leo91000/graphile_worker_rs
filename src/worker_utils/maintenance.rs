@@ -2,20 +2,21 @@ use std::time::Duration;
 
 use graphile_worker_migrations::{migrate as run_migrations, MigrateError};
 
-use super::{CleanupTask, WorkerUtils};
+use super::client::WorkerUtils;
+use super::types::CleanupTask;
 use crate::errors::GraphileWorkerError;
 use crate::recovery::{
     sweep_stale_workers as run_recovery_sweep, ActiveWorkerRow, WorkerRecoveryConfig,
 };
+use crate::recovery::{SweepStaleWorkersOptions, SweepStaleWorkersResult};
 use crate::sql::task_identifiers::get_tasks_details;
-use crate::sql::worker_heartbeat::list_active_workers as list_heartbeat_workers;
-use crate::worker_utils::{SweepStaleWorkersOptions, SweepStaleWorkersResult};
+use crate::sql::worker_heartbeat::active::list_active_workers as list_heartbeat_workers;
 
 pub(super) async fn list_active_workers(
     utils: &WorkerUtils,
     sweep_threshold: Duration,
 ) -> Result<Vec<ActiveWorkerRow>, GraphileWorkerError> {
-    list_heartbeat_workers(&utils.database, &utils.escaped_schema, sweep_threshold).await
+    list_heartbeat_workers(&utils.database, &utils.schema, sweep_threshold).await
 }
 
 pub(super) async fn sweep_stale_workers(
@@ -33,7 +34,7 @@ pub(super) async fn sweep_stale_workers_with_config(
 ) -> Result<SweepStaleWorkersResult, GraphileWorkerError> {
     run_recovery_sweep(
         &utils.database,
-        &utils.escaped_schema,
+        &utils.schema,
         utils.hooks.as_ref(),
         "worker_utils",
         recovery_config,
@@ -55,25 +56,23 @@ pub(super) async fn cleanup(
         let task_names = guard.task_names();
 
         for task in tasks {
-            task.execute(&utils.database, &utils.escaped_schema, &task_names)
+            task.execute(&utils.database, &utils.schema, &task_names)
                 .await?;
         }
 
-        let refreshed =
-            get_tasks_details(&utils.database, &utils.escaped_schema, task_names).await?;
+        let refreshed = get_tasks_details(&utils.database, &utils.schema, task_names).await?;
         *guard = refreshed;
         return Ok(());
     }
 
     for task in tasks {
-        task.execute(&utils.database, &utils.escaped_schema, &[])
-            .await?;
+        task.execute(&utils.database, &utils.schema, &[]).await?;
     }
 
     Ok(())
 }
 
 pub(super) async fn migrate(utils: &WorkerUtils) -> Result<(), MigrateError> {
-    run_migrations(&utils.database, &utils.escaped_schema).await?;
+    run_migrations(&utils.database, &utils.schema).await?;
     Ok(())
 }

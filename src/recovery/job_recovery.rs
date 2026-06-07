@@ -1,11 +1,11 @@
 use chrono::{DateTime, Utc};
-use graphile_worker_database::{DbExecutorArg, DbParams, DbValue};
+use graphile_worker_database::{DbExecutorArg, DbParams, DbValue, Schema};
 use graphile_worker_lifecycle_hooks::{JobRecoveryContext, JobRecoveryResult};
 use indoc::formatdoc;
 
 use crate::errors::GraphileWorkerError;
-use crate::sql::fail_job::fail_job;
-use crate::sql::return_jobs::return_job_for_recovery;
+use crate::sql::fail_job::single::fail_job;
+use crate::sql::return_jobs::recovery::return_job_for_recovery;
 
 use super::types::{JobRecoveryOutcome, JobRecoveryRequest};
 
@@ -13,7 +13,7 @@ const RECOVERY_LAST_ERROR: &str = "Job recovered after worker interruption";
 
 pub(crate) async fn apply_job_recovery(
     mut executor: impl DbExecutorArg,
-    escaped_schema: &str,
+    schema: &Schema,
     request: JobRecoveryRequest<'_>,
 ) -> Result<JobRecoveryOutcome, GraphileWorkerError> {
     let action = match request.hooks {
@@ -35,7 +35,7 @@ pub(crate) async fn apply_job_recovery(
             return_job_for_recovery(
                 &mut executor,
                 &request.job,
-                escaped_schema,
+                schema,
                 request.previous_worker_id,
                 Some(request.recovery_delay),
                 Some(RECOVERY_LAST_ERROR),
@@ -47,27 +47,21 @@ pub(crate) async fn apply_job_recovery(
             return_job_for_recovery(
                 &mut executor,
                 &request.job,
-                escaped_schema,
+                schema,
                 request.previous_worker_id,
                 None,
                 Some(RECOVERY_LAST_ERROR),
             )
             .await?;
-            set_recovered_job_schedule(
-                &mut executor,
-                escaped_schema,
-                *request.job.id(),
-                run_at,
-                attempts,
-            )
-            .await?;
+            set_recovered_job_schedule(&mut executor, schema, *request.job.id(), run_at, attempts)
+                .await?;
             Ok(JobRecoveryOutcome::Recovered)
         }
         JobRecoveryResult::FailWithBackoff => {
             fail_job(
                 &mut executor,
                 &request.job,
-                escaped_schema,
+                schema,
                 request.previous_worker_id,
                 &format!("{:?}", request.reason),
                 None,
@@ -81,14 +75,15 @@ pub(crate) async fn apply_job_recovery(
 
 async fn set_recovered_job_schedule(
     mut executor: impl DbExecutorArg,
-    escaped_schema: &str,
+    schema: &Schema,
     job_id: i64,
     run_at: DateTime<Utc>,
     attempts: Option<i16>,
 ) -> Result<(), GraphileWorkerError> {
+    let jobs = schema.private_table("jobs");
     let sql = formatdoc!(
         r#"
-            UPDATE {escaped_schema}._private_jobs AS jobs
+            UPDATE {jobs} AS jobs
             SET
                 run_at = $2::timestamptz,
                 attempts = COALESCE($3::int, jobs.attempts),

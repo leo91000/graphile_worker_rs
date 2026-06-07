@@ -1,15 +1,18 @@
-use graphile_worker::worker_utils::CleanupTask;
+use graphile_worker::worker_utils::types::CleanupTask;
 use graphile_worker::{DbJob, Job, JobKeyMode};
 use serde::Serialize;
 
 use super::auth::AdminAuthSummary;
 
-pub(crate) use graphile_worker_admin_api::{
-    ActiveWorkerRow, AddJobRequest, CleanupTaskName, DbJobOutput, ErrorResponse, JobAction,
-    JobActionRequest, JobActionResponse, JobKeyModeRequest, ListJobsParams, ListJobsResponse,
-    ListedJob, MaintenanceAction, MaintenanceRequest, MessageResponse, OverviewResponse,
-    RemoveJobByKeyRequest,
+pub(crate) use graphile_worker_admin_api::jobs::{
+    AddJobRequest, DbJobOutput, JobAction, JobActionRequest, JobActionResponse, JobKeyModeRequest,
+    ListJobsParams, ListJobsResponse, ListedJob, RemoveJobByKeyRequest,
 };
+pub(crate) use graphile_worker_admin_api::maintenance::{
+    CleanupTaskName, MaintenanceAction, MaintenanceRequest,
+};
+pub(crate) use graphile_worker_admin_api::overview::{ActiveWorkerRow, OverviewResponse};
+pub(crate) use graphile_worker_admin_api::responses::{ErrorResponse, MessageResponse};
 
 #[derive(Debug, Serialize)]
 pub(crate) struct SessionResponse {

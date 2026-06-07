@@ -12,7 +12,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum WorkerRuntimeError {
     /// An error occurred while processing or releasing a job
-    #[error("Unexpected error occured while processing job : '{0}'")]
+    #[error("Unexpected error occurred while processing job : '{0}'")]
     ProcessJob(#[from] ProcessJobError),
     #[error("Worker task failed : '{0}'")]
     WorkerTask(#[from] runtime::JoinError),
@@ -20,7 +20,7 @@ pub enum WorkerRuntimeError {
     #[error("Failed to listen to postgres notifications : '{0}'")]
     PgListen(#[from] GraphileWorkerError),
     /// An error occurred while scheduling or executing a cron job
-    #[error("Error occured while trying to schedule cron job : {0}")]
+    #[error("Error occurred while trying to schedule cron job : {0}")]
     Crontab(#[from] ScheduleCronJobError),
 }
 
@@ -28,10 +28,10 @@ pub enum WorkerRuntimeError {
 #[derive(Error, Debug)]
 pub enum ProcessJobError {
     /// Error occurred when trying to complete or fail a job after processing
-    #[error("An error occured while releasing a job : '{0}'")]
+    #[error("An error occurred while releasing a job : '{0}'")]
     ReleaseJobError(#[from] ReleaseJobError),
     /// Error occurred when trying to fetch a job from the database
-    #[error("An error occured while fetching a job to run : '{0}'")]
+    #[error("An error occurred while fetching a job to run : '{0}'")]
     GetJobError(#[from] GraphileWorkerError),
 }
 

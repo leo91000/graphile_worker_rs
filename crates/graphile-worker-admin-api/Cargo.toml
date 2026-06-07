@@ -16,6 +16,7 @@ sqlx = ["dep:sqlx"]
 
 [dependencies]
 chrono.workspace = true
+graphile_worker_database.workspace = true
 indoc.workspace = true
 serde.workspace = true
 serde_json.workspace = true

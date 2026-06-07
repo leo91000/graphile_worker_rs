@@ -83,7 +83,7 @@ async fn completion_batcher_falls_back_after_shutdown() {
         return;
     };
     let schema = setup_schema(&pg_pool, "completion_fallback").await;
-    let utils = crate::worker_utils::WorkerUtils::new(pg_pool.clone(), schema.clone());
+    let utils = crate::worker_utils::client::WorkerUtils::new(pg_pool.clone(), schema.clone());
     let job = utils
         .add_raw_job(
             "completion_fallback_job",
@@ -134,7 +134,7 @@ async fn failure_batcher_falls_back_after_shutdown() {
         return;
     };
     let schema = setup_schema(&pg_pool, "failure_fallback").await;
-    let utils = crate::worker_utils::WorkerUtils::new(pg_pool.clone(), schema.clone());
+    let utils = crate::worker_utils::client::WorkerUtils::new(pg_pool.clone(), schema.clone());
     let job = utils
         .add_raw_job(
             "failure_fallback_job",

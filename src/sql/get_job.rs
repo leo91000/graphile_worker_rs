@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use graphile_worker_database::{DbExecutorArg, DbParams, DbValue};
+use graphile_worker_database::{DbExecutorArg, DbParams, DbValue, Schema};
 use indoc::formatdoc;
 
 use crate::errors::Result;
@@ -13,7 +13,7 @@ use super::task_identifiers::TaskDetails;
 pub async fn get_job(
     mut executor: impl DbExecutorArg,
     task_details: &TaskDetails,
-    escaped_schema: &str,
+    schema: &Schema,
     worker_id: &str,
     flags_to_skip: &[String],
     now: Option<DateTime<Utc>>,
@@ -34,15 +34,16 @@ pub async fn get_job(
     let flag_clause = flag_param
         .map(|p| get_flag_clause(flags_to_skip, p))
         .unwrap_or_default();
-    let queue_clause = get_queue_clause(escaped_schema);
-    let update_queue_clause = get_update_queue_clause(escaped_schema, 1, now_param);
+    let jobs = schema.private_table("jobs");
+    let queue_clause = get_queue_clause(schema);
+    let update_queue_clause = get_update_queue_clause(schema, 1, now_param);
     let now_clause = get_now_clause(now_param);
 
     let sql = formatdoc!(
         r#"
             with j as (
                 select jobs.job_queue_id, jobs.priority, jobs.run_at, jobs.id
-                    from {escaped_schema}._private_jobs as jobs
+                    from {jobs} as jobs
                     where jobs.is_available = true
                     and run_at <= {now_clause}
                     and task_id = any($2::int[])
@@ -53,7 +54,7 @@ pub async fn get_job(
                     for update
                     skip locked
                 ) {update_queue_clause}
-                    update {escaped_schema}._private_jobs as jobs
+                    update {jobs} as jobs
                         set
                             attempts = jobs.attempts + 1,
                             locked_by = $1::text,
