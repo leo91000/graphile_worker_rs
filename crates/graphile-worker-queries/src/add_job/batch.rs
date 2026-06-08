@@ -40,7 +40,7 @@ struct BorrowedDbJobSpec<'a> {
 #[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn add_jobs<'a>(
     mut executor: impl DbExecutorArg,
-    schema: &Schema,
+    schema: impl Into<Schema>,
     jobs: &[JobToAdd<'a>],
     task_details: &TaskDetails,
     job_key_preserve_run_at: bool,
@@ -52,8 +52,9 @@ pub async fn add_jobs<'a>(
 
     validate_batch_job_key_modes(jobs)?;
 
+    let schema = schema.into();
     let default_run_at = use_local_time.then(Utc::now);
-    let sql = add_jobs_sql(schema);
+    let sql = add_jobs_sql(&schema);
 
     let specs_json = build_batch_specs_json(jobs, default_run_at)?;
     let db_jobs: Vec<graphile_worker_job::DbJob> = executor

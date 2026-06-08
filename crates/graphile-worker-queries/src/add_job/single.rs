@@ -13,13 +13,14 @@ use super::super::schema_names::WorkerFunction;
 #[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn add_job(
     mut executor: impl DbExecutorArg,
-    schema: &Schema,
+    schema: impl Into<Schema>,
     identifier: &str,
     payload: serde_json::Value,
     spec: JobSpec,
     use_local_time: bool,
 ) -> Result<Job, GraphileWorkerError> {
-    let add_job = WorkerFunction::AddJob.qualified(schema);
+    let schema = schema.into();
+    let add_job = WorkerFunction::AddJob.qualified(&schema);
     let sql = formatdoc!(
         r#"
             select * from {add_job}(
@@ -65,4 +66,71 @@ pub async fn add_job(
     );
 
     Ok(Job::from_db_job(job, identifier.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use graphile_worker_database::{BoxFuture, DbError, DbExecutor, DbParams, DbRow, Schema};
+
+    use super::*;
+
+    struct NeverExecutor;
+
+    impl DbExecutor for NeverExecutor {
+        fn execute<'a>(
+            &'a self,
+            _sql: &'a str,
+            _params: DbParams,
+        ) -> BoxFuture<'a, Result<u64, DbError>> {
+            Box::pin(async { unreachable!("schema compatibility tests never execute queries") })
+        }
+
+        fn fetch_all<'a>(
+            &'a self,
+            _sql: &'a str,
+            _params: DbParams,
+        ) -> BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
+            Box::pin(async { unreachable!("schema compatibility tests never execute queries") })
+        }
+    }
+
+    #[test]
+    fn add_job_accepts_common_schema_inputs() {
+        let executor = NeverExecutor;
+        let schema_string = String::from("graphile_worker");
+        let schema = Schema::from("graphile_worker");
+
+        std::mem::drop(add_job(
+            &executor,
+            "graphile_worker",
+            "task",
+            serde_json::json!({}),
+            JobSpec::default(),
+            false,
+        ));
+        std::mem::drop(add_job(
+            &executor,
+            schema_string.clone(),
+            "task",
+            serde_json::json!({}),
+            JobSpec::default(),
+            false,
+        ));
+        std::mem::drop(add_job(
+            &executor,
+            &schema_string,
+            "task",
+            serde_json::json!({}),
+            JobSpec::default(),
+            false,
+        ));
+        std::mem::drop(add_job(
+            &executor,
+            schema,
+            "task",
+            serde_json::json!({}),
+            JobSpec::default(),
+            false,
+        ));
+    }
 }

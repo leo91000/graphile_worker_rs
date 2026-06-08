@@ -10,12 +10,13 @@ use super::shared::{single_job_params, FailJobTables};
 pub async fn fail_job(
     mut executor: impl DbExecutorArg,
     job: &Job,
-    schema: &Schema,
+    schema: impl Into<Schema>,
     worker_id: &str,
     message: &str,
     replacement_payload: Option<serde_json::Value>,
 ) -> Result<()> {
-    let tables = FailJobTables::new(schema);
+    let schema = schema.into();
+    let tables = FailJobTables::new(&schema);
     let params = single_job_params(job, worker_id, message, replacement_payload);
 
     if job.job_queue_id().is_some() {

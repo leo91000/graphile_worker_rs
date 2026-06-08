@@ -8,6 +8,10 @@ pub struct Schema {
 }
 
 impl Schema {
+    /// Creates a schema from a raw PostgreSQL identifier.
+    ///
+    /// The input is escaped by this constructor, so pass raw schema names such
+    /// as `graphile_worker`, not pre-escaped SQL identifiers.
     pub fn new(schema: impl AsRef<str>) -> Self {
         Self {
             escaped: Arc::from(escape_identifier(schema.as_ref())),

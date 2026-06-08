@@ -20,10 +20,11 @@ pub struct ActiveWorkerRow {
 
 pub async fn list_active_workers(
     mut executor: impl DbExecutorArg,
-    schema: &Schema,
+    schema: impl Into<Schema>,
     sweep_threshold: Duration,
 ) -> Result<Vec<ActiveWorkerRow>> {
-    let workers = PrivateTable::Workers.qualified(schema);
+    let schema = schema.into();
+    let workers = PrivateTable::Workers.qualified(&schema);
     let sql = formatdoc!(
         r#"
             SELECT

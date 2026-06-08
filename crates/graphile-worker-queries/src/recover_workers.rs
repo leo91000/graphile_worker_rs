@@ -12,7 +12,7 @@ use crate::schema_names::{PrivateTable, WorkerFunction};
 
 pub async fn recover_dead_worker_jobs(
     mut executor: impl DbExecutorArg,
-    schema: &Schema,
+    schema: impl Into<Schema>,
     worker_ids: &[String],
     recovery_delay: Duration,
 ) -> Result<i32> {
@@ -20,7 +20,8 @@ pub async fn recover_dead_worker_jobs(
         return Ok(0);
     }
 
-    let recover_dead_worker_jobs = WorkerFunction::RecoverDeadWorkerJobs.qualified(schema);
+    let schema = schema.into();
+    let recover_dead_worker_jobs = WorkerFunction::RecoverDeadWorkerJobs.qualified(&schema);
     let sql = formatdoc!(
         r#"
             SELECT {recover_dead_worker_jobs}(
@@ -45,15 +46,16 @@ pub async fn recover_dead_worker_jobs(
 
 pub async fn get_locked_jobs_for_recovery(
     mut executor: impl DbExecutorArg,
-    schema: &Schema,
+    schema: impl Into<Schema>,
     worker_ids: &[String],
 ) -> Result<Vec<Arc<Job>>> {
     if worker_ids.is_empty() {
         return Ok(Vec::new());
     }
 
-    let jobs = PrivateTable::Jobs.qualified(schema);
-    let tasks = PrivateTable::Tasks.qualified(schema);
+    let schema = schema.into();
+    let jobs = PrivateTable::Jobs.qualified(&schema);
+    let tasks = PrivateTable::Tasks.qualified(&schema);
     let sql = formatdoc!(
         r#"
             SELECT jobs.*, tasks.identifier AS task_identifier

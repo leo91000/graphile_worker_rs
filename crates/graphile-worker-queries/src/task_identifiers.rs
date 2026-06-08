@@ -20,13 +20,14 @@ fn task_rows_to_details(tasks: Vec<TaskRow>) -> TaskDetails {
 #[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn get_tasks_details(
     mut executor: impl DbExecutorArg,
-    schema: &Schema,
+    schema: impl Into<Schema>,
     task_names: Vec<String>,
 ) -> Result<TaskDetails> {
     if task_names.is_empty() {
         return Ok(TaskDetails::new());
     }
 
+    let schema = schema.into();
     let tasks = schema.private_table("tasks");
     let insert_tasks_query = format!(
         "insert into {tasks} as tasks (identifier) select unnest($1::text[]) on conflict do nothing"
