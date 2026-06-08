@@ -3,7 +3,7 @@ use graphile_worker_database::{DbExecutorArg, DbValue, Schema};
 use graphile_worker_job::Job;
 use graphile_worker_job_spec::JobKeyMode;
 use indoc::formatdoc;
-use tracing::info;
+use tracing::{info, Span};
 
 use crate::errors::GraphileWorkerError;
 
@@ -38,7 +38,19 @@ struct BorrowedDbJobSpec<'a> {
     flags: Option<&'a [String]>,
 }
 
-#[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
+#[tracing::instrument(
+    skip_all,
+    err,
+    fields(
+        otel.kind = "client",
+        db.system = "postgresql",
+        messaging.system = "graphile-worker",
+        messaging.operation.name = "add_jobs",
+        messaging.batch.message_count = tracing::field::Empty,
+        messaging.destination.name = tracing::field::Empty,
+        otel.name = tracing::field::Empty
+    )
+)]
 pub async fn add_jobs<'a>(
     mut executor: impl DbExecutorArg,
     schema: impl Into<Schema>,
@@ -52,6 +64,13 @@ pub async fn add_jobs<'a>(
     }
 
     validate_batch_job_key_modes(jobs)?;
+
+    let span = Span::current();
+    span.record("messaging.batch.message_count", jobs.len());
+    if let Some(identifier) = single_batch_identifier(jobs) {
+        span.record("otel.name", identifier);
+        span.record("messaging.destination.name", identifier);
+    }
 
     let schema = schema.into();
     let default_run_at = use_local_time.then(Utc::now);
@@ -99,6 +118,15 @@ fn validate_batch_job_key_modes(jobs: &[JobToAdd<'_>]) -> Result<(), GraphileWor
     }
 
     Ok(())
+}
+
+fn single_batch_identifier<'a>(jobs: &[JobToAdd<'a>]) -> Option<&'a str> {
+    let first_identifier = jobs.first()?.identifier;
+    if jobs.iter().all(|job| job.identifier == first_identifier) {
+        return Some(first_identifier);
+    }
+
+    None
 }
 
 fn build_batch_specs_json<'a>(
@@ -219,5 +247,43 @@ mod tests {
         let specs = build_batch_specs_json(&jobs, None, None).unwrap();
 
         assert_eq!(specs[0]["payload"], json!({ "value": 1 }));
+    }
+
+    #[test]
+    fn single_batch_identifier_returns_identifier_for_same_identifier_batch() {
+        let spec = JobSpec::default();
+        let jobs = vec![
+            JobToAdd {
+                identifier: "task",
+                payload: json!({ "value": 1 }),
+                spec: &spec,
+            },
+            JobToAdd {
+                identifier: "task",
+                payload: json!({ "value": 2 }),
+                spec: &spec,
+            },
+        ];
+
+        assert_eq!(single_batch_identifier(&jobs), Some("task"));
+    }
+
+    #[test]
+    fn single_batch_identifier_returns_none_for_mixed_identifier_batch() {
+        let spec = JobSpec::default();
+        let jobs = vec![
+            JobToAdd {
+                identifier: "first",
+                payload: json!({ "value": 1 }),
+                spec: &spec,
+            },
+            JobToAdd {
+                identifier: "second",
+                payload: json!({ "value": 2 }),
+                spec: &spec,
+            },
+        ];
+
+        assert_eq!(single_batch_identifier(&jobs), None);
     }
 }

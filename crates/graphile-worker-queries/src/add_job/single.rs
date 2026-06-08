@@ -3,7 +3,7 @@ use graphile_worker_database::{DbExecutorArg, DbValue, Schema};
 use graphile_worker_job::Job;
 use graphile_worker_job_spec::JobSpec;
 use indoc::formatdoc;
-use tracing::info;
+use tracing::{info, Span};
 
 use crate::errors::GraphileWorkerError;
 use crate::telemetry::{self, TraceInfo};
@@ -11,7 +11,18 @@ use crate::telemetry::{self, TraceInfo};
 use super::super::schema_names::WorkerFunction;
 
 /// Add a job to the queue
-#[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
+#[tracing::instrument(
+    skip_all,
+    err,
+    fields(
+        otel.kind = "client",
+        db.system = "postgresql",
+        messaging.system = "graphile-worker",
+        messaging.operation.name = "add_job",
+        messaging.destination.name = tracing::field::Empty,
+        otel.name = tracing::field::Empty
+    )
+)]
 pub async fn add_job(
     mut executor: impl DbExecutorArg,
     schema: impl Into<Schema>,
@@ -40,6 +51,10 @@ pub async fn add_job(
 
     let job_key_mode = spec.job_key_mode().clone().map(|jkm| jkm.to_string());
     let run_at = spec.run_at().or_else(|| use_local_time.then(Utc::now));
+    let span = Span::current();
+    span.record("otel.name", identifier);
+    span.record("messaging.destination.name", identifier);
+
     let trace_info = telemetry::current_trace_info();
     let payload = prepare_payload_for_insert(payload, trace_info.as_ref());
 
