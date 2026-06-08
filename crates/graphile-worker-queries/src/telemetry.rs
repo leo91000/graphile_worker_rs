@@ -1,5 +1,15 @@
 pub(crate) use functions::current_trace_info;
 
+#[cfg(any(
+    all(feature = "opentelemetry_0_30", feature = "opentelemetry_0_31"),
+    all(feature = "opentelemetry_0_30", feature = "opentelemetry_0_32"),
+    all(feature = "opentelemetry_0_31", feature = "opentelemetry_0_32")
+))]
+compile_error!(
+    "Only one OpenTelemetry compatibility feature can be enabled at a time: \
+     opentelemetry_0_30, opentelemetry_0_31, or opentelemetry_0_32"
+);
+
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub(crate) struct TraceInfo {
     pub(crate) flags: u8,
