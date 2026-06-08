@@ -31,5 +31,7 @@ jobs:
         run: cargo check --all-targets --features opentelemetry_0_30
       - name: Check OpenTelemetry 0.31 feature
         run: cargo check --all-targets --features opentelemetry_0_31
+      - name: Check OpenTelemetry 0.32 feature
+        run: cargo check --all-targets --features opentelemetry_0_32
       - name: Clippy
         run: cargo clippy --all --all-targets -- -D warnings
