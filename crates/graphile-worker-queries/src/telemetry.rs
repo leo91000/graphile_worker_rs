@@ -23,7 +23,11 @@ pub(crate) fn add_tracing_info_with_trace(payload: &mut serde_json::Value, trace
     }
 }
 
-#[cfg(not(any(feature = "opentelemetry_0_30", feature = "opentelemetry_0_31")))]
+#[cfg(not(any(
+    feature = "opentelemetry_0_30",
+    feature = "opentelemetry_0_31",
+    feature = "opentelemetry_0_32"
+)))]
 mod functions {
     use super::TraceInfo;
 
@@ -32,12 +36,20 @@ mod functions {
     }
 }
 
-#[cfg(any(feature = "opentelemetry_0_30", feature = "opentelemetry_0_31"))]
+#[cfg(any(
+    feature = "opentelemetry_0_30",
+    feature = "opentelemetry_0_31",
+    feature = "opentelemetry_0_32"
+))]
 mod functions {
     #[cfg(feature = "opentelemetry_0_30")]
     use opentelemetry_30 as opentelemetry;
+    #[cfg(all(not(feature = "opentelemetry_0_30"), feature = "opentelemetry_0_32"))]
+    use opentelemetry_32 as opentelemetry;
     #[cfg(feature = "opentelemetry_0_30")]
     use tracing_opentelemetry_30 as tracing_opentelemetry;
+    #[cfg(all(not(feature = "opentelemetry_0_30"), feature = "opentelemetry_0_32"))]
+    use tracing_opentelemetry_32 as tracing_opentelemetry;
 
     use opentelemetry::trace::TraceContextExt;
     use tracing::Span;
