@@ -13,9 +13,10 @@ const RECOVERY_LAST_ERROR: &str = "Job recovered after worker interruption";
 
 pub async fn apply_job_recovery(
     mut executor: impl DbExecutorArg,
-    schema: &Schema,
+    schema: impl Into<Schema>,
     request: JobRecoveryRequest<'_>,
 ) -> Result<JobRecoveryOutcome, GraphileWorkerError> {
+    let schema = schema.into();
     let action = match request.hooks {
         Some(hooks) if !hooks.is_empty() => {
             hooks
@@ -35,7 +36,7 @@ pub async fn apply_job_recovery(
             return_job_for_recovery(
                 &mut executor,
                 &request.job,
-                schema,
+                &schema,
                 request.previous_worker_id,
                 Some(request.recovery_delay),
                 Some(RECOVERY_LAST_ERROR),
@@ -47,13 +48,13 @@ pub async fn apply_job_recovery(
             return_job_for_recovery(
                 &mut executor,
                 &request.job,
-                schema,
+                &schema,
                 request.previous_worker_id,
                 None,
                 Some(RECOVERY_LAST_ERROR),
             )
             .await?;
-            set_recovered_job_schedule(&mut executor, schema, *request.job.id(), run_at, attempts)
+            set_recovered_job_schedule(&mut executor, &schema, *request.job.id(), run_at, attempts)
                 .await?;
             Ok(JobRecoveryOutcome::Recovered)
         }
@@ -61,7 +62,7 @@ pub async fn apply_job_recovery(
             fail_job(
                 &mut executor,
                 &request.job,
-                schema,
+                &schema,
                 request.previous_worker_id,
                 &format!("{:?}", request.reason),
                 None,

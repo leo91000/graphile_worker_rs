@@ -13,12 +13,13 @@ use super::task_identifiers::TaskDetails;
 pub async fn batch_get_jobs(
     mut executor: impl DbExecutorArg,
     task_details: &TaskDetails,
-    schema: &Schema,
+    schema: impl Into<Schema>,
     worker_id: &str,
     flags_to_skip: &[String],
     batch_size: i32,
     now: Option<DateTime<Utc>>,
 ) -> Result<Vec<Job>> {
+    let schema = schema.into();
     let has_flags = !flags_to_skip.is_empty();
     let has_now = now.is_some();
 
@@ -36,8 +37,8 @@ pub async fn batch_get_jobs(
         .map(|p| get_flag_clause(flags_to_skip, p))
         .unwrap_or_default();
     let jobs = schema.private_table("jobs");
-    let queue_clause = get_queue_clause(schema);
-    let update_queue_clause = get_update_queue_clause(schema, 1, now_param);
+    let queue_clause = get_queue_clause(&schema);
+    let update_queue_clause = get_update_queue_clause(&schema, 1, now_param);
     let now_clause = get_now_clause(now_param);
 
     let sql = formatdoc!(

@@ -15,14 +15,15 @@ pub struct FailedJob<'a> {
 pub async fn fail_jobs(
     mut executor: impl DbExecutorArg,
     jobs: &[FailedJob<'_>],
-    schema: &Schema,
+    schema: impl Into<Schema>,
     worker_id: &str,
 ) -> Result<()> {
     if jobs.is_empty() {
         return Ok(());
     }
 
-    let tables = FailJobTables::new(schema);
+    let schema = schema.into();
+    let tables = FailJobTables::new(&schema);
     let job_ids: Vec<i64> = jobs.iter().map(|job| *job.job.id()).collect();
     let errors: Vec<String> = jobs.iter().map(|job| job.error.to_string()).collect();
     let has_queues = jobs.iter().any(|job| job.job.job_queue_id().is_some());

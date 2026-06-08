@@ -11,12 +11,13 @@ use super::shared::{recovery_params, ReturnJobTables};
 pub async fn return_job_for_recovery(
     mut executor: impl DbExecutorArg,
     job: &Job,
-    schema: &Schema,
+    schema: impl Into<Schema>,
     worker_id: &str,
     recovery_delay: Option<Duration>,
     last_error: Option<&str>,
 ) -> Result<()> {
-    let tables = ReturnJobTables::new(schema);
+    let schema = schema.into();
+    let tables = ReturnJobTables::new(&schema);
     let params = recovery_params(worker_id, job, recovery_delay, last_error);
 
     if job.job_queue_id().is_some() {

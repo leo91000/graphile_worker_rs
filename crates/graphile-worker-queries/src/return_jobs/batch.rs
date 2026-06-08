@@ -9,7 +9,7 @@ use super::shared::{ReturnJobIds, ReturnJobTables};
 pub async fn return_jobs(
     mut executor: impl DbExecutorArg,
     jobs: &[Job],
-    schema: &Schema,
+    schema: impl Into<Schema>,
     worker_id: &str,
 ) -> Result<()> {
     if jobs.is_empty() {
@@ -17,7 +17,8 @@ pub async fn return_jobs(
     }
 
     let ids = ReturnJobIds::from_jobs(jobs);
-    let tables = ReturnJobTables::new(schema);
+    let schema = schema.into();
+    let tables = ReturnJobTables::new(&schema);
 
     if ids.contains_queued_jobs() {
         return return_queued_jobs(&mut executor, &tables, worker_id, ids).await;

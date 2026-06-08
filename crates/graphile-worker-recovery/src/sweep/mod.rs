@@ -19,12 +19,13 @@ use jobs::recover_jobs_from_workers;
 
 pub async fn sweep_stale_workers(
     database: &Database,
-    schema: &Schema,
+    schema: impl Into<Schema>,
     hooks: Option<&Arc<HookRegistry>>,
     worker_id: &str,
     defaults: &WorkerRecoveryConfig,
     options: SweepStaleWorkersOptions,
 ) -> Result<SweepStaleWorkersResult, GraphileWorkerError> {
+    let schema = schema.into();
     let config = options.resolve(defaults);
 
     let transaction = database.begin().await?;
@@ -36,7 +37,7 @@ pub async fn sweep_stale_workers(
         });
     }
 
-    let dead_worker_ids = find_dead_worker_ids(&transaction, schema, &config).await?;
+    let dead_worker_ids = find_dead_worker_ids(&transaction, &schema, &config).await?;
 
     if config.dry_run {
         transaction.commit().await?;
@@ -48,7 +49,7 @@ pub async fn sweep_stale_workers(
 
     let recovered_count = recover_jobs_from_workers(
         &transaction,
-        schema,
+        &schema,
         hooks,
         worker_id,
         &dead_worker_ids,
@@ -56,7 +57,7 @@ pub async fn sweep_stale_workers(
     )
     .await?;
 
-    delete_stale_workers(&transaction, schema, &dead_worker_ids).await?;
+    delete_stale_workers(&transaction, &schema, &dead_worker_ids).await?;
     transaction.commit().await?;
 
     if let Some(hooks) = hooks.filter(|hooks| !hooks.is_empty()) {

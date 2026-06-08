@@ -11,10 +11,11 @@ use crate::schema_names::{PrivateTable, WorkerFunction};
 
 pub async fn list_stale_workers(
     mut executor: impl DbExecutorArg,
-    schema: &Schema,
+    schema: impl Into<Schema>,
     stale_threshold: Duration,
 ) -> Result<Vec<String>> {
-    let list_stale_workers = WorkerFunction::ListStaleWorkers.qualified(schema);
+    let schema = schema.into();
+    let list_stale_workers = WorkerFunction::ListStaleWorkers.qualified(&schema);
     list_workers_from_threshold_function(
         &mut executor,
         list_stale_workers.to_string(),
@@ -25,10 +26,11 @@ pub async fn list_stale_workers(
 
 pub async fn list_orphan_locked_workers(
     mut executor: impl DbExecutorArg,
-    schema: &Schema,
+    schema: impl Into<Schema>,
     stale_threshold: Duration,
 ) -> Result<Vec<String>> {
-    let list_orphan_locked_workers = WorkerFunction::ListOrphanLockedWorkers.qualified(schema);
+    let schema = schema.into();
+    let list_orphan_locked_workers = WorkerFunction::ListOrphanLockedWorkers.qualified(&schema);
     list_workers_from_threshold_function(
         &mut executor,
         list_orphan_locked_workers.to_string(),
@@ -61,7 +63,7 @@ async fn list_workers_from_threshold_function(
 
 pub async fn worker_holds_resilient_locks(
     mut executor: impl DbExecutorArg,
-    schema: &Schema,
+    schema: impl Into<Schema>,
     worker_id: &str,
     resilient_flags: &[String],
 ) -> Result<bool> {
@@ -69,7 +71,8 @@ pub async fn worker_holds_resilient_locks(
         return Ok(false);
     }
 
-    let jobs = PrivateTable::Jobs.qualified(schema);
+    let schema = schema.into();
+    let jobs = PrivateTable::Jobs.qualified(&schema);
     let sql = formatdoc!(
         r#"
             SELECT EXISTS (
@@ -96,10 +99,11 @@ pub async fn worker_holds_resilient_locks(
 
 pub async fn get_worker_last_heartbeat(
     mut executor: impl DbExecutorArg,
-    schema: &Schema,
+    schema: impl Into<Schema>,
     worker_id: &str,
 ) -> Result<Option<chrono::DateTime<Utc>>> {
-    let workers = PrivateTable::Workers.qualified(schema);
+    let schema = schema.into();
+    let workers = PrivateTable::Workers.qualified(&schema);
     let sql = formatdoc!(
         r#"
             SELECT workers.last_heartbeat_at
@@ -121,14 +125,15 @@ pub async fn get_worker_last_heartbeat(
 
 pub async fn delete_stale_workers(
     mut executor: impl DbExecutorArg,
-    schema: &Schema,
+    schema: impl Into<Schema>,
     worker_ids: &[String],
 ) -> Result<()> {
     if worker_ids.is_empty() {
         return Ok(());
     }
 
-    let delete_stale_workers = WorkerFunction::DeleteStaleWorkers.qualified(schema);
+    let schema = schema.into();
+    let delete_stale_workers = WorkerFunction::DeleteStaleWorkers.qualified(&schema);
     let sql = formatdoc!(
         r#"
             SELECT * FROM {delete_stale_workers}($1::text[]);

@@ -10,8 +10,9 @@ pub async fn complete_job(
     mut executor: impl DbExecutorArg,
     job: &Job,
     worker_id: &str,
-    schema: &Schema,
+    schema: impl Into<Schema>,
 ) -> Result<(), GraphileWorkerError> {
+    let schema = schema.into();
     let jobs = schema.private_table("jobs");
     let job_queues = schema.private_table("job_queues");
 
