@@ -41,9 +41,7 @@ impl WorkerUtils {
         skip_all,
         fields(
             messaging.system = "graphile-worker",
-            messaging.operation.name = "add_job",
-            messaging.destination.name = tracing::field::Empty,
-            otel.name = tracing::field::Empty
+            messaging.operation.name = "add_job"
         )
     )]
     pub async fn add_job<T: TaskHandler>(
@@ -80,9 +78,7 @@ impl WorkerUtils {
         skip_all,
         fields(
             messaging.system = "graphile-worker",
-            messaging.operation.name = "add_job",
-            messaging.destination.name = identifier,
-            otel.name = identifier
+            messaging.operation.name = "add_job"
         )
     )]
     pub async fn add_raw_job<P>(
@@ -155,9 +151,7 @@ impl WorkerUtils {
         fields(
             messaging.system = "graphile-worker",
             messaging.operation.name = "add_batch_job",
-            messaging.batch.message_count = tracing::field::Empty,
-            messaging.destination.name = tracing::field::Empty,
-            otel.name = tracing::field::Empty
+            messaging.batch.message_count = payloads.len()
         )
     )]
     pub async fn add_batch_job<T: BatchTaskHandler>(

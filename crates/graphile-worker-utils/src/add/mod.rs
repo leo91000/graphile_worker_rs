@@ -1,6 +1,5 @@
 use graphile_worker_task_handler::{BatchTaskHandler, TaskHandler};
 use serde::Serialize;
-use tracing::Span;
 
 use super::client::WorkerUtils;
 use graphile_worker_job::Job;
@@ -23,10 +22,6 @@ pub(super) async fn add_job<T: TaskHandler>(
 ) -> Result<Job, GraphileWorkerError> {
     let identifier = T::IDENTIFIER;
     let payload = serde_json::to_value(payload)?;
-
-    let span = Span::current();
-    span.record("otel.name", identifier);
-    span.record("messaging.destination.name", identifier);
 
     let payload = invoke_before_job_schedule(utils, identifier, payload, &spec).await?;
     insert_job(
@@ -68,9 +63,6 @@ pub(super) async fn add_batch_job<T: BatchTaskHandler>(
     payloads: Vec<T>,
     spec: JobSpec,
 ) -> Result<Job, GraphileWorkerError> {
-    let span = Span::current();
-    span.record("messaging.batch.message_count", payloads.len());
-
     if payloads.is_empty() {
         return Err(GraphileWorkerError::JobScheduleFailed(
             "batch job payload must contain at least one item".to_string(),
@@ -78,9 +70,6 @@ pub(super) async fn add_batch_job<T: BatchTaskHandler>(
     }
 
     let identifier = T::IDENTIFIER;
-    span.record("otel.name", identifier);
-    span.record("messaging.destination.name", identifier);
-
     let payload = serde_json::to_value(payloads)?;
 
     let payload = invoke_before_job_schedule(utils, identifier, payload, &spec).await?;
