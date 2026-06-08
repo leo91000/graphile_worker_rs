@@ -5,8 +5,8 @@ use graphile_worker_lifecycle_hooks::{HookRegistry, WorkerRecoveredContext};
 use tracing::{debug, warn};
 
 use crate::errors::GraphileWorkerError;
-use crate::sql::worker_heartbeat::lock::try_acquire_sweep_lock;
-use crate::sql::worker_heartbeat::stale::delete_stale_workers;
+use graphile_worker_queries::worker_heartbeat::lock::try_acquire_sweep_lock;
+use graphile_worker_queries::worker_heartbeat::stale::delete_stale_workers;
 
 use super::config::WorkerRecoveryConfig;
 use super::types::{SweepStaleWorkersOptions, SweepStaleWorkersResult};

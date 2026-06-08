@@ -2,7 +2,7 @@ use graphile_worker_database::{DbExecutorArg, DbValue, Schema};
 use indoc::formatdoc;
 
 use crate::errors::Result;
-use crate::Job;
+use graphile_worker_job::Job;
 
 use super::shared::FailJobTables;
 

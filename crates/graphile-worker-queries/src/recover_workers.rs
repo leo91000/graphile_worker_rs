@@ -5,10 +5,10 @@ use graphile_worker_database::{DbExecutorArg, DbParams, DbValue, Schema};
 use graphile_worker_job::Job;
 use indoc::formatdoc;
 
+use crate::duration::duration_as_millis_i64;
 use crate::errors::Result;
-use crate::sql::duration::duration_as_millis_i64;
-use crate::sql::rows::get_required;
-use crate::sql::schema_names::{PrivateTable, WorkerFunction};
+use crate::rows::get_required;
+use crate::schema_names::{PrivateTable, WorkerFunction};
 
 pub async fn recover_dead_worker_jobs(
     mut executor: impl DbExecutorArg,
@@ -73,7 +73,7 @@ pub async fn get_locked_jobs_for_recovery(
 
     rows.iter()
         .map(|row| {
-            let db_job = crate::sql::rows::db_job_from_row(row)?;
+            let db_job = crate::rows::db_job_from_row(row)?;
             let task_identifier = get_required(row, "task_identifier")?;
             Ok(Arc::new(Job::from_db_job(db_job, task_identifier)))
         })

@@ -32,6 +32,7 @@ graphile_worker_lifecycle_hooks = { path = "crates/graphile-worker-lifecycle-hoo
 graphile_worker_migrations = { path = "crates/graphile-worker-migrations", version = "0.4.17", default-features = false }
 graphile_worker_migrations_core = { path = "crates/graphile-worker-migrations-core", version = "0.1.0" }
 graphile_worker_migrations_macros = { path = "crates/graphile-worker-migrations-macros", version = "0.1.0" }
+graphile_worker_queries = { path = "crates/graphile-worker-queries", version = "0.1.0", default-features = false }
 graphile_worker_runtime = { path = "crates/graphile-worker-runtime", version = "0.1.2", default-features = false }
 graphile_worker_shutdown_signal = { path = "crates/graphile-worker-shutdown-signal", version = "0.3.13", default-features = false }
 graphile_worker_task_details = { path = "crates/graphile-worker-task-details", version = "0.1.4", default-features = false }
@@ -105,6 +106,7 @@ runtime-tokio = [
   "graphile_worker_lifecycle_hooks/runtime-tokio",
   "graphile_worker_task_handler/runtime-tokio",
   "graphile_worker_task_details/runtime-tokio",
+  "graphile_worker_queries/runtime-tokio",
   "graphile_worker_shutdown_signal/runtime-tokio",
   "graphile_worker_runtime/runtime-tokio",
 ]
@@ -118,6 +120,7 @@ runtime-async-std = [
   "graphile_worker_lifecycle_hooks/runtime-async-std",
   "graphile_worker_task_handler/runtime-async-std",
   "graphile_worker_task_details/runtime-async-std",
+  "graphile_worker_queries/runtime-async-std",
   "graphile_worker_shutdown_signal/runtime-async-std",
   "graphile_worker_runtime/runtime-async-std",
 ]
@@ -126,12 +129,14 @@ tls-native-tls = [
   "sqlx?/tls-native-tls",
   "graphile_worker_crontab_runner/tls-native-tls",
   "graphile_worker_migrations/tls-native-tls",
+  "graphile_worker_queries/tls-native-tls",
 ]
 tls-rustls = [
   "graphile_worker_database/tls-rustls",
   "sqlx?/tls-rustls",
   "graphile_worker_crontab_runner/tls-rustls",
   "graphile_worker_migrations/tls-rustls",
+  "graphile_worker_queries/tls-rustls",
 ]
 driver-sqlx = [
   "graphile_worker_database/driver-sqlx",
@@ -140,6 +145,7 @@ driver-sqlx = [
   "graphile_worker_lifecycle_hooks/driver-sqlx",
   "graphile_worker_crontab_runner/driver-sqlx",
   "graphile_worker_migrations/driver-sqlx",
+  "graphile_worker_queries/driver-sqlx",
   "sqlx",
 ]
 driver-tokio-postgres = [
@@ -147,6 +153,7 @@ driver-tokio-postgres = [
   "graphile_worker_database/driver-tokio-postgres",
   "graphile_worker_crontab_runner/driver-tokio-postgres",
   "graphile_worker_migrations/driver-tokio-postgres",
+  "graphile_worker_queries/driver-tokio-postgres",
 ]
 opentelemetry_0_30 = [
     "opentelemetry-30",
@@ -169,6 +176,7 @@ graphile_worker_extensions.workspace = true
 graphile_worker_lifecycle_hooks.workspace = true
 graphile_worker_job_spec.workspace = true
 graphile_worker_task_details.workspace = true
+graphile_worker_queries.workspace = true
 graphile_worker_runtime.workspace = true
 graphile_worker_database.workspace = true
 chrono.workspace = true

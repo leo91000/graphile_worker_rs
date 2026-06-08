@@ -1,7 +1,7 @@
 use graphile_worker_database::{DbValue, Schema};
 
-use crate::sql::schema_names::PrivateTable;
-use crate::Job;
+use crate::schema_names::PrivateTable;
+use graphile_worker_job::Job;
 
 pub(super) struct FailJobTables {
     pub jobs: String,

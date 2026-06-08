@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
 use graphile_worker_job::Job;
 use graphile_worker_lifecycle_hooks::{FailureReason, HookRegistry};
 use serde::Serialize;
@@ -72,15 +71,6 @@ impl JobRecoveryOutcome {
     pub(crate) fn was_handled(self) -> bool {
         !matches!(self, Self::Skipped)
     }
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct ActiveWorkerRow {
-    pub worker_id: String,
-    pub last_heartbeat_at: DateTime<Utc>,
-    pub started_at: DateTime<Utc>,
-    pub metadata: Option<serde_json::Value>,
-    pub is_stale: bool,
 }
 
 #[cfg(test)]

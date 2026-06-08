@@ -4,10 +4,10 @@ use chrono::Utc;
 use graphile_worker_database::{DbExecutorArg, DbParams, DbValue, Schema};
 use indoc::formatdoc;
 
+use crate::duration::duration_as_millis_i64;
 use crate::errors::Result;
-use crate::sql::duration::duration_as_millis_i64;
-use crate::sql::rows::{collect_column, get_required};
-use crate::sql::schema_names::{PrivateTable, WorkerFunction};
+use crate::rows::{collect_column, get_required};
+use crate::schema_names::{PrivateTable, WorkerFunction};
 
 pub async fn list_stale_workers(
     mut executor: impl DbExecutorArg,

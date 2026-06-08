@@ -1,7 +1,7 @@
 use graphile_worker_database::Schema;
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum PrivateTable {
+pub enum PrivateTable {
     Jobs,
     JobQueues,
     Tasks,
@@ -9,7 +9,7 @@ pub(crate) enum PrivateTable {
 }
 
 impl PrivateTable {
-    pub(crate) fn qualified(self, schema: &Schema) -> String {
+    pub fn qualified(self, schema: &Schema) -> String {
         schema.private_table(self.as_str())
     }
 
@@ -24,7 +24,7 @@ impl PrivateTable {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum WorkerFunction {
+pub enum WorkerFunction {
     AddJob,
     AddJobs,
     CompleteJobs,
@@ -41,7 +41,7 @@ pub(crate) enum WorkerFunction {
 }
 
 impl WorkerFunction {
-    pub(crate) fn qualified(self, schema: &Schema) -> String {
+    pub fn qualified(self, schema: &Schema) -> String {
         schema.function(self.as_str())
     }
 

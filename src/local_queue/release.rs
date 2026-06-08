@@ -4,7 +4,7 @@ use graphile_worker_lifecycle_hooks::{LocalQueueMode, LocalQueueReturnJobsContex
 use graphile_worker_runtime as runtime;
 use tracing::{debug, error, warn};
 
-use crate::sql::return_jobs::batch::return_jobs;
+use graphile_worker_queries::return_jobs::batch::return_jobs;
 
 use super::config::{calculate_retry_delay, RETURN_JOBS_RETRY_OPTIONS};
 use super::{LocalQueue, LocalQueueError};

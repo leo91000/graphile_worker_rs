@@ -4,7 +4,7 @@ use graphile_worker_lifecycle_hooks::{LocalQueueGetJobsCompleteContext, LocalQue
 use graphile_worker_runtime as runtime;
 use tracing::{debug, error};
 
-use crate::sql::batch_get_jobs::batch_get_jobs;
+use graphile_worker_queries::batch_get_jobs::batch_get_jobs;
 
 use super::LocalQueue;
 

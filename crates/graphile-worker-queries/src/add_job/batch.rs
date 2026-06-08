@@ -1,10 +1,11 @@
 use chrono::{DateTime, Utc};
 use graphile_worker_database::{DbExecutorArg, DbValue, Schema};
 use graphile_worker_job::Job;
+use graphile_worker_job_spec::JobKeyMode;
 use indoc::formatdoc;
 use tracing::info;
 
-use crate::{errors::GraphileWorkerError, JobKeyMode};
+use crate::errors::GraphileWorkerError;
 
 use super::super::schema_names::WorkerFunction;
 use super::super::task_identifiers::TaskDetails;

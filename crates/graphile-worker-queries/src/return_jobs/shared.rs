@@ -3,8 +3,8 @@ use std::time::Duration;
 use graphile_worker_database::{DbValue, Schema};
 use graphile_worker_job::Job;
 
-use crate::sql::duration::duration_as_millis_i64;
-use crate::sql::schema_names::PrivateTable;
+use crate::duration::duration_as_millis_i64;
+use crate::schema_names::PrivateTable;
 
 pub(super) struct ReturnJobTables {
     pub jobs: String,

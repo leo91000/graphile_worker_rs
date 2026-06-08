@@ -1,13 +1,4 @@
-pub mod add_job;
-pub mod batch_get_jobs;
-pub mod complete_job;
-pub(crate) mod duration;
-pub mod fail_job;
-pub mod get_job;
-mod job_query_helpers;
-pub mod recover_workers;
-pub mod return_jobs;
-pub mod rows;
-pub(crate) mod schema_names;
-pub mod task_identifiers;
-pub mod worker_heartbeat;
+pub use graphile_worker_queries::{
+    add_job, batch_get_jobs, complete_job, fail_job, get_job, recover_workers, return_jobs, rows,
+    task_identifiers, worker_heartbeat,
+};

@@ -5,7 +5,7 @@ use graphile_worker_job::Job;
 use graphile_worker_lifecycle_hooks::JobCompleteContext;
 
 use crate::batcher::CompletionRequest;
-use crate::sql::complete_job::complete_job;
+use graphile_worker_queries::complete_job::complete_job;
 
 use super::super::errors::ReleaseJobError;
 use super::super::WorkerRunner;

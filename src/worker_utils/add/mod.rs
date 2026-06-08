@@ -3,9 +3,9 @@ use serde::Serialize;
 use tracing::Span;
 
 use super::client::WorkerUtils;
-use crate::sql::add_job::single::add_job as insert_job;
 use crate::tracing::add_tracing_info;
 use crate::{errors::GraphileWorkerError, Job, JobSpec};
+use graphile_worker_queries::add_job::single::add_job as insert_job;
 
 mod analyze;
 mod bulk;

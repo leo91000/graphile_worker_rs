@@ -1,8 +1,8 @@
 use graphile_worker_database::{Database, Schema};
 use tracing::error;
 
-use crate::sql::fail_job::batch::{fail_jobs, FailedJob};
-use crate::sql::fail_job::single::fail_job;
+use graphile_worker_queries::fail_job::batch::{fail_jobs, FailedJob};
+use graphile_worker_queries::fail_job::single::fail_job;
 
 use super::FailureRequest;
 

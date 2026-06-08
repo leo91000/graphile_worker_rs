@@ -2,7 +2,7 @@ use chrono::Utc;
 use graphile_worker_database::{DbExecutorArg, Schema};
 
 use crate::errors::GraphileWorkerError;
-use crate::sql::worker_heartbeat::stale::{
+use graphile_worker_queries::worker_heartbeat::stale::{
     get_worker_last_heartbeat, list_orphan_locked_workers, list_stale_workers,
     worker_holds_resilient_locks,
 };

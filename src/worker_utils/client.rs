@@ -3,7 +3,7 @@ use std::sync::Arc;
 use graphile_worker_database::{Database, Schema};
 use graphile_worker_lifecycle_hooks::HookRegistry;
 
-use crate::sql::task_identifiers::SharedTaskDetails;
+use graphile_worker_queries::task_identifiers::SharedTaskDetails;
 
 /// The WorkerUtils struct provides a set of utility methods for managing jobs.
 ///

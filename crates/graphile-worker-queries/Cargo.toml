@@ -1,0 +1,47 @@
+[package]
+name = "graphile_worker_queries"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Database query helpers for graphile_worker"
+homepage = "https://docs.rs/graphile_worker"
+documentation = "https://docs.rs/graphile_worker"
+repository = "https://github.com/leo91000/graphile_worker_rs"
+keywords = ["jobs", "queue", "postgres", "worker"]
+categories = ["asynchronous", "database"]
+readme = "README.md"
+
+[features]
+default = ["runtime-tokio", "driver-sqlx"]
+runtime-tokio = [
+  "graphile_worker_database/runtime-tokio",
+  "graphile_worker_job/runtime-tokio",
+  "graphile_worker_task_details/runtime-tokio",
+]
+runtime-async-std = [
+  "graphile_worker_database/runtime-async-std",
+  "graphile_worker_job/runtime-async-std",
+  "graphile_worker_task_details/runtime-async-std",
+]
+driver-sqlx = [
+  "graphile_worker_database/driver-sqlx",
+  "graphile_worker_job/driver-sqlx",
+]
+driver-tokio-postgres = ["graphile_worker_database/driver-tokio-postgres"]
+tls-native-tls = ["graphile_worker_database/tls-native-tls"]
+tls-rustls = ["graphile_worker_database/tls-rustls"]
+
+[dependencies]
+graphile_worker_database.workspace = true
+graphile_worker_job.workspace = true
+graphile_worker_job_spec.workspace = true
+graphile_worker_task_details.workspace = true
+chrono.workspace = true
+indoc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }

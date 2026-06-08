@@ -6,8 +6,8 @@ use tracing::{error, info};
 
 use super::job_execution::run_and_release_job;
 use super::{Worker, WorkerRuntimeError};
-use crate::sql::get_job::get_job;
 use crate::streams::{job_stream, StreamSource};
+use graphile_worker_queries::get_job::get_job;
 
 impl Worker {
     /// Runs the worker once and processes all available jobs, then returns.

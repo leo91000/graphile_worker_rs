@@ -3,8 +3,8 @@ use indoc::formatdoc;
 
 use super::client::WorkerUtils;
 use super::types::RescheduleJobOptions;
-use crate::sql::schema_names::WorkerFunction;
 use crate::{errors::GraphileWorkerError, DbJob};
+use graphile_worker_queries::schema_names::WorkerFunction;
 
 pub(super) async fn remove_job(
     utils: &WorkerUtils,
@@ -132,7 +132,7 @@ async fn fetch_db_jobs(
         .fetch_all(sql, params.into())
         .await?
         .iter()
-        .map(crate::sql::rows::db_job_from_row)
+        .map(graphile_worker_queries::rows::db_job_from_row)
         .collect::<std::result::Result<Vec<_>, _>>()?;
 
     Ok(jobs)

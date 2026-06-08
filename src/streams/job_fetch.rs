@@ -4,8 +4,8 @@ use graphile_worker_database::{Database, Schema};
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use tracing::error;
 
-use crate::sql::{get_job::get_job, task_identifiers::SharedTaskDetails};
 use crate::Job;
+use graphile_worker_queries::{get_job::get_job, task_identifiers::SharedTaskDetails};
 
 /// Creates a stream that yields jobs ready for processing.
 ///

@@ -9,8 +9,8 @@ use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
 use tracing::warn;
 
-use crate::sql::task_identifiers::SharedTaskDetails;
 use crate::streams::JobSignalSender;
+use graphile_worker_queries::task_identifiers::SharedTaskDetails;
 
 mod cache;
 mod config;
