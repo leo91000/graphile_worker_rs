@@ -4,13 +4,13 @@ use graphile_worker_migrations::{migrate as run_migrations, MigrateError};
 
 use super::client::WorkerUtils;
 use super::types::CleanupTask;
-use crate::errors::GraphileWorkerError;
-use crate::recovery::{
-    sweep_stale_workers as run_recovery_sweep, ActiveWorkerRow, WorkerRecoveryConfig,
-};
-use crate::recovery::{SweepStaleWorkersOptions, SweepStaleWorkersResult};
+use graphile_worker_queries::errors::GraphileWorkerError;
 use graphile_worker_queries::task_identifiers::get_tasks_details;
 use graphile_worker_queries::worker_heartbeat::active::list_active_workers as list_heartbeat_workers;
+use graphile_worker_recovery::{
+    sweep_stale_workers as run_recovery_sweep, ActiveWorkerRow, WorkerRecoveryConfig,
+};
+use graphile_worker_recovery::{SweepStaleWorkersOptions, SweepStaleWorkersResult};
 
 pub(super) async fn list_active_workers(
     utils: &WorkerUtils,

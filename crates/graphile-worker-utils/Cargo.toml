@@ -1,0 +1,93 @@
+[package]
+name = "graphile_worker_utils"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Worker utility helpers for graphile_worker"
+homepage = "https://docs.rs/graphile_worker"
+documentation = "https://docs.rs/graphile_worker"
+repository = "https://github.com/leo91000/graphile_worker_rs"
+keywords = ["jobs", "queue", "postgres", "worker"]
+categories = ["asynchronous", "database"]
+readme = "README.md"
+
+[features]
+default = ["runtime-tokio", "tls-rustls", "driver-sqlx"]
+runtime-tokio = [
+  "graphile_worker_ctx/runtime-tokio",
+  "graphile_worker_database/runtime-tokio",
+  "graphile_worker_job/runtime-tokio",
+  "graphile_worker_lifecycle_hooks/runtime-tokio",
+  "graphile_worker_migrations/runtime-tokio",
+  "graphile_worker_queries/runtime-tokio",
+  "graphile_worker_recovery/runtime-tokio",
+  "graphile_worker_task_handler/runtime-tokio",
+]
+runtime-async-std = [
+  "graphile_worker_ctx/runtime-async-std",
+  "graphile_worker_database/runtime-async-std",
+  "graphile_worker_job/runtime-async-std",
+  "graphile_worker_lifecycle_hooks/runtime-async-std",
+  "graphile_worker_migrations/runtime-async-std",
+  "graphile_worker_queries/runtime-async-std",
+  "graphile_worker_recovery/runtime-async-std",
+  "graphile_worker_task_handler/runtime-async-std",
+]
+tls-native-tls = [
+  "graphile_worker_database/tls-native-tls",
+  "graphile_worker_migrations/tls-native-tls",
+  "graphile_worker_queries/tls-native-tls",
+  "graphile_worker_recovery/tls-native-tls",
+]
+tls-rustls = [
+  "graphile_worker_database/tls-rustls",
+  "graphile_worker_migrations/tls-rustls",
+  "graphile_worker_queries/tls-rustls",
+  "graphile_worker_recovery/tls-rustls",
+]
+driver-sqlx = [
+  "graphile_worker_database/driver-sqlx",
+  "graphile_worker_job/driver-sqlx",
+  "graphile_worker_lifecycle_hooks/driver-sqlx",
+  "graphile_worker_migrations/driver-sqlx",
+  "graphile_worker_queries/driver-sqlx",
+  "graphile_worker_recovery/driver-sqlx",
+]
+driver-tokio-postgres = [
+  "runtime-tokio",
+  "graphile_worker_database/driver-tokio-postgres",
+  "graphile_worker_migrations/driver-tokio-postgres",
+  "graphile_worker_queries/driver-tokio-postgres",
+  "graphile_worker_recovery/driver-tokio-postgres",
+]
+opentelemetry_0_30 = [
+  "opentelemetry-30",
+  "tracing-opentelemetry-30",
+]
+opentelemetry_0_31 = [
+  "opentelemetry",
+  "tracing-opentelemetry",
+]
+
+[dependencies]
+graphile_worker_ctx.workspace = true
+graphile_worker_database.workspace = true
+graphile_worker_job.workspace = true
+graphile_worker_job_spec.workspace = true
+graphile_worker_lifecycle_hooks.workspace = true
+graphile_worker_migrations.workspace = true
+graphile_worker_queries.workspace = true
+graphile_worker_recovery.workspace = true
+graphile_worker_task_handler.workspace = true
+chrono.workspace = true
+indoc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+opentelemetry-30 = { workspace = true, optional = true }
+opentelemetry = { workspace = true, optional = true }
+tracing-opentelemetry-30 = { workspace = true, optional = true }
+tracing-opentelemetry = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }

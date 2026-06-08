@@ -3,7 +3,7 @@ use graphile_worker_database::{DbExecutorArg, DbParams, DbValue, Schema};
 use graphile_worker_lifecycle_hooks::{JobRecoveryContext, JobRecoveryResult};
 use indoc::formatdoc;
 
-use crate::errors::GraphileWorkerError;
+use graphile_worker_queries::errors::GraphileWorkerError;
 use graphile_worker_queries::fail_job::single::fail_job;
 use graphile_worker_queries::return_jobs::recovery::return_job_for_recovery;
 
@@ -11,7 +11,7 @@ use super::types::{JobRecoveryOutcome, JobRecoveryRequest};
 
 const RECOVERY_LAST_ERROR: &str = "Job recovered after worker interruption";
 
-pub(crate) async fn apply_job_recovery(
+pub async fn apply_job_recovery(
     mut executor: impl DbExecutorArg,
     schema: &Schema,
     request: JobRecoveryRequest<'_>,

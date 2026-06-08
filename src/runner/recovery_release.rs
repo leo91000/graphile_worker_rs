@@ -3,8 +3,7 @@ use std::time::Duration;
 
 use graphile_worker_job::Job;
 use graphile_worker_lifecycle_hooks::{FailureReason, JobInterruptedContext};
-
-use crate::recovery::{apply_job_recovery, JobRecoveryRequest};
+use graphile_worker_recovery::{apply_job_recovery, JobRecoveryRequest};
 
 use super::{ReleaseJobError, WorkerRunner};
 

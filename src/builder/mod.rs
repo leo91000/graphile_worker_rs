@@ -7,6 +7,7 @@ use graphile_worker_crontab_types::Crontab;
 use graphile_worker_database::{Database, Schema};
 use graphile_worker_extensions::Extensions;
 use graphile_worker_lifecycle_hooks::HookRegistry;
+use graphile_worker_recovery::WorkerRecoveryConfig;
 
 mod batching;
 mod core;
@@ -116,7 +117,7 @@ pub struct WorkerOptions {
     fail_job_batch_delay: Option<Duration>,
 
     /// Dead worker recovery configuration.
-    worker_recovery_config: Option<crate::recovery::WorkerRecoveryConfig>,
+    worker_recovery_config: Option<WorkerRecoveryConfig>,
 
     /// Worker shutdown behavior.
     worker_shutdown_config: Option<crate::WorkerShutdownConfig>,

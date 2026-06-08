@@ -4,7 +4,7 @@ use std::time::Duration;
 use graphile_worker_database::{DbExecutorArg, Schema};
 use graphile_worker_lifecycle_hooks::{FailureReason, HookRegistry, JobInterruptedContext};
 
-use crate::errors::GraphileWorkerError;
+use graphile_worker_queries::errors::GraphileWorkerError;
 use graphile_worker_queries::recover_workers::{
     get_locked_jobs_for_recovery, recover_dead_worker_jobs,
 };

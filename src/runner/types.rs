@@ -7,10 +7,10 @@ use graphile_worker_crontab_types::Crontab;
 use graphile_worker_database::{Database, Schema};
 use graphile_worker_extensions::ReadOnlyExtensions;
 use graphile_worker_lifecycle_hooks::HookRegistry;
+use graphile_worker_recovery::WorkerRecoveryConfig;
 use graphile_worker_runtime as runtime;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 
-use crate::recovery::WorkerRecoveryConfig;
 use crate::WorkerShutdownConfig;
 use graphile_worker_queries::task_identifiers::SharedTaskDetails;
 
