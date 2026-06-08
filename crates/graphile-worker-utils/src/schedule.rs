@@ -3,8 +3,10 @@ use serde::Serialize;
 
 use super::add;
 use super::client::WorkerUtils;
-use crate::{errors::GraphileWorkerError, Job, JobSpec};
+use graphile_worker_job::Job;
+use graphile_worker_job_spec::JobSpec;
 use graphile_worker_queries::add_job::types::RawJobSpec;
+use graphile_worker_queries::errors::GraphileWorkerError;
 
 impl WorkerUtils {
     /// Adds a job to the queue with type safety.
@@ -14,8 +16,11 @@ impl WorkerUtils {
     ///
     /// # Example
     /// ```
-    /// # use graphile_worker::{WorkerUtils, JobSpec, TaskHandler, WorkerContext, IntoTaskHandlerResult};
-    /// # use graphile_worker::errors::GraphileWorkerError;
+    /// # use graphile_worker_ctx::WorkerContext;
+    /// # use graphile_worker_job_spec::JobSpec;
+    /// # use graphile_worker_queries::errors::GraphileWorkerError;
+    /// # use graphile_worker_task_handler::{IntoTaskHandlerResult, TaskHandler};
+    /// # use graphile_worker_utils::WorkerUtils;
     /// # use serde::{Deserialize, Serialize};
     /// # #[derive(Deserialize, Serialize)]
     /// # struct MyTask { data: String }
@@ -57,8 +62,9 @@ impl WorkerUtils {
     ///
     /// # Example
     /// ```
-    /// # use graphile_worker::{WorkerUtils, JobSpec};
-    /// # use graphile_worker::errors::GraphileWorkerError;
+    /// # use graphile_worker_job_spec::JobSpec;
+    /// # use graphile_worker_queries::errors::GraphileWorkerError;
+    /// # use graphile_worker_utils::WorkerUtils;
     /// # use serde_json::json;
     /// # async fn example(utils: &WorkerUtils) -> Result<(), GraphileWorkerError> {
     /// let job = utils.add_raw_job(
@@ -141,9 +147,8 @@ impl WorkerUtils {
     /// Adds a batch job to the queue with type safety.
     ///
     /// The database payload is a JSON array of `T` items. Register the same
-    /// identifier with [`WorkerOptions::define_batch_job`](crate::WorkerOptions::define_batch_job)
-    /// so the worker can run the batch and retry only failed items after partial
-    /// success.
+    /// identifier with the worker builder's batch-job registration API so the worker can
+    /// run the batch and retry only failed items after partial success.
     #[tracing::instrument(
         "add_batch_job",
         skip_all,

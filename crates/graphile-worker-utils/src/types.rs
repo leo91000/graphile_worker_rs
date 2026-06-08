@@ -1,7 +1,7 @@
 use graphile_worker_database::{DbExecutorArg, DbValue, Schema};
 use indoc::formatdoc;
 
-use crate::errors::GraphileWorkerError;
+use graphile_worker_queries::errors::GraphileWorkerError;
 use graphile_worker_queries::schema_names::PrivateTable;
 
 /// Types of database cleanup tasks that can be performed on the Graphile Worker schema.

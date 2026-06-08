@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use super::WorkerOptions;
+use graphile_worker_recovery::WorkerRecoveryConfig;
 
 impl WorkerOptions {
     /// Configures dead worker recovery.
@@ -8,7 +9,7 @@ impl WorkerOptions {
     /// See [`crate::WorkerRecoveryConfig`] for Pro-aligned options such as
     /// `heartbeat_interval` (`heartbeatInterval`), `sweep_interval` (`sweepInterval`),
     /// and `sweep_threshold` (`sweepThreshold`).
-    pub fn worker_recovery(mut self, config: crate::recovery::WorkerRecoveryConfig) -> Self {
+    pub fn worker_recovery(mut self, config: WorkerRecoveryConfig) -> Self {
         self.worker_recovery_config = Some(config);
         self
     }

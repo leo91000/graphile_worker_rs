@@ -1,8 +1,7 @@
-pub(crate) use functions::{add_tracing_info, link_to_job_create_span};
+pub(crate) use functions::link_to_job_create_span;
 
 #[cfg(not(any(feature = "opentelemetry_0_30", feature = "opentelemetry_0_31")))]
 mod functions {
-    pub(crate) fn add_tracing_info(_payload: &mut serde_json::Value) {}
     pub(crate) fn link_to_job_create_span(_payload: &serde_json::Value) {}
 }
 
@@ -13,38 +12,13 @@ mod functions {
     #[cfg(feature = "opentelemetry_0_30")]
     use tracing_opentelemetry_30 as tracing_opentelemetry;
 
-    use opentelemetry::trace::TraceContextExt;
     use tracing::Span;
-    use tracing_opentelemetry::OpenTelemetrySpanExt;
 
     #[derive(Debug, serde::Serialize, serde::Deserialize)]
     struct TraceInfo {
         flags: u8,
         trace_id: String,
         span_id: String,
-    }
-
-    pub(crate) fn add_tracing_info(payload: &mut serde_json::Value) {
-        if let Some(payload) = payload.as_object_mut() {
-            let context = Span::current().context();
-            let span = context.span();
-            let span_context = span.span_context();
-            if !span_context.is_valid() {
-                return;
-            }
-
-            let flags = span_context.trace_flags().to_u8();
-            let span_id = span_context.span_id().to_string();
-            let trace_id = span_context.trace_id().to_string();
-
-            let value = TraceInfo {
-                flags,
-                trace_id,
-                span_id,
-            };
-
-            payload.insert("_trace".into(), serde_json::json!(value));
-        }
     }
 
     pub(crate) fn link_to_job_create_span(payload: &serde_json::Value) {

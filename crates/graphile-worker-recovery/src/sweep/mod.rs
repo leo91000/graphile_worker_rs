@@ -4,7 +4,7 @@ use graphile_worker_database::{Database, Schema};
 use graphile_worker_lifecycle_hooks::{HookRegistry, WorkerRecoveredContext};
 use tracing::{debug, warn};
 
-use crate::errors::GraphileWorkerError;
+use graphile_worker_queries::errors::GraphileWorkerError;
 use graphile_worker_queries::worker_heartbeat::lock::try_acquire_sweep_lock;
 use graphile_worker_queries::worker_heartbeat::stale::delete_stale_workers;
 
@@ -17,7 +17,7 @@ mod jobs;
 use discovery::find_dead_worker_ids;
 use jobs::recover_jobs_from_workers;
 
-pub(crate) async fn sweep_stale_workers(
+pub async fn sweep_stale_workers(
     database: &Database,
     schema: &Schema,
     hooks: Option<&Arc<HookRegistry>>,

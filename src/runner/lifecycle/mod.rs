@@ -2,8 +2,8 @@ mod run;
 
 use super::Worker;
 use crate::builder::WorkerOptions;
-use crate::worker_utils::client::WorkerUtils;
 use graphile_worker_database::Schema;
+use graphile_worker_utils::WorkerUtils;
 
 impl Worker {
     /// Creates a new `WorkerOptions` builder with default settings.

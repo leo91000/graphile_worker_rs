@@ -91,4 +91,4 @@ pub use recovery::{
 pub use runner::Worker;
 pub use shutdown::WorkerShutdownConfig;
 pub use sql::add_job::types::RawJobSpec;
-pub use worker_utils::client::WorkerUtils;
+pub use worker_utils::WorkerUtils;

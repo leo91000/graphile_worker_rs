@@ -3,16 +3,18 @@ use std::collections::HashSet;
 use graphile_worker_task_handler::TaskHandler;
 
 use crate::tracing::add_tracing_info;
-use crate::{errors::GraphileWorkerError, Job, JobSpec};
+use graphile_worker_job::Job;
+use graphile_worker_job_spec::{JobKeyMode, JobSpec};
 use graphile_worker_queries::add_job::batch::add_jobs as insert_jobs;
 use graphile_worker_queries::add_job::types::{JobToAdd, RawJobSpec};
+use graphile_worker_queries::errors::GraphileWorkerError;
 use graphile_worker_queries::task_identifiers::get_tasks_details;
 
 use super::super::client::WorkerUtils;
 use super::analyze::analyze_jobs_after_large_batch;
 use super::hooks::invoke_before_job_schedule;
 
-pub(in crate::worker_utils) async fn add_jobs<T: TaskHandler + Clone>(
+pub(crate) async fn add_jobs<T: TaskHandler + Clone>(
     utils: &WorkerUtils,
     jobs: &[(T, &JobSpec)],
 ) -> Result<Vec<Job>, GraphileWorkerError> {
@@ -47,7 +49,7 @@ pub(in crate::worker_utils) async fn add_jobs<T: TaskHandler + Clone>(
     Ok(added_jobs)
 }
 
-pub(in crate::worker_utils) async fn add_raw_jobs(
+pub(crate) async fn add_raw_jobs(
     utils: &WorkerUtils,
     jobs: &[RawJobSpec],
 ) -> Result<Vec<Job>, GraphileWorkerError> {
@@ -95,7 +97,7 @@ async fn prepare_batch_jobs<'a>(
         job_key_preserve_run_at |= spec
             .job_key_mode()
             .as_ref()
-            .is_some_and(|m| matches!(m, crate::JobKeyMode::PreserveRunAt));
+            .is_some_and(|m| matches!(m, JobKeyMode::PreserveRunAt));
 
         jobs_to_add.push(JobToAdd {
             identifier,

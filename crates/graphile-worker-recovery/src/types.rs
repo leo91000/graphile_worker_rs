@@ -51,7 +51,7 @@ pub struct SweepStaleWorkersResult {
     pub recovered_count: i32,
 }
 
-pub(crate) struct JobRecoveryRequest<'a> {
+pub struct JobRecoveryRequest<'a> {
     pub hooks: Option<&'a Arc<HookRegistry>>,
     pub worker_id: &'a str,
     pub job: Arc<Job>,
@@ -60,15 +60,16 @@ pub(crate) struct JobRecoveryRequest<'a> {
     pub recovery_delay: Duration,
 }
 
+#[doc(hidden)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum JobRecoveryOutcome {
+pub enum JobRecoveryOutcome {
     Recovered,
     FailedWithBackoff,
     Skipped,
 }
 
 impl JobRecoveryOutcome {
-    pub(crate) fn was_handled(self) -> bool {
+    pub fn was_handled(self) -> bool {
         !matches!(self, Self::Skipped)
     }
 }

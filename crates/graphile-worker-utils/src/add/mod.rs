@@ -4,8 +4,10 @@ use tracing::Span;
 
 use super::client::WorkerUtils;
 use crate::tracing::add_tracing_info;
-use crate::{errors::GraphileWorkerError, Job, JobSpec};
+use graphile_worker_job::Job;
+use graphile_worker_job_spec::JobSpec;
 use graphile_worker_queries::add_job::single::add_job as insert_job;
+use graphile_worker_queries::errors::GraphileWorkerError;
 
 mod analyze;
 mod bulk;

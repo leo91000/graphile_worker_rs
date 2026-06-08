@@ -1,0 +1,58 @@
+[package]
+name = "graphile_worker_recovery"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Dead worker recovery helpers for graphile_worker"
+homepage = "https://docs.rs/graphile_worker"
+documentation = "https://docs.rs/graphile_worker"
+repository = "https://github.com/leo91000/graphile_worker_rs"
+keywords = ["jobs", "queue", "postgres", "worker"]
+categories = ["asynchronous", "database"]
+readme = "README.md"
+
+[features]
+default = ["runtime-tokio", "driver-sqlx"]
+runtime-tokio = [
+  "graphile_worker_database/runtime-tokio",
+  "graphile_worker_job/runtime-tokio",
+  "graphile_worker_lifecycle_hooks/runtime-tokio",
+  "graphile_worker_queries/runtime-tokio",
+]
+runtime-async-std = [
+  "graphile_worker_database/runtime-async-std",
+  "graphile_worker_job/runtime-async-std",
+  "graphile_worker_lifecycle_hooks/runtime-async-std",
+  "graphile_worker_queries/runtime-async-std",
+]
+driver-sqlx = [
+  "graphile_worker_database/driver-sqlx",
+  "graphile_worker_job/driver-sqlx",
+  "graphile_worker_lifecycle_hooks/driver-sqlx",
+  "graphile_worker_queries/driver-sqlx",
+]
+driver-tokio-postgres = [
+  "graphile_worker_database/driver-tokio-postgres",
+  "graphile_worker_queries/driver-tokio-postgres",
+]
+tls-native-tls = [
+  "graphile_worker_database/tls-native-tls",
+  "graphile_worker_queries/tls-native-tls",
+]
+tls-rustls = [
+  "graphile_worker_database/tls-rustls",
+  "graphile_worker_queries/tls-rustls",
+]
+
+[dependencies]
+graphile_worker_database.workspace = true
+graphile_worker_job.workspace = true
+graphile_worker_lifecycle_hooks.workspace = true
+graphile_worker_queries.workspace = true
+chrono.workspace = true
+indoc.workspace = true
+serde.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }

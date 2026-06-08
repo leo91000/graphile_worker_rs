@@ -3,7 +3,8 @@ use indoc::formatdoc;
 
 use super::client::WorkerUtils;
 use super::types::RescheduleJobOptions;
-use crate::{errors::GraphileWorkerError, DbJob};
+use graphile_worker_job::DbJob;
+use graphile_worker_queries::errors::GraphileWorkerError;
 use graphile_worker_queries::schema_names::WorkerFunction;
 
 pub(super) async fn remove_job(

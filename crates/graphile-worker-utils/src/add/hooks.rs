@@ -1,6 +1,7 @@
 use graphile_worker_lifecycle_hooks::{BeforeJobScheduleContext, JobScheduleResult};
 
-use crate::{errors::GraphileWorkerError, JobSpec};
+use graphile_worker_job_spec::JobSpec;
+use graphile_worker_queries::errors::GraphileWorkerError;
 
 use super::super::client::WorkerUtils;
 

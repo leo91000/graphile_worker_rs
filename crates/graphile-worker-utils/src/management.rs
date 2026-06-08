@@ -5,10 +5,11 @@ use graphile_worker_migrations::MigrateError;
 use super::client::WorkerUtils;
 use super::types::{CleanupTask, RescheduleJobOptions};
 use super::{actions, maintenance};
-use crate::recovery::{
+use graphile_worker_job::DbJob;
+use graphile_worker_queries::errors::GraphileWorkerError;
+use graphile_worker_recovery::{
     ActiveWorkerRow, SweepStaleWorkersOptions, SweepStaleWorkersResult, WorkerRecoveryConfig,
 };
-use crate::{errors::GraphileWorkerError, DbJob};
 
 impl WorkerUtils {
     /// Removes a job from the queue by its job key.
