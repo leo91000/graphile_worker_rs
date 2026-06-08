@@ -74,14 +74,12 @@ mod tests {
 
     use super::*;
 
+    type TestFuture<'a, T> = BoxFuture<'a, Result<T, DbError>>;
+
     struct EmptyExecutor;
 
     impl DbExecutor for EmptyExecutor {
-        fn execute<'a>(
-            &'a self,
-            _sql: &'a str,
-            _params: DbParams,
-        ) -> BoxFuture<'a, Result<u64, DbError>> {
+        fn execute<'a>(&'a self, _sql: &'a str, _params: DbParams) -> TestFuture<'a, u64> {
             Box::pin(async { Ok(0) })
         }
 
@@ -95,14 +93,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn add_job_accepts_common_schema_inputs() {
+    async fn add_job_signature_accepts_various_schema_input_types() {
         let executor = EmptyExecutor;
         let schema_string = String::from("graphile_worker");
         let schema = Schema::from("graphile_worker");
-
-        DbExecutor::execute(&executor, "", DbParams::new())
-            .await
-            .expect("empty executor execute should succeed");
 
         assert!(add_job(
             &executor,
