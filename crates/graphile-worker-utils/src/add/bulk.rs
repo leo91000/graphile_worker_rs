@@ -2,7 +2,6 @@ use std::collections::HashSet;
 
 use graphile_worker_task_handler::TaskHandler;
 
-use crate::tracing::add_tracing_info;
 use graphile_worker_job::Job;
 use graphile_worker_job_spec::{JobKeyMode, JobSpec};
 use graphile_worker_queries::add_job::batch::add_jobs as insert_jobs;
@@ -89,9 +88,7 @@ async fn prepare_batch_jobs<'a>(
     let mut jobs_to_add = Vec::with_capacity(jobs.len());
     let mut job_key_preserve_run_at = false;
 
-    for (identifier, mut payload, spec) in jobs {
-        add_tracing_info(&mut payload);
-
+    for (identifier, payload, spec) in jobs {
         let payload = invoke_before_job_schedule(utils, identifier, payload, spec).await?;
 
         job_key_preserve_run_at |= spec

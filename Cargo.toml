@@ -172,11 +172,13 @@ driver-tokio-postgres = [
 opentelemetry_0_30 = [
     "opentelemetry-30",
     "tracing-opentelemetry-30",
+    "graphile_worker_queries/opentelemetry_0_30",
     "graphile_worker_utils/opentelemetry_0_30",
 ]
 opentelemetry_0_31 = [
     "opentelemetry",
     "tracing-opentelemetry",
+    "graphile_worker_queries/opentelemetry_0_31",
     "graphile_worker_utils/opentelemetry_0_31",
 ]
 [dependencies]

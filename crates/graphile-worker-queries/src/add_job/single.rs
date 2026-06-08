@@ -6,6 +6,7 @@ use indoc::formatdoc;
 use tracing::info;
 
 use crate::errors::GraphileWorkerError;
+use crate::telemetry::{self, TraceInfo};
 
 use super::super::schema_names::WorkerFunction;
 
@@ -39,6 +40,8 @@ pub async fn add_job(
 
     let job_key_mode = spec.job_key_mode().clone().map(|jkm| jkm.to_string());
     let run_at = spec.run_at().or_else(|| use_local_time.then(Utc::now));
+    let trace_info = telemetry::current_trace_info();
+    let payload = prepare_payload_for_insert(payload, trace_info.as_ref());
 
     let row = executor
         .fetch_one(
@@ -68,9 +71,21 @@ pub async fn add_job(
     Ok(Job::from_db_job(job, identifier.to_string()))
 }
 
+fn prepare_payload_for_insert(
+    mut payload: serde_json::Value,
+    trace_info: Option<&TraceInfo>,
+) -> serde_json::Value {
+    if let Some(trace_info) = trace_info {
+        telemetry::add_tracing_info_with_trace(&mut payload, trace_info);
+    }
+
+    payload
+}
+
 #[cfg(test)]
 mod tests {
     use graphile_worker_database::{BoxFuture, DbError, DbExecutor, DbParams, DbRow, Schema};
+    use serde_json::json;
 
     use super::*;
 
@@ -138,5 +153,18 @@ mod tests {
         )
         .await
         .is_err());
+    }
+
+    #[test]
+    fn prepare_payload_for_insert_adds_trace_info() {
+        let trace_info = TraceInfo {
+            flags: 1,
+            trace_id: "4bf92f3577b34da6a3ce929d0e0e4736".to_string(),
+            span_id: "00f067aa0ba902b7".to_string(),
+        };
+
+        let payload = prepare_payload_for_insert(json!({ "value": true }), Some(&trace_info));
+
+        assert_eq!(payload["_trace"], json!(trace_info));
     }
 }

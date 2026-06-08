@@ -30,6 +30,14 @@ driver-sqlx = [
 driver-tokio-postgres = ["graphile_worker_database/driver-tokio-postgres"]
 tls-native-tls = ["graphile_worker_database/tls-native-tls"]
 tls-rustls = ["graphile_worker_database/tls-rustls"]
+opentelemetry_0_30 = [
+  "opentelemetry-30",
+  "tracing-opentelemetry-30",
+]
+opentelemetry_0_31 = [
+  "opentelemetry",
+  "tracing-opentelemetry",
+]
 
 [dependencies]
 graphile_worker_database.workspace = true
@@ -42,6 +50,10 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+opentelemetry-30 = { workspace = true, optional = true }
+opentelemetry = { workspace = true, optional = true }
+tracing-opentelemetry-30 = { workspace = true, optional = true }
+tracing-opentelemetry = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }

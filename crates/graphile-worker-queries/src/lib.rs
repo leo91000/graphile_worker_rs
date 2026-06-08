@@ -12,4 +12,5 @@ pub mod rows;
 #[doc(hidden)]
 pub mod schema_names;
 pub mod task_identifiers;
+mod telemetry;
 pub mod worker_heartbeat;
