@@ -9,8 +9,8 @@ use crate::recovery::{
     sweep_stale_workers as run_recovery_sweep, ActiveWorkerRow, WorkerRecoveryConfig,
 };
 use crate::recovery::{SweepStaleWorkersOptions, SweepStaleWorkersResult};
-use crate::sql::task_identifiers::get_tasks_details;
-use crate::sql::worker_heartbeat::active::list_active_workers as list_heartbeat_workers;
+use graphile_worker_queries::task_identifiers::get_tasks_details;
+use graphile_worker_queries::worker_heartbeat::active::list_active_workers as list_heartbeat_workers;
 
 pub(super) async fn list_active_workers(
     utils: &WorkerUtils,

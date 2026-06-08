@@ -3,7 +3,7 @@ use graphile_worker_job::Job;
 use graphile_worker_lifecycle_hooks::LocalQueueMode;
 use tracing::error;
 
-use crate::sql::get_job::get_job;
+use graphile_worker_queries::get_job::get_job;
 
 use super::LocalQueue;
 

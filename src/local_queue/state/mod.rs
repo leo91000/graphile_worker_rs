@@ -12,8 +12,8 @@ use graphile_worker_lifecycle_hooks::{HookRegistry, LocalQueueMode};
 use graphile_worker_runtime as runtime;
 
 use crate::background_tasks::TaskSlot;
-use crate::sql::task_identifiers::SharedTaskDetails;
 use crate::streams::JobSignalSender;
+use graphile_worker_queries::task_identifiers::SharedTaskDetails;
 
 use super::{LocalQueueConfig, LocalQueueParams};
 

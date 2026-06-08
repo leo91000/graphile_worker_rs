@@ -1,8 +1,8 @@
 use crate::errors::GraphileWorkerError;
-use crate::sql::add_job::types::RawJobSpec;
 use crate::worker_utils::client::WorkerUtils;
 use crate::{Job, JobSpec, TaskHandler};
 use graphile_worker_ctx::WorkerContext;
+use graphile_worker_queries::add_job::types::RawJobSpec;
 use graphile_worker_task_handler::BatchTaskHandler;
 use serde::Serialize;
 

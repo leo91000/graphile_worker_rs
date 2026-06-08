@@ -11,8 +11,8 @@ use graphile_worker_runtime as runtime;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 
 use crate::recovery::WorkerRecoveryConfig;
-use crate::sql::task_identifiers::SharedTaskDetails;
 use crate::WorkerShutdownConfig;
+use graphile_worker_queries::task_identifiers::SharedTaskDetails;
 
 /// Type alias for task handler functions.
 ///

@@ -3,7 +3,7 @@ use indoc::formatdoc;
 
 use crate::errors::GraphileWorkerError;
 
-use crate::Job;
+use graphile_worker_job::Job;
 
 #[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn complete_job(

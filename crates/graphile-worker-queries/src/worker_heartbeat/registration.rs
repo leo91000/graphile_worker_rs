@@ -2,7 +2,7 @@ use graphile_worker_database::{DbExecutorArg, DbValue, Schema};
 use indoc::formatdoc;
 
 use crate::errors::Result;
-use crate::sql::schema_names::WorkerFunction;
+use crate::schema_names::WorkerFunction;
 
 pub async fn worker_heartbeat(
     mut executor: impl DbExecutorArg,

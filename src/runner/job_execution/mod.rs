@@ -11,8 +11,8 @@ use self::hooks::run_job_with_hooks;
 use super::errors::ProcessJobError;
 use super::release::release_job;
 use super::WorkerRunner;
-use crate::sql::get_job::get_job;
 use crate::streams::StreamSource;
+use graphile_worker_queries::get_job::get_job;
 
 /// Fetches and processes a single job from the queue.
 ///

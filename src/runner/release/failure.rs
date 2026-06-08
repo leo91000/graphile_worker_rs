@@ -6,7 +6,7 @@ use serde_json::Value;
 use tracing::{error, warn};
 
 use crate::batcher::FailureRequest;
-use crate::sql::fail_job::single::fail_job;
+use graphile_worker_queries::fail_job::single::fail_job;
 
 use super::super::errors::{ReleaseJobError, RunJobError};
 use super::super::recovery_release::recover_shutdown_aborted_job;

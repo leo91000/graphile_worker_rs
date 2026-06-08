@@ -1,13 +1,22 @@
 use std::time::Duration;
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use graphile_worker_database::{DbExecutorArg, DbParams, Schema};
 use indoc::formatdoc;
 
 use crate::errors::Result;
-use crate::recovery::ActiveWorkerRow;
-use crate::sql::rows::get_required;
-use crate::sql::schema_names::PrivateTable;
+
+use crate::rows::get_required;
+use crate::schema_names::PrivateTable;
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ActiveWorkerRow {
+    pub worker_id: String,
+    pub last_heartbeat_at: DateTime<Utc>,
+    pub started_at: DateTime<Utc>,
+    pub metadata: Option<serde_json::Value>,
+    pub is_stale: bool,
+}
 
 pub async fn list_active_workers(
     mut executor: impl DbExecutorArg,

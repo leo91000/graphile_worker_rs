@@ -6,8 +6,8 @@ use graphile_worker_shutdown_signal::shutdown_signal;
 use rand::Rng;
 
 use crate::batcher::{CompletionBatcher, FailureBatcher};
-use crate::sql::task_identifiers::{get_tasks_details, SharedTaskDetails};
 use crate::Worker;
+use graphile_worker_queries::task_identifiers::{get_tasks_details, SharedTaskDetails};
 
 use super::database::connect_default_database;
 use super::shutdown::{combine_shutdown_signals, manual_shutdown_signal_pair};

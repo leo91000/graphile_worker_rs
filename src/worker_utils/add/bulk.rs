@@ -2,11 +2,11 @@ use std::collections::HashSet;
 
 use graphile_worker_task_handler::TaskHandler;
 
-use crate::sql::add_job::batch::add_jobs as insert_jobs;
-use crate::sql::add_job::types::{JobToAdd, RawJobSpec};
-use crate::sql::task_identifiers::get_tasks_details;
 use crate::tracing::add_tracing_info;
 use crate::{errors::GraphileWorkerError, Job, JobSpec};
+use graphile_worker_queries::add_job::batch::add_jobs as insert_jobs;
+use graphile_worker_queries::add_job::types::{JobToAdd, RawJobSpec};
+use graphile_worker_queries::task_identifiers::get_tasks_details;
 
 use super::super::client::WorkerUtils;
 use super::analyze::analyze_jobs_after_large_batch;

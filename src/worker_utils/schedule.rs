@@ -3,8 +3,8 @@ use serde::Serialize;
 
 use super::add;
 use super::client::WorkerUtils;
-use crate::sql::add_job::types::RawJobSpec;
 use crate::{errors::GraphileWorkerError, Job, JobSpec};
+use graphile_worker_queries::add_job::types::RawJobSpec;
 
 impl WorkerUtils {
     /// Adds a job to the queue with type safety.

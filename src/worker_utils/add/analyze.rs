@@ -2,7 +2,7 @@ use graphile_worker_database::DbExecutor;
 use indoc::formatdoc;
 use tracing::debug;
 
-use crate::sql::schema_names::PrivateTable;
+use graphile_worker_queries::schema_names::PrivateTable;
 
 use super::super::client::WorkerUtils;
 

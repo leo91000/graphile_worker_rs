@@ -1,4 +1,4 @@
-use crate::JobSpec;
+use graphile_worker_job_spec::JobSpec;
 
 #[derive(Debug, Clone)]
 pub struct RawJobSpec {

@@ -5,8 +5,10 @@ use tracing::{debug, error, warn};
 
 use crate::background_tasks::BackgroundTasks;
 use crate::recovery::{sweep_stale_workers, SweepStaleWorkersOptions};
-use crate::sql::worker_heartbeat::registration::{worker_deregister, worker_heartbeat};
 use crate::Worker;
+use graphile_worker_queries::worker_heartbeat::registration::{
+    worker_deregister, worker_heartbeat,
+};
 use graphile_worker_runtime as runtime;
 
 pub(crate) async fn register_worker(

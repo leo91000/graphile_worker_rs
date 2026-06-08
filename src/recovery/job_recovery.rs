@@ -4,8 +4,8 @@ use graphile_worker_lifecycle_hooks::{JobRecoveryContext, JobRecoveryResult};
 use indoc::formatdoc;
 
 use crate::errors::GraphileWorkerError;
-use crate::sql::fail_job::single::fail_job;
-use crate::sql::return_jobs::recovery::return_job_for_recovery;
+use graphile_worker_queries::fail_job::single::fail_job;
+use graphile_worker_queries::return_jobs::recovery::return_job_for_recovery;
 
 use super::types::{JobRecoveryOutcome, JobRecoveryRequest};
 
