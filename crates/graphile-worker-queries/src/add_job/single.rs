@@ -74,15 +74,15 @@ mod tests {
 
     use super::*;
 
-    struct NeverExecutor;
+    struct EmptyExecutor;
 
-    impl DbExecutor for NeverExecutor {
+    impl DbExecutor for EmptyExecutor {
         fn execute<'a>(
             &'a self,
             _sql: &'a str,
             _params: DbParams,
         ) -> BoxFuture<'a, Result<u64, DbError>> {
-            Box::pin(async { unreachable!("schema compatibility tests never execute queries") })
+            Box::pin(async { Ok(0) })
         }
 
         fn fetch_all<'a>(
@@ -90,47 +90,59 @@ mod tests {
             _sql: &'a str,
             _params: DbParams,
         ) -> BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
-            Box::pin(async { unreachable!("schema compatibility tests never execute queries") })
+            Box::pin(async { Ok(Vec::new()) })
         }
     }
 
-    #[test]
-    fn add_job_accepts_common_schema_inputs() {
-        let executor = NeverExecutor;
+    #[tokio::test]
+    async fn add_job_accepts_common_schema_inputs() {
+        let executor = EmptyExecutor;
         let schema_string = String::from("graphile_worker");
         let schema = Schema::from("graphile_worker");
 
-        std::mem::drop(add_job(
+        DbExecutor::execute(&executor, "", DbParams::new())
+            .await
+            .expect("empty executor execute should succeed");
+
+        assert!(add_job(
             &executor,
             "graphile_worker",
             "task",
             serde_json::json!({}),
             JobSpec::default(),
             false,
-        ));
-        std::mem::drop(add_job(
+        )
+        .await
+        .is_err());
+        assert!(add_job(
             &executor,
             schema_string.clone(),
             "task",
             serde_json::json!({}),
             JobSpec::default(),
             false,
-        ));
-        std::mem::drop(add_job(
+        )
+        .await
+        .is_err());
+        assert!(add_job(
             &executor,
             &schema_string,
             "task",
             serde_json::json!({}),
             JobSpec::default(),
             false,
-        ));
-        std::mem::drop(add_job(
+        )
+        .await
+        .is_err());
+        assert!(add_job(
             &executor,
             schema,
             "task",
             serde_json::json!({}),
             JobSpec::default(),
             false,
-        ));
+        )
+        .await
+        .is_err());
     }
 }
