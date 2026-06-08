@@ -10,6 +10,7 @@ use crate::errors::GraphileWorkerError;
 use super::super::schema_names::WorkerFunction;
 use super::super::task_identifiers::TaskDetails;
 use super::types::JobToAdd;
+use crate::telemetry::{self, TraceInfo};
 
 const BORROWED_BATCH_SERIALIZATION_THRESHOLD: usize = 512;
 
@@ -56,7 +57,8 @@ pub async fn add_jobs<'a>(
     let default_run_at = use_local_time.then(Utc::now);
     let sql = add_jobs_sql(&schema);
 
-    let specs_json = build_batch_specs_json(jobs, default_run_at)?;
+    let trace_info = telemetry::current_trace_info();
+    let specs_json = build_batch_specs_json(jobs, default_run_at, trace_info.as_ref())?;
     let db_jobs: Vec<graphile_worker_job::DbJob> = executor
         .fetch_all(
             &sql,
@@ -102,22 +104,30 @@ fn validate_batch_job_key_modes(jobs: &[JobToAdd<'_>]) -> Result<(), GraphileWor
 fn build_batch_specs_json<'a>(
     jobs: &[JobToAdd<'a>],
     default_run_at: Option<DateTime<Utc>>,
+    trace_info: Option<&TraceInfo>,
 ) -> serde_json::Result<serde_json::Value> {
-    if jobs.len() >= BORROWED_BATCH_SERIALIZATION_THRESHOLD {
+    if trace_info.is_none() && jobs.len() >= BORROWED_BATCH_SERIALIZATION_THRESHOLD {
         return build_borrowed_batch_specs_json(jobs, default_run_at);
     }
 
     let db_specs: Vec<DbJobSpec> = jobs
         .iter()
-        .map(|job| DbJobSpec {
-            identifier: job.identifier.to_string(),
-            payload: job.payload.clone(),
-            queue_name: job.spec.queue_name().clone(),
-            run_at: job.spec.run_at().or(default_run_at),
-            max_attempts: *job.spec.max_attempts(),
-            job_key: job.spec.job_key().clone(),
-            priority: *job.spec.priority(),
-            flags: job.spec.flags().clone(),
+        .map(|job| {
+            let mut payload = job.payload.clone();
+            if let Some(trace_info) = trace_info {
+                telemetry::add_tracing_info_with_trace(&mut payload, trace_info);
+            }
+
+            DbJobSpec {
+                identifier: job.identifier.to_string(),
+                payload,
+                queue_name: job.spec.queue_name().clone(),
+                run_at: job.spec.run_at().or(default_run_at),
+                max_attempts: *job.spec.max_attempts(),
+                job_key: job.spec.job_key().clone(),
+                priority: *job.spec.priority(),
+                flags: job.spec.flags().clone(),
+            }
         })
         .collect();
     serde_json::to_value(&db_specs)
@@ -156,4 +166,58 @@ fn add_jobs_sql(schema: &Schema) -> String {
             );
         "#
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use graphile_worker_job_spec::JobSpec;
+    use serde_json::json;
+
+    use super::*;
+
+    fn trace_info() -> TraceInfo {
+        TraceInfo {
+            flags: 1,
+            trace_id: "4bf92f3577b34da6a3ce929d0e0e4736".to_string(),
+            span_id: "00f067aa0ba902b7".to_string(),
+        }
+    }
+
+    #[test]
+    fn build_batch_specs_json_adds_trace_info_to_each_job_payload() {
+        let trace_info = trace_info();
+        let spec = JobSpec::default();
+        let jobs = vec![
+            JobToAdd {
+                identifier: "first",
+                payload: json!({ "value": 1 }),
+                spec: &spec,
+            },
+            JobToAdd {
+                identifier: "second",
+                payload: json!([{ "value": 2 }, "unchanged"]),
+                spec: &spec,
+            },
+        ];
+
+        let specs = build_batch_specs_json(&jobs, None, Some(&trace_info)).unwrap();
+
+        assert_eq!(specs[0]["payload"]["_trace"], json!(trace_info));
+        assert_eq!(specs[1]["payload"][0]["_trace"], json!(trace_info));
+        assert!(specs[1]["payload"][1].get("_trace").is_none());
+    }
+
+    #[test]
+    fn build_batch_specs_json_leaves_payload_unchanged_without_trace_info() {
+        let spec = JobSpec::default();
+        let jobs = vec![JobToAdd {
+            identifier: "task",
+            payload: json!({ "value": 1 }),
+            spec: &spec,
+        }];
+
+        let specs = build_batch_specs_json(&jobs, None, None).unwrap();
+
+        assert_eq!(specs[0]["payload"], json!({ "value": 1 }));
+    }
 }

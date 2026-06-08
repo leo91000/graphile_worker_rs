@@ -3,7 +3,6 @@ use serde::Serialize;
 use tracing::Span;
 
 use super::client::WorkerUtils;
-use crate::tracing::add_tracing_info;
 use graphile_worker_job::Job;
 use graphile_worker_job_spec::JobSpec;
 use graphile_worker_queries::add_job::single::add_job as insert_job;
@@ -23,8 +22,7 @@ pub(super) async fn add_job<T: TaskHandler>(
     spec: JobSpec,
 ) -> Result<Job, GraphileWorkerError> {
     let identifier = T::IDENTIFIER;
-    let mut payload = serde_json::to_value(payload)?;
-    add_tracing_info(&mut payload);
+    let payload = serde_json::to_value(payload)?;
 
     let span = Span::current();
     span.record("otel.name", identifier);
@@ -51,8 +49,7 @@ pub(super) async fn add_raw_job<P>(
 where
     P: Serialize,
 {
-    let mut payload = serde_json::to_value(payload)?;
-    add_tracing_info(&mut payload);
+    let payload = serde_json::to_value(payload)?;
 
     let payload = invoke_before_job_schedule(utils, identifier, payload, &spec).await?;
     insert_job(
@@ -84,12 +81,7 @@ pub(super) async fn add_batch_job<T: BatchTaskHandler>(
     span.record("otel.name", identifier);
     span.record("messaging.destination.name", identifier);
 
-    let mut payload = serde_json::to_value(payloads)?;
-    if let Some(items) = payload.as_array_mut() {
-        for item in items {
-            add_tracing_info(item);
-        }
-    }
+    let payload = serde_json::to_value(payloads)?;
 
     let payload = invoke_before_job_schedule(utils, identifier, payload, &spec).await?;
 
