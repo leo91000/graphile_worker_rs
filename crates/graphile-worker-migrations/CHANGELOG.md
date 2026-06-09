@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.4.18](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.17...graphile_worker_migrations-v0.4.18) - 2026-06-09
+
+### Added
+
+- *(recovery)* add worker heartbeat recovery and shutdown job return
+
+### Fixed
+
+- *(recovery)* harden worker recovery
+
+### Other
+
+- split shutdown config and migration registry
+- split migration sql module
+- clean up migration loading
+- clean worker architecture
+- split large modules and tests
+- migrate to sqlx 0.9
+
 ## [0.4.17](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.16...graphile_worker_migrations-v0.4.17) - 2026-05-23
 
 ### Fixed

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.16](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_types-v0.5.15...graphile_worker_crontab_types-v0.5.16) - 2026-06-09
+
+### Other
+
+- raise patch coverage for admin cleanup PR
+- clean worker architecture
+
 ## [0.5.15](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_types-v0.5.14...graphile_worker_crontab_types-v0.5.15) - 2026-05-11
 
 ### Added

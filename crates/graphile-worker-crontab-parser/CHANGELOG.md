@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.22](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_parser-v0.5.21...graphile_worker_crontab_parser-v0.5.22) - 2026-06-09
+
+### Other
+
+- raise patch coverage for admin cleanup PR
+- clean worker architecture
+
 ## [0.5.21](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_parser-v0.5.20...graphile_worker_crontab_parser-v0.5.21) - 2026-05-23
 
 ### Other

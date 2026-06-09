@@ -1,5 +1,63 @@
 # Changelog
 
+## [0.13.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.1...graphile_worker-v0.13.2) - 2026-06-09
+
+### Added
+
+- support opentelemetry 0.32
+- *(recovery)* add sweep-stale-workers CLI and admin UI panel
+- *(recovery)* add worker heartbeat recovery and shutdown job return
+
+### Fixed
+
+- reject mixed opentelemetry feature versions
+- accept raw schema inputs in query APIs
+- *(recovery)* harden worker recovery
+
+### Other
+
+- harden local queue timing flakes
+- *(deps)* update all non-major dependencies to 1.23.3 ([#440](https://github.com/leo91000/graphile_worker_rs/pull/440))
+- *(deps)* update all non-major dependencies ([#439](https://github.com/leo91000/graphile_worker_rs/pull/439))
+- check opentelemetry 0.32 in CI
+- remove duplicate utility span labels
+- label query add job spans
+- move trace injection to query inserts
+- clarify schema input test
+- cover schema input compatibility
+- add root worker utils example
+- split worker utils and recovery crates
+- split sql queries crate
+- *(deps)* lock file maintenance ([#436](https://github.com/leo91000/graphile_worker_rs/pull/436))
+- raise patch coverage for admin cleanup PR
+- split shutdown config and migration registry
+- split migration sql module
+- clean up migration loading
+- make throughput benchmark fail fast
+- clean worker architecture
+- split large modules and tests
+- split worker utilities and runner sources
+- clean up recovery architecture
+- Extract admin API and split recovery modules
+- *(recovery)* macroize recovery hook event
+- *(recovery)* normalize recovery test SQL
+- *(recovery)* address review feedback
+- *(recovery)* cover recovery helper paths
+- *(ci)* skip Codecov CLI validation
+- *(recovery)* document and test recovery behavior
+- *(deps)* lock file maintenance ([#431](https://github.com/leo91000/graphile_worker_rs/pull/431))
+- *(deps)* update all non-major dependencies to 0.4.45 ([#432](https://github.com/leo91000/graphile_worker_rs/pull/432))
+- *(deps)* update dependency @iconify-json/lucide to v1.2.111 ([#430](https://github.com/leo91000/graphile_worker_rs/pull/430))
+- *(deps)* update all non-major dependencies ([#429](https://github.com/leo91000/graphile_worker_rs/pull/429))
+- *(deps)* lock file maintenance ([#428](https://github.com/leo91000/graphile_worker_rs/pull/428))
+- *(deps)* update all non-major dependencies ([#423](https://github.com/leo91000/graphile_worker_rs/pull/423))
+- isolate escape identifier parity test
+- match listener identifier escaping
+- escape identifiers without database query
+- address sqlx upgrade review comments
+- cover sqlx migration transaction executor
+- migrate to sqlx 0.9
+
 ## [0.13.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.0...graphile_worker-v0.13.1) - 2026-05-23
 
 ### Fixed
