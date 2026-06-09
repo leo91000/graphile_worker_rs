@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.18](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_handler-v0.5.17...graphile_worker_task_handler-v0.5.18) - 2026-06-09
+
+### Other
+
+- clean worker architecture
+
 ## [0.5.17](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_handler-v0.5.16...graphile_worker_task_handler-v0.5.17) - 2026-05-23
 
 ### Other

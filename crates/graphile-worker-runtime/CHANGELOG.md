@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_runtime-v0.1.2...graphile_worker_runtime-v0.1.3) - 2026-06-09
+
+### Other
+
+- clean up migration loading
+- clean worker architecture
+
 ## [0.1.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_runtime-v0.1.1...graphile_worker_runtime-v0.1.2) - 2026-05-12
 
 ### Other

@@ -1,6 +1,6 @@
 [package]
 name = "graphile_worker_admin_api"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT"
 description = "Shared Graphile Worker admin API contracts and queries"

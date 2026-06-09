@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_lifecycle_hooks-v0.3.2...graphile_worker_lifecycle_hooks-v0.3.3) - 2026-06-09
+
+### Added
+
+- *(recovery)* add worker heartbeat recovery and shutdown job return
+
+### Other
+
+- clean worker architecture
+- *(recovery)* macroize recovery hook event
+
 ## [0.3.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_lifecycle_hooks-v0.3.1...graphile_worker_lifecycle_hooks-v0.3.2) - 2026-05-23
 
 ### Other
