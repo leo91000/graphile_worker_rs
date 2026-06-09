@@ -47,7 +47,15 @@ async fn local_queue_processes_jobs_correctly() {
             );
         }
 
-        sleep(Duration::from_secs(1)).await;
+        wait_for_jobs(
+            &test_db,
+            Duration::from_secs(5),
+            Duration::from_millis(50),
+            "All jobs should be removed after completion",
+            |jobs| jobs.is_empty(),
+        )
+        .await;
+
         assert_eq!(
             LOCAL_QUEUE_JOB_CALL_COUNT.get().await,
             5,

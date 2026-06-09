@@ -54,15 +54,20 @@ async fn local_queue_with_forbidden_flags_uses_direct_fetch() {
         )
         .await;
 
-        sleep(Duration::from_millis(500)).await;
-
         assert_eq!(
             FLAGGED_CALL_COUNT.get().await,
             3,
             "Only 3 jobs without the special flag should have been executed"
         );
 
-        let remaining_jobs = test_db.get_jobs().await;
+        let remaining_jobs = wait_for_jobs(
+            &test_db,
+            Duration::from_secs(5),
+            Duration::from_millis(50),
+            "Only the jobs with the special flag should remain in the queue",
+            |jobs| jobs.len() == 3,
+        )
+        .await;
         assert_eq!(
             remaining_jobs.len(),
             3,

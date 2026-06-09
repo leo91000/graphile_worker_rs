@@ -7,6 +7,11 @@ async fn local_queue_refetch_delay_abort_with_low_concurrency() {
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
 
+        let init_count = Arc::new(AtomicU32::new(0));
+        let plugin = LocalQueueInitCounterPlugin {
+            counter: init_count.clone(),
+        };
+
         let worker = Arc::new(
             Worker::options()
                 .database(test_db.database.clone())
@@ -24,6 +29,7 @@ async fn local_queue_refetch_delay_abort_with_low_concurrency() {
                 )
                 .listen_os_shutdown_signals(false)
                 .define_job::<RefetchAbortJob>()
+                .add_plugin(plugin)
                 .init()
                 .await
                 .expect("Failed to create worker"),
@@ -34,7 +40,14 @@ async fn local_queue_refetch_delay_abort_with_low_concurrency() {
             let _ = worker_for_run.run().await;
         });
 
-        sleep(Duration::from_millis(300)).await;
+        wait_for_atomic_counter(
+            &init_count,
+            1,
+            Duration::from_secs(5),
+            Duration::from_millis(50),
+            "Local queue should have initialized before adding jobs",
+        )
+        .await;
 
         for i in 1..=5 {
             utils

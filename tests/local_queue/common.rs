@@ -10,8 +10,8 @@ mod refetch_jobs;
 mod shutdown_jobs;
 
 use graphile_worker::{
-    HookRegistry, IntoTaskHandlerResult, JobSpec, LocalQueueConfig, LocalQueueInit, Plugin,
-    RefetchDelayConfig, TaskHandler, Worker, WorkerContext,
+    HookRegistry, IntoTaskHandlerResult, JobSpec, LocalQueueConfig, LocalQueueGetJobsComplete,
+    LocalQueueInit, Plugin, RefetchDelayConfig, TaskHandler, Worker, WorkerContext,
 };
 use graphile_worker_runtime::sleep as runtime_sleep;
 use serde::{Deserialize, Serialize};
@@ -23,7 +23,7 @@ use tokio::{
     time::{sleep, Instant},
 };
 
-use crate::helpers::{with_test_db, StaticCounter};
+use crate::helpers::{with_test_db, JobWithQueueName, StaticCounter, TestDatabase};
 
 use basic_jobs::*;
 use distribution_jobs::*;
@@ -43,6 +43,47 @@ async fn wait_for_counter(
         if start_time.elapsed() > timeout {
             panic!("{timeout_message}, got {}", counter.get().await);
         }
+        sleep(poll_interval).await;
+    }
+}
+
+async fn wait_for_atomic_counter(
+    counter: &AtomicU32,
+    expected: u32,
+    timeout: Duration,
+    poll_interval: Duration,
+    timeout_message: &str,
+) {
+    let start_time = Instant::now();
+    while counter.load(Ordering::SeqCst) < expected {
+        if start_time.elapsed() > timeout {
+            panic!(
+                "{timeout_message}, got {}",
+                counter.load(Ordering::SeqCst)
+            );
+        }
+        sleep(poll_interval).await;
+    }
+}
+
+async fn wait_for_jobs(
+    test_db: &TestDatabase,
+    timeout: Duration,
+    poll_interval: Duration,
+    timeout_message: &str,
+    predicate: impl Fn(&[JobWithQueueName]) -> bool,
+) -> Vec<JobWithQueueName> {
+    let start_time = Instant::now();
+    loop {
+        let jobs = test_db.get_jobs().await;
+        if predicate(&jobs) {
+            return jobs;
+        }
+
+        if start_time.elapsed() > timeout {
+            panic!("{timeout_message}, got {} jobs: {jobs:?}", jobs.len());
+        }
+
         sleep(poll_interval).await;
     }
 }

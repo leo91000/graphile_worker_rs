@@ -7,6 +7,11 @@ async fn local_queue_handles_empty_queue_gracefully() {
         let utils = test_db.worker_utils();
         utils.migrate().await.expect("Failed to migrate");
 
+        let get_jobs_complete_count = Arc::new(AtomicU32::new(0));
+        let plugin = LocalQueueGetJobsCompleteCounterPlugin {
+            counter: get_jobs_complete_count.clone(),
+        };
+
         let worker = Arc::new(
             Worker::options()
                 .database(test_db.database.clone())
@@ -15,6 +20,7 @@ async fn local_queue_handles_empty_queue_gracefully() {
                 .local_queue(LocalQueueConfig::builder().size(10).build())
                 .listen_os_shutdown_signals(false)
                 .define_job::<EmptyQueueJob>()
+                .add_plugin(plugin)
                 .init()
                 .await
                 .expect("Failed to create worker"),
@@ -25,7 +31,14 @@ async fn local_queue_handles_empty_queue_gracefully() {
             let _ = worker_for_run.run().await;
         });
 
-        sleep(Duration::from_millis(300)).await;
+        wait_for_atomic_counter(
+            &get_jobs_complete_count,
+            1,
+            Duration::from_secs(5),
+            Duration::from_millis(50),
+            "Local queue should have completed an empty fetch",
+        )
+        .await;
 
         assert_eq!(
             EMPTY_QUEUE_CALL_COUNT.get().await,

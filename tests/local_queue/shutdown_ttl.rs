@@ -34,7 +34,14 @@ async fn local_queue_returns_jobs_on_shutdown() {
             let _ = worker_for_run.run().await;
         });
 
-        sleep(Duration::from_millis(500)).await;
+        wait_for_jobs(
+            &test_db,
+            Duration::from_secs(5),
+            Duration::from_millis(100),
+            "Jobs should be locked by the worker before shutdown",
+            |jobs| jobs.iter().filter(|j| j.locked_by.is_some()).count() >= 2,
+        )
+        .await;
 
         worker.request_shutdown();
 
@@ -47,9 +54,14 @@ async fn local_queue_returns_jobs_on_shutdown() {
             sleep(Duration::from_millis(100)).await;
         }
 
-        sleep(Duration::from_millis(200)).await;
-
-        let remaining_jobs = test_db.get_jobs().await;
+        let remaining_jobs = wait_for_jobs(
+            &test_db,
+            Duration::from_secs(5),
+            Duration::from_millis(100),
+            "Most jobs should be returned to the queue",
+            |jobs| jobs.iter().filter(|j| j.locked_by.is_none()).count() >= 8,
+        )
+        .await;
         let unlocked_jobs: Vec<_> = remaining_jobs
             .iter()
             .filter(|j| j.locked_by.is_none())

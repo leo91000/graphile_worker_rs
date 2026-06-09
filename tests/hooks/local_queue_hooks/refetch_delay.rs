@@ -37,12 +37,13 @@ async fn test_local_queue_refetch_delay_hooks() {
             }
         });
 
-        sleep(Duration::from_millis(500)).await;
-
-        assert!(
-            counters.refetch_delay_start.load(Ordering::SeqCst) >= 1,
-            "refetch_delay_start hook should be called"
-        );
+        let c = counters.clone();
+        wait_for_condition(
+            || c.refetch_delay_start.load(Ordering::SeqCst) >= 1,
+            5,
+            "refetch_delay_start hook should be called",
+        )
+        .await;
 
         let c = counters.clone();
         wait_for_condition(
