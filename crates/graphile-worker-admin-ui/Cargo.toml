@@ -12,6 +12,7 @@ categories = ["web-programming", "database"]
 include = [
   "/Cargo.toml",
   "/assets/**",
+  "/build/**",
   "/build.rs",
   "/package-lock.json",
   "/package.json",
