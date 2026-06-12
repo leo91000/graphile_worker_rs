@@ -8,7 +8,7 @@
     "@egoist/tailwindcss-icons": "1.9.2",
     "@iconify-json/lucide": "1.2.111",
     "@iconify-json/tabler": "1.2.35",
-    "@tailwindcss/cli": "4.3.0",
-    "tailwindcss": "4.3.0"
+    "@tailwindcss/cli": "4.3.1",
+    "tailwindcss": "4.3.1"
   }
 }
