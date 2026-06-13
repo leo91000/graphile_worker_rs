@@ -53,12 +53,12 @@ deadpool-postgres = "0.14.1"
 derive_builder = "0.20.2"
 event-listener = "5.4.1"
 futures = "0.3.32"
-getset = "0.1.6"
+getset = "0.1.7"
 gloo-net = "0.7.0"
 gloo-timers = "0.4.0"
 hex = "0.4.3"
 indoc = "2.0.7"
-js-sys = "=0.3.100"
+js-sys = "=0.3.102"
 json5 = "1.3.1"
 leptos = "0.8.19"
 nom = "8.0.0"
@@ -77,7 +77,7 @@ syn = "2.0.117"
 subtle = "2.6.1"
 thiserror = "2.0.18"
 tokio = { version = "1.52.3" }
-tokio-postgres = { version = "0.7.17", default-features = false }
+tokio-postgres = { version = "0.7.18", default-features = false }
 tokio-stream = "0.1.18"
 tokio-util = { version = "0.7.18" }
 sqlx = { version = "0.9.0", features = [
@@ -93,9 +93,9 @@ tracing-opentelemetry-32 = { package = "tracing-opentelemetry", version = "0.33.
 tracing-subscriber = "0.3.23"
 url = "2.5.8"
 uuid = "1.23.3"
-wasm-bindgen = "=0.2.123"
-wasm-bindgen-futures = "=0.4.73"
-web-sys = "=0.3.100"
+wasm-bindgen = "=0.2.125"
+wasm-bindgen-futures = "=0.4.75"
+web-sys = "=0.3.102"
 windows-sys = "0.61.2"
 
 [features]
