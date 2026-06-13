@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_lifecycle_hooks-v0.3.3...graphile_worker_lifecycle_hooks-v0.3.4) - 2026-06-13
+
+### Other
+
+- updated the following local packages: graphile_worker_database, graphile_worker_crontab_types, graphile_worker_job, graphile_worker_job_spec
+
 ## [0.3.3](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_lifecycle_hooks-v0.3.2...graphile_worker_lifecycle_hooks-v0.3.3) - 2026-06-09
 
 ### Added
