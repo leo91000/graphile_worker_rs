@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.3](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.2...graphile_worker-v0.13.3) - 2026-06-13
+
+### Other
+
+- *(deps)* update all non-major dependencies to v1.2.112 ([#443](https://github.com/leo91000/graphile_worker_rs/pull/443))
+- *(deps)* update all non-major dependencies ([#441](https://github.com/leo91000/graphile_worker_rs/pull/441))
+
 ## [0.13.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.1...graphile_worker-v0.13.2) - 2026-06-09
 
 ### Added
