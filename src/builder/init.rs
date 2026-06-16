@@ -2,7 +2,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use graphile_worker_migrations::migrate;
-use graphile_worker_shutdown_signal::shutdown_signal;
 use rand::Rng;
 
 use crate::batcher::{CompletionBatcher, FailureBatcher};
@@ -10,7 +9,7 @@ use crate::Worker;
 use graphile_worker_queries::task_identifiers::{get_tasks_details, SharedTaskDetails};
 
 use super::database::connect_default_database;
-use super::shutdown::{combine_shutdown_signals, manual_shutdown_signal_pair};
+use super::shutdown::{configured_shutdown_signal, manual_shutdown_signal_pair};
 use super::{WorkerBuildError, WorkerOptions};
 
 impl WorkerOptions {
@@ -80,11 +79,7 @@ impl WorkerOptions {
         rand::rng().fill_bytes(&mut random_bytes);
 
         let (manual_signal, shutdown_notifier) = manual_shutdown_signal_pair();
-        let shutdown_signal = if shutdown_config.listen_os_shutdown_signals {
-            combine_shutdown_signals(manual_signal, shutdown_signal())
-        } else {
-            manual_signal
-        };
+        let shutdown_signal = configured_shutdown_signal(manual_signal, &shutdown_config);
 
         let worker_id = format!("graphile_worker_{}", hex::encode(random_bytes));
         let poll_interval = self.poll_interval.unwrap_or(Duration::from_millis(1000));

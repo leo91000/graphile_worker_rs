@@ -157,12 +157,13 @@ graphile_worker::WorkerOptions::default()
 
 Graphile Worker installs OS-level signal handlers (like `SIGINT`/`SIGTERM`) so
 it can shut down gracefully when you press Ctrl+C. If your application already
-owns the shutdown lifecycle, disable the built-in listeners and call
-`Worker::request_shutdown()` when your orchestrator asks the worker to stop:
+owns the shutdown lifecycle, pass the host shutdown signal to the worker and
+disable the built-in listeners:
 
 ```rust,ignore
 let shutdown = graphile_worker::WorkerShutdownConfig::default()
-    .listen_os_shutdown_signals(false);
+    .listen_os_shutdown_signals(false)
+    .shutdown_signal(on_shutdown());
 
 let worker = graphile_worker::WorkerOptions::default()
     .worker_shutdown(shutdown) // prevent installing Ctrl+C handlers
@@ -170,19 +171,12 @@ let worker = graphile_worker::WorkerOptions::default()
     .init()
     .await?;
 
-let run_loop = worker.run();
-tokio::pin!(run_loop);
-
-tokio::select! {
-    // Main worker loop
-    result = &mut run_loop => result?,
-    // Notify the worker when the host framework wants to stop
-    () = on_shutdown() => {
-        worker.request_shutdown();
-        run_loop.await?; // drain gracefully before returning
-    }
-}
+worker.run().await?;
 ```
+
+The custom future should complete when shutdown is requested. Graphile Worker
+still owns graceful draining, local queue release, batcher flushes, and
+grace-period handling for in-flight jobs.
 
 ### Worker Recovery
 
