@@ -127,7 +127,7 @@ async fn main() {
         RawJobSpec {
             identifier: "process_payment".into(),
             payload: json!({ "user_id": 123, "amount": 50 }),
-            spec: JobSpecBuilder::new().priority(10).build(),
+            spec: JobSpecBuilder::new().priority(-10).build(),
         },
         RawJobSpec {
             identifier: "process_payment".into(),

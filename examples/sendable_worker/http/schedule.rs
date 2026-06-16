@@ -80,7 +80,7 @@ pub(super) async fn schedule_database_task(
         query: sql_query.clone(),
     };
     let job_spec = JobSpecBuilder::new()
-        .priority(10)
+        .priority(-10)
         .run_at(chrono::Utc::now() + chrono::Duration::seconds(10))
         .job_key(format!("db_task_{}", chrono::Utc::now().timestamp()))
         .build();
@@ -91,7 +91,7 @@ pub(super) async fn schedule_database_task(
                 stream,
                 200,
                 "OK",
-                "Database task scheduled to run in 10 seconds with high priority!",
+                "Database task scheduled to run in 10 seconds with elevated priority!",
             )
             .await;
         }

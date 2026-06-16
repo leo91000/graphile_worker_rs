@@ -1,0 +1,17 @@
+[book]
+title = "Graphile Worker RS"
+authors = ["Graphile Worker RS contributors"]
+description = "Guide for the Graphile Worker Rust/PostgreSQL job queue."
+language = "en"
+multilingual = false
+src = "src"
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+default-theme = "rust"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/leo91000/graphile_worker_rs"
+edit-url-template = "https://github.com/leo91000/graphile_worker_rs/edit/main/docs/src/{path}"

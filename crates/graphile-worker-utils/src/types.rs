@@ -105,7 +105,7 @@ pub struct RescheduleJobOptions {
     /// When the job should be executed. If not specified, jobs will be scheduled to run immediately.
     pub run_at: Option<chrono::DateTime<chrono::Utc>>,
 
-    /// The job's priority. Higher numbers indicate higher priority (runs sooner).
+    /// The job's priority. Lower numbers indicate higher priority and run sooner.
     /// Default priority is 0.
     pub priority: Option<i16>,
 
