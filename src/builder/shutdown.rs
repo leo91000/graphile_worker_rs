@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use futures::FutureExt;
 use graphile_worker_runtime::Notify;
-use graphile_worker_shutdown_signal::ShutdownSignal;
+use graphile_worker_shutdown_signal::{shutdown_signal as os_shutdown_signal, ShutdownSignal};
 
 use super::WorkerOptions;
 
@@ -38,6 +38,23 @@ pub(super) fn combine_shutdown_signals(
     .shared()
 }
 
+pub(super) fn configured_shutdown_signal(
+    manual_signal: ShutdownSignal,
+    config: &crate::WorkerShutdownConfig,
+) -> ShutdownSignal {
+    let mut signal = manual_signal;
+
+    if let Some(custom_signal) = config.shutdown_signal.clone() {
+        signal = combine_shutdown_signals(signal, custom_signal);
+    }
+
+    if config.listen_os_shutdown_signals {
+        signal = combine_shutdown_signals(signal, os_shutdown_signal());
+    }
+
+    signal
+}
+
 impl WorkerOptions {
     fn update_shutdown_config(
         mut self,
@@ -66,6 +83,19 @@ impl WorkerOptions {
     pub fn listen_os_shutdown_signals(self, value: bool) -> Self {
         self.update_shutdown_config(|config| {
             config.listen_os_shutdown_signals = value;
+        })
+    }
+
+    /// Sets a custom application shutdown signal.
+    ///
+    /// The future should complete when the host application requests shutdown.
+    /// The worker still owns graceful draining after the signal is received.
+    pub fn shutdown_signal(
+        self,
+        signal: impl std::future::Future<Output = ()> + Send + 'static,
+    ) -> Self {
+        self.update_shutdown_config(|config| {
+            config.shutdown_signal = Some(crate::shutdown::future_to_shutdown_signal(signal));
         })
     }
 

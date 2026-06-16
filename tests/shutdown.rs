@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
-use graphile_worker::{IntoTaskHandlerResult, JobSpec, TaskHandler, Worker, WorkerContext};
+use graphile_worker::{
+    IntoTaskHandlerResult, JobSpec, TaskHandler, Worker, WorkerContext, WorkerShutdownConfig,
+};
 use serde::{Deserialize, Serialize};
 use tokio::{
+    sync::Notify,
     task::spawn_local,
     time::{Duration, Instant},
 };
@@ -83,6 +86,75 @@ async fn request_shutdown_executes_scheduled_jobs() {
             job_count,
             "All scheduled jobs should have run before shutdown"
         );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn custom_shutdown_signal_stops_worker_run() {
+    with_test_db(|test_db| async move {
+        let shutdown_notify = Arc::new(Notify::new());
+        let shutdown = WorkerShutdownConfig::default()
+            .listen_os_shutdown_signals(false)
+            .shutdown_signal({
+                let shutdown_notify = shutdown_notify.clone();
+                async move {
+                    shutdown_notify.notified().await;
+                }
+            });
+
+        let worker = Arc::new(
+            Worker::options()
+                .database(test_db.database.clone())
+                .worker_shutdown(shutdown)
+                .init()
+                .await
+                .expect("Failed to create worker"),
+        );
+
+        let worker_handle = spawn_local({
+            let worker = worker.clone();
+            async move {
+                worker.run().await.expect("Worker run failed");
+            }
+        });
+
+        shutdown_notify.notify_one();
+
+        tokio::time::timeout(Duration::from_secs(2), worker_handle)
+            .await
+            .expect("Worker did not shut down after custom shutdown signal")
+            .expect("Worker task panicked");
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn request_shutdown_still_works_with_pending_custom_signal() {
+    with_test_db(|test_db| async move {
+        let worker = Arc::new(
+            Worker::options()
+                .database(test_db.database.clone())
+                .listen_os_shutdown_signals(false)
+                .shutdown_signal(std::future::pending::<()>())
+                .init()
+                .await
+                .expect("Failed to create worker"),
+        );
+
+        let worker_handle = spawn_local({
+            let worker = worker.clone();
+            async move {
+                worker.run().await.expect("Worker run failed");
+            }
+        });
+
+        worker.request_shutdown();
+
+        tokio::time::timeout(Duration::from_secs(2), worker_handle)
+            .await
+            .expect("Worker did not shut down after request_shutdown")
+            .expect("Worker task panicked");
     })
     .await;
 }
