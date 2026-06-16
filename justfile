@@ -87,6 +87,15 @@ coverage-diff branch="main":
 doc-test:
   cargo test --all --doc
 
+docs-install:
+  cargo install mdbook --vers "^0.4" --locked
+
+docs:
+  mdbook build docs
+
+docs-serve port="3000":
+  mdbook serve docs --hostname 127.0.0.1 --port {{port}}
+
 fmt:
   cargo fmt --all
 
