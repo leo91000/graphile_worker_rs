@@ -22,9 +22,6 @@ admin UI.
 - [Examples](https://github.com/leo91000/graphile_worker_rs/tree/main/examples) -
   runnable repository examples.
 
-If the guide has not been deployed yet, browse the
-[source summary](https://github.com/leo91000/graphile_worker_rs/blob/main/docs/src/SUMMARY.md).
-
 ## Installation
 
 ```bash
