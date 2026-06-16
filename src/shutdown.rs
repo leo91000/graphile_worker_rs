@@ -78,3 +78,20 @@ pub(crate) fn future_to_shutdown_signal(
 ) -> ShutdownSignal {
     signal.boxed().shared()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::WorkerShutdownConfig;
+
+    #[test]
+    fn debug_reports_shutdown_signal_presence() {
+        let without_signal = format!("{:?}", WorkerShutdownConfig::default());
+        assert!(without_signal.contains("shutdown_signal: false"));
+
+        let with_signal = format!(
+            "{:?}",
+            WorkerShutdownConfig::default().shutdown_signal(std::future::pending::<()>())
+        );
+        assert!(with_signal.contains("shutdown_signal: true"));
+    }
+}
