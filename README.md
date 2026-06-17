@@ -1,9 +1,9 @@
 # Graphile Worker RS
 
 [![Codecov](https://codecov.io/github/leo91000/graphile_worker_rs/coverage.svg?branch=main)](https://codecov.io/gh/leo91000/graphile_worker_rs)
-[![Crates.io](https://img.shields.io/crates/v/graphile-worker.svg)](https://crates.io/crates/graphile-worker)
+[![Crates.io](https://badgen.net/crates/v/graphile_worker)](https://crates.io/crates/graphile_worker)
 [![Documentation](https://img.shields.io/docsrs/graphile_worker)](https://docs.rs/graphile_worker/)
-[![MIT License](https://img.shields.io/crates/l/graphile-worker.svg)](https://github.com/leo91000/graphile_worker_rs/blob/main/LICENSE.md)
+[![MIT License](https://shields.io/badge/license-MIT-blue)](https://github.com/leo91000/graphile_worker_rs/blob/main/LICENSE.md)
 
 A PostgreSQL-backed job queue for Rust applications, based on
 [Graphile Worker](https://github.com/graphile/worker).
