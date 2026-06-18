@@ -64,7 +64,7 @@ jobs:
           cargo llvm-cov nextest --ignore-filename-regex "${COVERAGE_IGNORE_REGEX}" --cobertura --output-path "${{ matrix.output }}" ${{ matrix.cargo_args }} ${{ matrix.nextest_args }}
       - name: Upload combined coverage to Codecov
         if: matrix.codecov_flags == ''
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: ./${{ matrix.output }}
           fail_ci_if_error: true
@@ -74,7 +74,7 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload flagged coverage to Codecov
         if: matrix.codecov_flags != ''
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: ./${{ matrix.output }}
           flags: ${{ matrix.codecov_flags }}
