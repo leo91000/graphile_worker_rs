@@ -60,6 +60,18 @@ impl WorkerOptions {
         self
     }
 
+    /// Sets whether to use PostgreSQL notification delivery.
+    ///
+    /// # Arguments
+    /// * `value` - True to use notification delivery, false to use polling only
+    ///
+    /// # Default
+    /// If not specified, defaults to true
+    pub fn use_notification_delivery(mut self, value: bool) -> Self {
+        self.use_notification_delivery = Some(value);
+        self
+    }
+
     /// Sets whether to use local application time or database time for timestamps.
     ///
     /// When `use_local_time` is true, the application's `Utc::now()` is used for timestamps,

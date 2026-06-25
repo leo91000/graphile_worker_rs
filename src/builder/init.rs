@@ -83,6 +83,7 @@ impl WorkerOptions {
 
         let worker_id = format!("graphile_worker_{}", hex::encode(random_bytes));
         let poll_interval = self.poll_interval.unwrap_or(Duration::from_millis(1000));
+        let use_notification_delivery = self.use_notification_delivery.unwrap_or(true);
 
         let hooks = Arc::new(self.hooks);
 
@@ -125,6 +126,7 @@ impl WorkerOptions {
             worker_id,
             concurrency,
             poll_interval,
+            use_notification_delivery,
             jobs: self.jobs,
             database,
             schema,

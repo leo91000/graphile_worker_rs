@@ -71,6 +71,7 @@ impl Worker {
             worker_id: self.worker_id.clone(),
             concurrency: self.concurrency,
             poll_interval: self.poll_interval,
+            use_notification_delivery: self.use_notification_delivery,
             jobs: self.jobs.clone(),
             database: self.database.clone(),
             schema: self.schema.clone(),

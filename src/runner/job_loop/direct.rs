@@ -11,6 +11,7 @@ pub(super) async fn run(worker: &Worker) -> Result<(), WorkerRuntimeError> {
     let job_signal = job_signal_stream(
         worker.database.clone(),
         worker.poll_interval,
+        worker.use_notification_delivery,
         worker.shutdown_signal.clone(),
         1,
     )

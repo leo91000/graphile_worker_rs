@@ -17,6 +17,7 @@ pub(super) async fn run(
     let job_signal = job_signal_stream_with_receiver(
         worker.database.clone(),
         worker.poll_interval,
+        worker.use_notification_delivery,
         worker.shutdown_signal.clone(),
         1,
         job_signal_rx,

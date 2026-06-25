@@ -49,10 +49,19 @@ pub type JobSignalReceiver = runtime::Receiver<()>;
 pub async fn job_signal_stream(
     database: Database,
     poll_interval: Duration,
+    use_notification_system: bool,
     shutdown_signal: ShutdownSignal,
     concurrency: usize,
 ) -> Result<impl Stream<Item = StreamSource>> {
-    job_signal_stream_internal(database, poll_interval, shutdown_signal, concurrency, None).await
+    job_signal_stream_internal(
+        database,
+        poll_interval,
+        use_notification_system,
+        shutdown_signal,
+        concurrency,
+        None,
+    )
+    .await
 }
 
 /// Creates a stream that yields job processing signals, with a provided receiver for internal signaling.
@@ -62,6 +71,7 @@ pub async fn job_signal_stream(
 pub async fn job_signal_stream_with_receiver(
     database: Database,
     poll_interval: Duration,
+    use_notification_system: bool,
     shutdown_signal: ShutdownSignal,
     concurrency: usize,
     internal_rx: JobSignalReceiver,
@@ -69,6 +79,7 @@ pub async fn job_signal_stream_with_receiver(
     job_signal_stream_internal(
         database,
         poll_interval,
+        use_notification_system,
         shutdown_signal,
         concurrency,
         Some(internal_rx),
@@ -79,12 +90,19 @@ pub async fn job_signal_stream_with_receiver(
 async fn job_signal_stream_internal(
     database: Database,
     poll_interval: Duration,
+    use_notification_system: bool,
     shutdown_signal: ShutdownSignal,
     concurrency: usize,
     internal_rx: Option<runtime::Receiver<()>>,
 ) -> Result<impl Stream<Item = StreamSource>> {
     let interval = runtime::interval(poll_interval);
-    let pg_listener = database.listen("jobs:insert").await?;
+
+    let pg_listener = if use_notification_system {
+        database.listen("jobs:insert").await?
+    } else {
+        None
+    };
+
     let stream_data = JobSignalStreamData::new(
         interval,
         pg_listener,
