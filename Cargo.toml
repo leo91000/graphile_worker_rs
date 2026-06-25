@@ -39,7 +39,7 @@ graphile_worker_shutdown_signal = { path = "crates/graphile-worker-shutdown-sign
 graphile_worker_task_details = { path = "crates/graphile-worker-task-details", version = "0.1.5", default-features = false }
 graphile_worker_task_handler = { path = "crates/graphile-worker-task-handler", version = "0.5.18", default-features = false }
 graphile_worker_utils = { path = "crates/graphile-worker-utils", version = "0.1.0", default-features = false }
-anyhow = "1.0.102"
+anyhow = "1.0.103"
 async-channel = "2.5.0"
 async-lock = "3.4.2"
 async-signal = "0.2.14"
