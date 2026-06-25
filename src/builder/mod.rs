@@ -72,6 +72,9 @@ pub struct WorkerOptions {
     /// How often to poll the database for new jobs
     poll_interval: Option<Duration>,
 
+    /// Use notification delivery
+    use_notification_delivery: Option<bool>,
+
     /// Map of job identifiers to handler functions
     jobs: HashMap<String, WorkerFn>,
 

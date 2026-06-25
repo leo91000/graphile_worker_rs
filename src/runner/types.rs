@@ -38,6 +38,8 @@ pub struct Worker {
     pub(crate) concurrency: usize,
     /// How often to poll for new jobs when no notifications are received
     pub(crate) poll_interval: Duration,
+    /// Whether to LISTEN to job notifications
+    pub(crate) use_notification_delivery: bool,
     /// Map of task identifiers to their handler functions
     pub(crate) jobs: HashMap<String, WorkerFn>,
     /// Database connection pool
