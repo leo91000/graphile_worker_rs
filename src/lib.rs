@@ -83,7 +83,8 @@ pub use graphile_worker_task_handler::*;
 pub use builder::{CronInput, WorkerBuildError, WorkerOptions};
 pub use context_ext::WorkerContextExt;
 pub use local_queue::{
-    LocalQueue, LocalQueueConfig, LocalQueueError, LocalQueueMode, RefetchDelayConfig,
+    LocalQueue, LocalQueueConfig, LocalQueueError, LocalQueueMode, LocalQueueSignalSender,
+    RefetchDelayConfig,
 };
 pub use recovery::{
     ActiveWorkerRow, SweepStaleWorkersOptions, SweepStaleWorkersResult, WorkerRecoveryConfig,

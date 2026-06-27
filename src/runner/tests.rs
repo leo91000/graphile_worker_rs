@@ -13,7 +13,7 @@ use graphile_worker_job::Job;
 use graphile_worker_lifecycle_hooks::HookRegistry;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 
-use crate::streams::StreamSource;
+use crate::streams::job_signal::JobSignalSource;
 
 use super::errors::{Redacted, RunJobError};
 use super::release::release_job;
@@ -125,10 +125,10 @@ fn panic_payload_to_string_handles_string_payload() {
 }
 
 #[test]
-fn stream_source_is_copy_for_worker_fanout() {
+fn job_signal_source_is_copy_for_worker_fanout() {
     fn assert_copy<T: Copy>() {}
 
-    assert_copy::<StreamSource>();
+    assert_copy::<JobSignalSource>();
 }
 
 #[tokio::test]

@@ -92,7 +92,9 @@ Important core methods:
   The default is one second.
 - `use_notification_delivery(value)` controls whether the worker listens for
   PostgreSQL `NOTIFY` wakeups. The default is `true`; set it to `false` to use
-  polling only.
+  polling only. Notifications are treated as coalesced wakeup hints; when all
+  workers are already saturated, extra notifications are dropped and the runner
+  keeps draining the listener instead of blocking on worker fanout.
 - `use_local_time(value)` controls whether timestamps use application time
   (`true`) or PostgreSQL server time (`false`). The default is PostgreSQL server
   time.

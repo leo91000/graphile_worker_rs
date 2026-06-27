@@ -11,7 +11,7 @@ use tracing::{debug, info, warn, Instrument, Span};
 
 use super::errors::{Redacted, RunJobError};
 use super::WorkerRunner;
-use crate::streams::StreamSource;
+use crate::streams::job_signal::JobSignalSource;
 use crate::tracing::link_to_job_create_span;
 
 pub(super) fn panic_payload_to_string(payload: Box<dyn std::any::Any + Send>) -> String {
@@ -46,7 +46,7 @@ pub(super) fn panic_payload_to_string(payload: Box<dyn std::any::Any + Send>) ->
 pub(super) async fn run_job(
     job: Arc<Job>,
     worker: &WorkerRunner,
-    source: &StreamSource,
+    source: &JobSignalSource,
 ) -> Result<(), RunJobError> {
     link_to_job_create_span(job.payload());
     let task_id = job.task_id();

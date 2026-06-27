@@ -10,12 +10,12 @@ use tracing::debug;
 use crate::runner::errors::RunJobError;
 use crate::runner::task_execution::run_job;
 use crate::runner::WorkerRunner;
-use crate::streams::StreamSource;
+use crate::streams::job_signal::JobSignalSource;
 
 pub(super) async fn run_job_with_hooks(
     job: Arc<Job>,
     worker: &WorkerRunner,
-    source: &StreamSource,
+    source: &JobSignalSource,
 ) -> (Result<(), RunJobError>, Duration) {
     if worker.hooks.is_empty() {
         return run_without_hooks(job, worker, source).await;
@@ -40,7 +40,7 @@ pub(super) async fn run_job_with_hooks(
 async fn run_without_hooks(
     job: Arc<Job>,
     worker: &WorkerRunner,
-    source: &StreamSource,
+    source: &JobSignalSource,
 ) -> (Result<(), RunJobError>, Duration) {
     let start = Instant::now();
     let job_result = run_job(job, worker, source).await;
@@ -61,7 +61,7 @@ async fn before_job_run(job: Arc<Job>, worker: &WorkerRunner) -> HookResult {
 async fn run_with_after_hook(
     job: Arc<Job>,
     worker: &WorkerRunner,
-    source: &StreamSource,
+    source: &JobSignalSource,
 ) -> (Result<(), RunJobError>, Duration) {
     worker
         .hooks

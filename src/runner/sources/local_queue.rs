@@ -6,13 +6,13 @@ use graphile_worker_runtime as runtime;
 use super::super::errors::ProcessJobError;
 use super::super::job_execution::run_and_release_job;
 use super::super::{Worker, WorkerRunner};
-use crate::local_queue::{LocalQueue, LocalQueueParams};
-use crate::streams::StreamSource;
+use crate::local_queue::{LocalQueue, LocalQueueParams, LocalQueueSignalReceiver};
+use crate::streams::job_signal::JobSignalSource;
 use crate::Job;
 
 pub(in crate::runner) fn create_local_queues(
     worker: &Worker,
-) -> Option<(Vec<LocalQueue>, crate::streams::JobSignalReceiver)> {
+) -> Option<(Vec<LocalQueue>, LocalQueueSignalReceiver)> {
     let config = worker.local_queue_config.as_ref()?;
     let (tx, rx) = runtime::channel(worker.concurrency * 2);
     let queue_count = config.queue_count.min(worker.concurrency);
@@ -41,9 +41,9 @@ pub(in crate::runner) async fn process_local_queue_source(
     worker: &WorkerRunner,
     local_queues: &[LocalQueue],
     start_index: usize,
-    source: StreamSource,
+    source: JobSignalSource,
 ) -> Result<(), ProcessJobError> {
-    if matches!(source, StreamSource::PgListener) {
+    if matches!(source, JobSignalSource::Notification) {
         local_queues[start_index % local_queues.len()]
             .pulse(1)
             .await;
@@ -70,7 +70,7 @@ pub(in crate::runner) async fn process_local_queue_source(
         }
 
         run_and_release_job(job.clone(), worker, &source).await?;
-        source = StreamSource::Internal;
+        source = JobSignalSource::LocalQueue;
     }
 
     Ok(())

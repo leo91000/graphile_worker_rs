@@ -12,10 +12,9 @@ use graphile_worker_lifecycle_hooks::{HookRegistry, LocalQueueMode};
 use graphile_worker_runtime as runtime;
 
 use crate::background_tasks::TaskSlot;
-use crate::streams::JobSignalSender;
 use graphile_worker_queries::task_identifiers::SharedTaskDetails;
 
-use super::{LocalQueueConfig, LocalQueueParams};
+use super::{LocalQueueConfig, LocalQueueParams, LocalQueueSignalSender};
 
 pub(super) struct RefetchDelayState {
     pub(super) active: AtomicBool,
@@ -40,7 +39,7 @@ impl Default for RefetchDelayState {
 pub(super) struct LocalQueueState {
     pub(super) mode: runtime::RwLock<LocalQueueMode>,
     pub(super) job_queue: runtime::Mutex<VecDeque<Job>>,
-    pub(super) job_signal_sender: JobSignalSender,
+    pub(super) job_signal_sender: LocalQueueSignalSender,
     pub(super) fetch_in_progress: AtomicBool,
     pub(super) fetch_again: AtomicBool,
     pub(super) refetch_delay: RefetchDelayState,

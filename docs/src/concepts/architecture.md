@@ -130,7 +130,10 @@ without taking the same job.
 The job runner listens for job signals. A signal can come from the PostgreSQL
 listener, the polling interval, `run_once`, or the local queue. Each signal is
 fanned out to the configured concurrency so idle worker tasks can attempt to
-fetch jobs.
+fetch jobs. Signals are wakeup hints rather than durable work items, so the
+dispatcher coalesces them when worker tasks are already saturated. This keeps
+PostgreSQL notification listeners drained while polling still provides the
+fallback path for missed or future work.
 
 There are two fetch modes:
 
