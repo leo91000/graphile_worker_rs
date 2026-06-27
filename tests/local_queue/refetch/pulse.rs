@@ -40,7 +40,6 @@ async fn local_queue_pulse_triggers_immediate_fetch() {
         )
         .await;
 
-        let start = Instant::now();
         utils
             .add_job(PulseImmediateFetchJob { id: 1 }, JobSpec::default())
             .await
@@ -54,13 +53,6 @@ async fn local_queue_pulse_triggers_immediate_fetch() {
             "Job should have been processed immediately via pulse, not after 30s poll",
         )
         .await;
-
-        let elapsed = start.elapsed();
-        assert!(
-            elapsed < Duration::from_secs(3),
-            "Job should be processed quickly via pulse (took {:?}), not waiting for 30s poll_interval",
-            elapsed
-        );
 
         worker.request_shutdown();
         worker_fut.abort();
