@@ -11,7 +11,7 @@ use self::hooks::run_job_with_hooks;
 use super::errors::ProcessJobError;
 use super::release::release_job;
 use super::WorkerRunner;
-use crate::streams::StreamSource;
+use crate::streams::job_signal::JobSignalSource;
 use graphile_worker_queries::get_job::get_job;
 
 /// Fetches and processes a single job from the queue.
@@ -33,7 +33,7 @@ use graphile_worker_queries::get_job::get_job;
 /// - `Err(ProcessJobError)` if an error occurred during processing
 pub(super) async fn process_one_job(
     worker: &WorkerRunner,
-    source: StreamSource,
+    source: JobSignalSource,
 ) -> Result<Option<Job>, ProcessJobError> {
     let now = worker.use_local_time.then(Utc::now);
     let task_details_guard = worker.task_details.read().await;
@@ -98,7 +98,7 @@ pub(super) async fn process_one_job(
 pub(super) async fn run_and_release_job(
     job: Arc<Job>,
     worker: &WorkerRunner,
-    source: &StreamSource,
+    source: &JobSignalSource,
 ) -> Result<(), ProcessJobError> {
     let (job_result, duration) = run_job_with_hooks(job.clone(), worker, source).await;
 

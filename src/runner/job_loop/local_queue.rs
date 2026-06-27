@@ -6,21 +6,22 @@ use tracing::{debug, warn};
 
 use super::super::errors::ProcessJobError;
 use super::super::{sources, Worker, WorkerRuntimeError};
-use crate::local_queue::LocalQueue;
-use crate::streams::job_signal_stream_with_receiver;
+use crate::local_queue::{LocalQueue, LocalQueueSignalReceiver};
+use crate::streams::job_signal::{job_signal_stream, JobSignalStreamConfig};
 
 pub(super) async fn run(
     worker: &Worker,
     local_queues: Vec<LocalQueue>,
-    job_signal_rx: crate::streams::JobSignalReceiver,
+    job_signal_rx: LocalQueueSignalReceiver,
 ) -> Result<(), WorkerRuntimeError> {
-    let job_signal = job_signal_stream_with_receiver(
-        worker.database.clone(),
-        worker.poll_interval,
-        worker.use_notification_delivery,
-        worker.shutdown_signal.clone(),
-        1,
-        job_signal_rx,
+    let job_signal = job_signal_stream(
+        JobSignalStreamConfig::new(
+            worker.database.clone(),
+            worker.poll_interval,
+            worker.use_notification_delivery,
+            worker.shutdown_signal.clone(),
+        )
+        .with_local_queue(job_signal_rx),
     )
     .await?;
 

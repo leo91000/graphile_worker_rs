@@ -6,7 +6,8 @@ use tracing::{error, info};
 
 use super::job_execution::run_and_release_job;
 use super::{Worker, WorkerRuntimeError};
-use crate::streams::{job_stream, StreamSource};
+use crate::streams::job_signal::JobSignalSource;
+use crate::streams::job_stream;
 use graphile_worker_queries::get_job::get_job;
 
 impl Worker {
@@ -33,9 +34,12 @@ impl Worker {
                         loop {
                             let job_id = *job.id();
                             let has_queue = job.job_queue_id().is_some();
-                            let result =
-                                run_and_release_job(Arc::new(job), &runner, &StreamSource::RunOnce)
-                                    .await;
+                            let result = run_and_release_job(
+                                Arc::new(job),
+                                &runner,
+                                &JobSignalSource::RunOnce,
+                            )
+                            .await;
 
                             match result {
                                 Ok(_) => {

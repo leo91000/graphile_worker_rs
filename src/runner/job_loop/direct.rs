@@ -5,16 +5,15 @@ use tracing::debug;
 use super::super::errors::ProcessJobError;
 use super::super::job_execution::process_one_job;
 use super::super::{sources, Worker, WorkerRuntimeError};
-use crate::streams::job_signal_stream;
+use crate::streams::job_signal::{job_signal_stream, JobSignalStreamConfig};
 
 pub(super) async fn run(worker: &Worker) -> Result<(), WorkerRuntimeError> {
-    let job_signal = job_signal_stream(
+    let job_signal = job_signal_stream(JobSignalStreamConfig::new(
         worker.database.clone(),
         worker.poll_interval,
         worker.use_notification_delivery,
         worker.shutdown_signal.clone(),
-        1,
-    )
+    ))
     .await?;
 
     debug!("Listening for jobs...");

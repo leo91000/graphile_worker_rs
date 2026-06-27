@@ -3,12 +3,12 @@ mod direct;
 mod local_queue;
 
 use super::{sources, Worker, WorkerRunner, WorkerRuntimeError};
-use crate::local_queue::LocalQueue;
+use crate::local_queue::{LocalQueue, LocalQueueSignalReceiver};
 
 impl Worker {
     pub(super) fn create_local_queues(
         &self,
-    ) -> Option<(Vec<LocalQueue>, crate::streams::JobSignalReceiver)> {
+    ) -> Option<(Vec<LocalQueue>, LocalQueueSignalReceiver)> {
         sources::create_local_queues(self)
     }
 
@@ -32,7 +32,7 @@ impl Worker {
 
     pub(super) async fn job_runner_internal(
         &self,
-        local_queue: Option<(Vec<LocalQueue>, crate::streams::JobSignalReceiver)>,
+        local_queue: Option<(Vec<LocalQueue>, LocalQueueSignalReceiver)>,
     ) -> Result<(), WorkerRuntimeError> {
         match local_queue {
             Some((local_queues, rx)) => local_queue::run(self, local_queues, rx).await,

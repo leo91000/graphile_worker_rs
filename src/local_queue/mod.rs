@@ -9,7 +9,6 @@ use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
 use tracing::warn;
 
-use crate::streams::JobSignalSender;
 use graphile_worker_queries::task_identifiers::SharedTaskDetails;
 
 mod cache;
@@ -25,6 +24,12 @@ pub use config::{
     RefetchDelayConfigBuilder,
 };
 use state::LocalQueueState;
+
+/// Sender for notifying the runner that LocalQueue has cached work available.
+pub type LocalQueueSignalSender = runtime::Sender<()>;
+
+/// Receiver for LocalQueue cache notifications.
+pub(crate) type LocalQueueSignalReceiver = runtime::Receiver<()>;
 
 #[derive(Debug, Error)]
 pub enum LocalQueueError {
@@ -59,7 +64,7 @@ pub struct LocalQueueParams {
     pub continuous: bool,
     pub shutdown_signal: Option<ShutdownSignal>,
     pub hooks: Arc<HookRegistry>,
-    pub job_signal_sender: JobSignalSender,
+    pub job_signal_sender: LocalQueueSignalSender,
     pub use_local_time: bool,
 }
 

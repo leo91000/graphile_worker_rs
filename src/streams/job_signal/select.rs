@@ -5,11 +5,11 @@ use graphile_worker_shutdown_signal::ShutdownSignal;
 use tracing::warn;
 
 use super::state::{JobSignalStreamData, NextSignal};
-use super::StreamSource;
+use super::JobSignalSource;
 
 pub(super) async fn next_signal(data: &mut JobSignalStreamData) -> NextSignal {
-    if let Some(ref mut rx) = data.internal_rx {
-        return next_signal_with_internal(
+    if let Some(ref mut rx) = data.local_queue_rx {
+        return next_signal_with_local_queue(
             &mut data.interval,
             data.pg_listener.as_mut(),
             &mut data.shutdown_signal,
@@ -30,7 +30,7 @@ pub(super) async fn next_signal(data: &mut JobSignalStreamData) -> NextSignal {
     next_signal_polling_only(&mut data.interval, &mut data.shutdown_signal).await
 }
 
-async fn next_signal_with_internal(
+async fn next_signal_with_local_queue(
     interval: &mut runtime::Interval,
     pg_listener: Option<&mut NotificationStream>,
     shutdown_signal: &mut ShutdownSignal,
@@ -45,13 +45,13 @@ async fn next_signal_with_internal(
 
         futures::select_biased! {
             _ = shutdown => NextSignal::Shutdown,
-            _ = interval => NextSignal::Source(StreamSource::Polling),
+            _ = interval => NextSignal::Source(JobSignalSource::Polling),
             res = pg_listener => pg_listener_result_to_signal(res),
             res = internal => {
                 if res.is_ok() {
-                    NextSignal::Source(StreamSource::Internal)
+                    NextSignal::Source(JobSignalSource::LocalQueue)
                 } else {
-                    NextSignal::InternalClosed
+                    NextSignal::LocalQueueClosed
                 }
             },
         }
@@ -63,12 +63,12 @@ async fn next_signal_with_internal(
 
         futures::select_biased! {
             _ = shutdown => NextSignal::Shutdown,
-            _ = interval => NextSignal::Source(StreamSource::Polling),
+            _ = interval => NextSignal::Source(JobSignalSource::Polling),
             res = internal => {
                 if res.is_ok() {
-                    NextSignal::Source(StreamSource::Internal)
+                    NextSignal::Source(JobSignalSource::LocalQueue)
                 } else {
-                    NextSignal::InternalClosed
+                    NextSignal::LocalQueueClosed
                 }
             },
         }
@@ -87,7 +87,7 @@ async fn next_signal_with_listener(
 
     futures::select_biased! {
         _ = shutdown => NextSignal::Shutdown,
-        _ = interval => NextSignal::Source(StreamSource::Polling),
+        _ = interval => NextSignal::Source(JobSignalSource::Polling),
         res = pg_listener => pg_listener_result_to_signal(res),
     }
 }
@@ -102,7 +102,7 @@ async fn next_signal_polling_only(
 
     futures::select_biased! {
         _ = shutdown => NextSignal::Shutdown,
-        _ = interval => NextSignal::Source(StreamSource::Polling),
+        _ = interval => NextSignal::Source(JobSignalSource::Polling),
     }
 }
 
@@ -110,17 +110,17 @@ fn pg_listener_result_to_signal(
     result: Option<std::result::Result<Notification, DbError>>,
 ) -> NextSignal {
     match result {
-        Some(Ok(_)) => NextSignal::Source(StreamSource::PgListener),
+        Some(Ok(_)) => NextSignal::Source(JobSignalSource::Notification),
         Some(Err(error)) => {
             warn!(
                 ?error,
                 "PostgreSQL notification listener failed; falling back to polling"
             );
-            NextSignal::PgListenerClosed
+            NextSignal::NotificationListenerClosed
         }
         None => {
             warn!("PostgreSQL notification listener closed; falling back to polling");
-            NextSignal::PgListenerClosed
+            NextSignal::NotificationListenerClosed
         }
     }
 }
@@ -160,40 +160,68 @@ mod tests {
         let mut shutdown = pending_shutdown_signal();
         assert!(matches!(
             next_signal_polling_only(&mut interval, &mut shutdown).await,
-            NextSignal::Source(StreamSource::Polling)
+            NextSignal::Source(JobSignalSource::Polling)
         ));
     }
 
     #[tokio::test]
-    async fn internal_signal_returns_internal_or_closed() {
+    async fn local_queue_signal_returns_local_queue_or_closed() {
         let mut interval = delayed_interval().await;
         let mut shutdown = pending_shutdown_signal();
         let (tx, rx) = runtime::channel(1);
-        tx.send(()).await.expect("internal send should succeed");
+        tx.send(()).await.expect("local queue send should succeed");
 
         assert!(matches!(
-            next_signal_with_internal(&mut interval, None, &mut shutdown, &rx).await,
-            NextSignal::Source(StreamSource::Internal)
+            next_signal_with_local_queue(&mut interval, None, &mut shutdown, &rx).await,
+            NextSignal::Source(JobSignalSource::LocalQueue)
         ));
 
         drop(tx);
         assert!(matches!(
-            next_signal_with_internal(&mut interval, None, &mut shutdown, &rx).await,
-            NextSignal::InternalClosed
+            next_signal_with_local_queue(&mut interval, None, &mut shutdown, &rx).await,
+            NextSignal::LocalQueueClosed
         ));
     }
 
     #[tokio::test]
-    async fn internal_signal_with_listener_still_accepts_internal_source() {
+    async fn local_queue_signal_can_return_polling_without_listener() {
+        let mut interval = runtime::interval(Duration::from_millis(1));
+        let mut shutdown = pending_shutdown_signal();
+        let (_tx, rx) = runtime::channel(1);
+
+        assert!(matches!(
+            next_signal_with_local_queue(&mut interval, None, &mut shutdown, &rx).await,
+            NextSignal::Source(JobSignalSource::Polling)
+        ));
+    }
+
+    #[tokio::test]
+    async fn local_queue_signal_with_listener_still_accepts_local_queue_source() {
         let mut interval = delayed_interval().await;
         let mut shutdown = pending_shutdown_signal();
         let (tx, rx) = runtime::channel(1);
         let mut listener: NotificationStream = Box::pin(stream::pending());
-        tx.send(()).await.expect("internal send should succeed");
+        tx.send(()).await.expect("local queue send should succeed");
 
         assert!(matches!(
-            next_signal_with_internal(&mut interval, Some(&mut listener), &mut shutdown, &rx).await,
-            NextSignal::Source(StreamSource::Internal)
+            next_signal_with_local_queue(&mut interval, Some(&mut listener), &mut shutdown, &rx)
+                .await,
+            NextSignal::Source(JobSignalSource::LocalQueue)
+        ));
+    }
+
+    #[tokio::test]
+    async fn local_queue_signal_with_listener_reports_closed_local_queue() {
+        let mut interval = delayed_interval().await;
+        let mut shutdown = pending_shutdown_signal();
+        let (tx, rx) = runtime::channel(1);
+        let mut listener: NotificationStream = Box::pin(stream::pending());
+        drop(tx);
+
+        assert!(matches!(
+            next_signal_with_local_queue(&mut interval, Some(&mut listener), &mut shutdown, &rx)
+                .await,
+            NextSignal::LocalQueueClosed
         ));
     }
 
@@ -209,7 +237,7 @@ mod tests {
 
         assert!(matches!(
             next_signal_with_listener(&mut interval, &mut listener, &mut shutdown).await,
-            NextSignal::Source(StreamSource::PgListener)
+            NextSignal::Source(JobSignalSource::Notification)
         ));
 
         let mut interval = delayed_interval().await;
@@ -219,7 +247,7 @@ mod tests {
 
         assert!(matches!(
             next_signal_with_listener(&mut interval, &mut listener, &mut shutdown).await,
-            NextSignal::PgListenerClosed
+            NextSignal::NotificationListenerClosed
         ));
 
         let mut interval = delayed_interval().await;
@@ -229,7 +257,7 @@ mod tests {
 
         assert!(matches!(
             next_signal_with_listener(&mut interval, &mut listener, &mut shutdown).await,
-            NextSignal::PgListenerClosed
+            NextSignal::NotificationListenerClosed
         ));
     }
 
@@ -242,15 +270,15 @@ mod tests {
 
         assert!(matches!(
             pg_listener_result_to_signal(Some(Ok(notification))),
-            NextSignal::Source(StreamSource::PgListener)
+            NextSignal::Source(JobSignalSource::Notification)
         ));
         assert!(matches!(
             pg_listener_result_to_signal(Some(Err(DbError::new("listener failed")))),
-            NextSignal::PgListenerClosed
+            NextSignal::NotificationListenerClosed
         ));
         assert!(matches!(
             pg_listener_result_to_signal(None),
-            NextSignal::PgListenerClosed
+            NextSignal::NotificationListenerClosed
         ));
     }
 }
