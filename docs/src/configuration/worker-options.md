@@ -73,6 +73,7 @@ let worker = WorkerOptions::default()
     .schema("my_app_worker")
     .concurrency(10)
     .poll_interval(Duration::from_millis(500))
+    .use_notification_delivery(true)
     .use_local_time(false)
     .pg_pool(pg_pool)
     .define_job::<SendEmail>()
@@ -89,6 +90,9 @@ Important core methods:
   `0` panics.
 - `poll_interval(duration)` controls fallback polling for new or future jobs.
   The default is one second.
+- `use_notification_delivery(value)` controls whether the worker listens for
+  PostgreSQL `NOTIFY` wakeups. The default is `true`; set it to `false` to use
+  polling only.
 - `use_local_time(value)` controls whether timestamps use application time
   (`true`) or PostgreSQL server time (`false`). The default is PostgreSQL server
   time.

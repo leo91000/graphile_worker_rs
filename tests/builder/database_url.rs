@@ -12,6 +12,7 @@ async fn worker_options_initializes_from_database_url() {
             .with_cron(Cron::every_minute::<BuilderJob>())
             .with_cron("* * * * * builder_job")
             .expect("Failed to add second crontab")
+            .use_notification_delivery(false)
             .use_local_time(true)
             .on(JobStart, |_ctx| async {})
             .define_job::<BuilderJob>()
@@ -20,6 +21,7 @@ async fn worker_options_initializes_from_database_url() {
             .expect("Failed to create worker");
 
         assert!(*worker.use_local_time());
+        assert!(!*worker.use_notification_delivery());
         assert_eq!(worker.crontabs().len(), 2);
         assert_eq!(worker.concurrency(), &num_cpus::get());
     })
