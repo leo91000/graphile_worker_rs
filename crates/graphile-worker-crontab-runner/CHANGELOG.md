@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.9](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.7.8...graphile_worker_crontab_runner-v0.7.9) - 2026-06-27
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.7.8](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.7.7...graphile_worker_crontab_runner-v0.7.8) - 2026-06-09
 
 ### Other

@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.13.3](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.2...graphile_worker-v0.13.3) - 2026-06-27
+
+### Added
+
+- support custom worker shutdown signals
+
+### Other
+
+- remove flaky pulse timing cutoff
+- coalesce job signal fanout
+- cover notification delivery toggle
+- Allow disabling LISTEN for notifications
+- *(deps)* update rust crate anyhow to 1.0.103 ([#458](https://github.com/leo91000/graphile_worker_rs/pull/458))
+- *(deps)* update rust crate leptos to 0.8.20 ([#457](https://github.com/leo91000/graphile_worker_rs/pull/457))
+- *(deps)* update all non-major dependencies ([#454](https://github.com/leo91000/graphile_worker_rs/pull/454))
+- *(deps)* update all non-major dependencies ([#453](https://github.com/leo91000/graphile_worker_rs/pull/453))
+- *(deps)* update all non-major dependencies to 1.0.46 ([#452](https://github.com/leo91000/graphile_worker_rs/pull/452))
+- *(deps)* update all non-major dependencies to v1.2.114 ([#451](https://github.com/leo91000/graphile_worker_rs/pull/451))
+- *(deps)* update codecov/codecov-action action to v7
+- *(deps)* update all non-major dependencies to v24.17.0 ([#450](https://github.com/leo91000/graphile_worker_rs/pull/450))
+- fix README badges
+- remove stale guide deployment note
+- add mdBook documentation site
+- *(deps)* update all non-major dependencies to 2.0.118 ([#449](https://github.com/leo91000/graphile_worker_rs/pull/449))
+- *(deps)* update all non-major dependencies to v1.2.113 ([#447](https://github.com/leo91000/graphile_worker_rs/pull/447))
+- cover worker shutdown config debug output
+- *(deps)* lock file maintenance ([#445](https://github.com/leo91000/graphile_worker_rs/pull/445))
+- *(deps)* update all non-major dependencies to v1.2.112 ([#443](https://github.com/leo91000/graphile_worker_rs/pull/443))
+- *(deps)* update all non-major dependencies ([#441](https://github.com/leo91000/graphile_worker_rs/pull/441))
+
 ## [0.13.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.1...graphile_worker-v0.13.2) - 2026-06-09
 
 ### Added

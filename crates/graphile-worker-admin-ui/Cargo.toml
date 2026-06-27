@@ -1,6 +1,6 @@
 [package]
 name = "graphile_worker_admin_ui"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "MIT"
 description = "Embedded Leptos admin UI for graphile_worker"
