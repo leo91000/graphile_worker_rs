@@ -40,7 +40,8 @@ pub type JobSignalReceiver = runtime::Receiver<()>;
 /// This function returns a stream that emits signals when the worker should check for jobs.
 /// The signals come from:
 /// 1. Regular interval-based polling (every `poll_interval`)
-/// 2. PostgreSQL notifications when new jobs are inserted (`NOTIFY 'jobs:insert'`)
+/// 2. PostgreSQL notifications when notification delivery is enabled and new jobs are inserted
+///    (`NOTIFY 'jobs:insert'`)
 ///
 /// When a signal is received, the stream will emit enough items to utilize the
 /// configured concurrency (one item per potential concurrent job).
