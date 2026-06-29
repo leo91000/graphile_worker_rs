@@ -6,9 +6,9 @@
   },
   "devDependencies": {
     "@egoist/tailwindcss-icons": "1.9.2",
-    "@iconify-json/lucide": "1.2.114",
+    "@iconify-json/lucide": "1.2.115",
     "@iconify-json/tabler": "1.2.35",
-    "@tailwindcss/cli": "4.3.1",
-    "tailwindcss": "4.3.1"
+    "@tailwindcss/cli": "4.3.2",
+    "tailwindcss": "4.3.2"
   }
 }
