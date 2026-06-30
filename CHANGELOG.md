@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.4](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.3...graphile_worker-v0.13.4) - 2026-06-30
+
+### Other
+
+- *(deps)* update rust to v1.96.1 ([#462](https://github.com/leo91000/graphile_worker_rs/pull/462))
+- *(deps)* update all non-major dependencies ([#461](https://github.com/leo91000/graphile_worker_rs/pull/461))
+- *(deps)* update actions/checkout action to v7
+
 ## [0.13.3](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.2...graphile_worker-v0.13.3) - 2026-06-27
 
 ### Added
