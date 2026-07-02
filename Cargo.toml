@@ -69,7 +69,7 @@ opentelemetry-30 = { package = "opentelemetry", version = "0.30.0" }
 opentelemetry-32 = { package = "opentelemetry", version = "0.32.0" }
 proc-macro2 = "1.0.106"
 quote = "1.0.46"
-rand = "0.10.1"
+rand = "0.10.2"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 serde_qs = "1.1.2"
