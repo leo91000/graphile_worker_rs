@@ -53,12 +53,14 @@ pub(super) async fn get_last_migration(
             (select id from {migrations} where breaking is true order by id desc limit 1) as biggest_breaking_id;
         "#
     );
-    for retry_delay in INSTALL_RETRY_DELAYS
+    let mut retry_delays = INSTALL_RETRY_DELAYS
         .iter()
         .copied()
         .map(Some)
-        .chain(std::iter::once(None))
-    {
+        .chain(std::iter::once(None));
+
+    loop {
+        let retry_delay = retry_delays.next().flatten();
         let last_migration_query_result =
             fetch_last_migration(executor, &migrations_status_query).await;
         let error = match last_migration_query_result {
@@ -88,8 +90,6 @@ pub(super) async fn get_last_migration(
             Err(error) => return Err(error),
         }
     }
-
-    unreachable!("install retry loop must return on the final attempt")
 }
 
 async fn fetch_last_migration(
@@ -110,7 +110,170 @@ async fn fetch_last_migration(
 
 #[cfg(test)]
 mod tests {
+    use std::any::Any;
+    use std::collections::VecDeque;
+    use std::future::Future;
+    use std::sync::{Arc, Mutex};
+
+    use graphile_worker_database::{
+        row_mapping, BoxFuture, DatabaseDriver, DbCell, DbRow, DbTransaction, NotificationStream,
+        TransactionDriver,
+    };
+
     use super::*;
+
+    type FetchResult = Result<Vec<DbRow>, DbError>;
+    type FetchResults = Arc<Mutex<VecDeque<FetchResult>>>;
+
+    #[derive(Debug)]
+    struct MockDriver {
+        fetch_results: FetchResults,
+        transaction_execute_result: Result<u64, DbError>,
+    }
+
+    impl MockDriver {
+        fn new(
+            fetch_results: impl IntoIterator<Item = Result<Vec<DbRow>, DbError>>,
+            transaction_execute_result: Result<u64, DbError>,
+        ) -> Self {
+            Self {
+                fetch_results: Arc::new(Mutex::new(fetch_results.into_iter().collect())),
+                transaction_execute_result,
+            }
+        }
+    }
+
+    impl DbExecutor for MockDriver {
+        fn execute<'a>(
+            &'a self,
+            _sql: &'a str,
+            _params: DbParams,
+        ) -> BoxFuture<'a, Result<u64, DbError>> {
+            Box::pin(async { Ok(1) })
+        }
+
+        fn fetch_all<'a>(
+            &'a self,
+            _sql: &'a str,
+            _params: DbParams,
+        ) -> BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
+            Box::pin(async {
+                self.fetch_results
+                    .lock()
+                    .expect("mock fetch result lock should not be poisoned")
+                    .pop_front()
+                    .expect("mock fetch result should be configured")
+            })
+        }
+    }
+
+    impl DatabaseDriver for MockDriver {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn begin<'a>(&'a self) -> BoxFuture<'a, Result<DbTransaction, DbError>> {
+            Box::pin(async {
+                Ok(DbTransaction::new(Box::new(MockTransaction {
+                    execute_result: self.transaction_execute_result.clone(),
+                })))
+            })
+        }
+
+        fn listen<'a>(
+            &'a self,
+            _channel: &'a str,
+        ) -> BoxFuture<'a, Result<Option<NotificationStream>, DbError>> {
+            Box::pin(async { Ok(None) })
+        }
+    }
+
+    #[derive(Debug)]
+    struct MockTransaction {
+        execute_result: Result<u64, DbError>,
+    }
+
+    impl DbExecutor for MockTransaction {
+        fn execute<'a>(
+            &'a self,
+            _sql: &'a str,
+            _params: DbParams,
+        ) -> BoxFuture<'a, Result<u64, DbError>> {
+            Box::pin(async { self.execute_result.clone() })
+        }
+
+        fn fetch_all<'a>(
+            &'a self,
+            _sql: &'a str,
+            _params: DbParams,
+        ) -> BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
+            Box::pin(async { Ok(Vec::new()) })
+        }
+    }
+
+    impl TransactionDriver for MockTransaction {
+        fn commit(self: Box<Self>) -> BoxFuture<'static, Result<(), DbError>> {
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    fn database(
+        fetch_results: impl IntoIterator<Item = Result<Vec<DbRow>, DbError>>,
+        transaction_execute_result: Result<u64, DbError>,
+    ) -> Database {
+        Database::new(MockDriver::new(fetch_results, transaction_execute_result))
+    }
+
+    fn server_version_row(version: &str) -> DbRow {
+        row_mapping::cells([("server_version_num", DbCell::Text(version.to_string()))])
+    }
+
+    fn run_async<T>(future: impl Future<Output = T>) -> T {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .expect("test runtime should build")
+            .block_on(future)
+    }
+
+    #[test]
+    fn mock_driver_exercises_database_contract_paths() {
+        run_async(async {
+            let database = database([Ok(Vec::new())], Ok(7));
+
+            assert!(database.downcast_ref::<MockDriver>().is_some());
+            assert_eq!(
+                database
+                    .execute("select 1", DbParams::new())
+                    .await
+                    .expect("mock execute should succeed"),
+                1
+            );
+            assert!(database
+                .listen("jobs:insert")
+                .await
+                .expect("mock listen should succeed")
+                .is_none());
+
+            let transaction = database.begin().await.expect("mock begin should succeed");
+            assert_eq!(
+                transaction
+                    .execute("select 1", DbParams::new())
+                    .await
+                    .expect("mock transaction execute should succeed"),
+                7
+            );
+            assert!(transaction
+                .fetch_all("select 1", DbParams::new())
+                .await
+                .expect("mock transaction fetch should succeed")
+                .is_empty());
+            transaction
+                .commit()
+                .await
+                .expect("mock transaction commit should succeed");
+        });
+    }
 
     #[test]
     fn last_migration_detects_pending_migrations() {
@@ -128,5 +291,67 @@ mod tests {
             ..Default::default()
         };
         assert!(negative_migration.is_before_number(1));
+    }
+
+    #[test]
+    fn get_last_migration_keeps_non_missing_schema_errors() {
+        run_async(async {
+            let database = database(
+                [Err(DbError::with_code("permission denied", "42501"))],
+                Ok(1),
+            );
+
+            let error = get_last_migration(&database, &Schema::default())
+                .await
+                .expect_err("non-missing schema errors should be returned");
+
+            assert!(matches!(
+                error,
+                MigrateError::SqlError(ref error) if error.code() == Some("42501")
+            ));
+        });
+    }
+
+    #[test]
+    fn get_last_migration_keeps_install_errors() {
+        run_async(async {
+            let database = database(
+                [
+                    Err(DbError::with_code("missing migrations table", "42P01")),
+                    Ok(vec![server_version_row("110000")]),
+                ],
+                Ok(1),
+            );
+
+            let error = get_last_migration(&database, &Schema::default())
+                .await
+                .expect_err("install errors should be returned");
+
+            assert!(matches!(error, MigrateError::IncompatibleVersion(110000)));
+        });
+    }
+
+    #[test]
+    fn get_last_migration_stops_after_install_clash_retries() {
+        run_async(async {
+            let mut fetch_results = Vec::new();
+            for _ in 0..=INSTALL_RETRY_DELAYS.len() {
+                fetch_results.push(Err(DbError::with_code("missing migrations table", "42P01")));
+                fetch_results.push(Ok(vec![server_version_row("120000")]));
+            }
+            let database = database(
+                fetch_results,
+                Err(DbError::with_code("concurrent install", "23505")),
+            );
+
+            let error = get_last_migration(&database, &Schema::default())
+                .await
+                .expect_err("install clash retries should be bounded");
+
+            assert!(matches!(
+                error,
+                MigrateError::SqlError(ref error) if error.code() == Some("23505")
+            ));
+        });
     }
 }
