@@ -13,8 +13,16 @@ readme = "README.md"
 
 [features]
 default = ["runtime-tokio", "tls-rustls", "driver-sqlx"]
-runtime-tokio = ["graphile_worker_database/runtime-tokio", "sqlx?/runtime-tokio"]
-runtime-async-std = ["graphile_worker_database/runtime-async-std", "sqlx?/runtime-async-std"]
+runtime-tokio = [
+  "graphile_worker_database/runtime-tokio",
+  "graphile_worker_runtime/runtime-tokio",
+  "sqlx?/runtime-tokio",
+]
+runtime-async-std = [
+  "graphile_worker_database/runtime-async-std",
+  "graphile_worker_runtime/runtime-async-std",
+  "sqlx?/runtime-async-std",
+]
 tls-rustls = ["graphile_worker_database/tls-rustls", "sqlx?/tls-rustls"]
 tls-native-tls = ["graphile_worker_database/tls-native-tls", "sqlx?/tls-native-tls"]
 driver-sqlx = ["graphile_worker_database/driver-sqlx", "sqlx"]
@@ -24,6 +32,7 @@ driver-tokio-postgres = ["graphile_worker_database/driver-tokio-postgres"]
 graphile_worker_database.workspace = true
 graphile_worker_migrations_core.workspace = true
 graphile_worker_migrations_macros.workspace = true
+graphile_worker_runtime.workspace = true
 sqlx = { workspace = true, optional = true }
 tracing.workspace = true
 indoc.workspace = true

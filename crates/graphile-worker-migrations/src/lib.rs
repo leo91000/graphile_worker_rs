@@ -1,3 +1,4 @@
+mod clash;
 mod error;
 mod install;
 pub mod pg_version;
