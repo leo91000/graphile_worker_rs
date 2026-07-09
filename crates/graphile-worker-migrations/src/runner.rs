@@ -62,8 +62,7 @@ pub async fn migrate(
                     info!(
                         migration_number,
                         migration_name = migration.name(),
-                        "Some other migration runner performed migration {}; continuing.",
-                        migration.name()
+                        "Some other migration runner performed this migration; continuing."
                     );
                     continue;
                 }
