@@ -1,6 +1,7 @@
 use graphile_worker_database::{Database, DbError, DbExecutor, DbValue, Schema};
 use tracing::{info, warn};
 
+use crate::clash::is_clash_error;
 use crate::error::MigrateError;
 use crate::pg_version::check_postgres_version;
 use crate::sql::{MigrationExecuteExt, GRAPHILE_WORKER_MIGRATIONS};
@@ -42,20 +43,36 @@ pub async fn migrate(
                 },
                 migration.name(),
             );
-            let tx = database.begin().await?;
-            let result = migration.execute(&tx, &schema).await;
-            check_migration_error(migration_number, result)?;
             let migrations = schema.identifier("migrations");
             let sql = format!("insert into {migrations} (id, breaking) values ($1, $2)");
-            tx.execute(
-                &sql,
-                vec![
-                    DbValue::I32(migration_number as i32),
-                    DbValue::Bool(migration.is_breaking()),
-                ]
-                .into(),
-            )
-            .await?;
+            let tx = database.begin().await?;
+            let migration_insert_result = tx
+                .execute(
+                    &sql,
+                    vec![
+                        DbValue::I32(migration_number as i32),
+                        DbValue::Bool(migration.is_breaking()),
+                    ]
+                    .into(),
+                )
+                .await;
+
+            if let Err(error) = migration_insert_result {
+                if is_clash_error(&error) {
+                    info!(
+                        migration_number,
+                        migration_name = migration.name(),
+                        "Some other migration runner performed migration {}; continuing.",
+                        migration.name()
+                    );
+                    continue;
+                }
+
+                return Err(MigrateError::SqlError(error));
+            }
+
+            let result = migration.execute(&tx, &schema).await;
+            check_migration_error(migration_number, result)?;
 
             tx.commit().await?;
         }

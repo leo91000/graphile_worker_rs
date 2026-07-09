@@ -1,9 +1,19 @@
-use graphile_worker_database::{Database, DbExecutor, DbParams, Schema};
+use std::time::Duration;
+
+use graphile_worker_database::{Database, DbError, DbExecutor, DbParams, Schema};
+use graphile_worker_runtime::sleep;
 use indoc::formatdoc;
 use tracing::info;
 
+use crate::clash::is_clash_error;
 use crate::error::MigrateError;
 use crate::install::install_schema;
+
+const INSTALL_RETRY_DELAYS: &[Duration] = &[
+    Duration::from_millis(50),
+    Duration::from_millis(100),
+    Duration::from_millis(200),
+];
 
 #[derive(Debug)]
 pub(super) struct LastMigration {
@@ -43,8 +53,51 @@ pub(super) async fn get_last_migration(
             (select id from {migrations} where breaking is true order by id desc limit 1) as biggest_breaking_id;
         "#
     );
-    let last_migration_query_result = executor
-        .fetch_one(&migrations_status_query, DbParams::new())
+    for retry_delay in INSTALL_RETRY_DELAYS
+        .iter()
+        .copied()
+        .map(Some)
+        .chain(std::iter::once(None))
+    {
+        let last_migration_query_result =
+            fetch_last_migration(executor, &migrations_status_query).await;
+        let error = match last_migration_query_result {
+            Ok(last_migration) => return Ok(last_migration),
+            Err(error) => error,
+        };
+
+        if error.code() != Some("42P01") {
+            return Err(MigrateError::SqlError(error));
+        }
+
+        info!(error = ?error, schema = %schema, "Graphile Worker schema not found, installing...");
+        match install_schema(executor, schema).await {
+            Ok(()) => return Ok(Default::default()),
+            Err(MigrateError::SqlError(error)) if is_clash_error(&error) => {
+                let Some(delay) = retry_delay else {
+                    return Err(MigrateError::SqlError(error));
+                };
+
+                info!(
+                    error = ?error,
+                    schema = %schema,
+                    "Graphile Worker schema was installed concurrently, retrying migration state read..."
+                );
+                sleep(delay).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+
+    unreachable!("install retry loop must return on the final attempt")
+}
+
+async fn fetch_last_migration(
+    executor: &Database,
+    migrations_status_query: &str,
+) -> Result<LastMigration, DbError> {
+    executor
+        .fetch_one(migrations_status_query, DbParams::new())
         .await
         .and_then(|row| {
             Ok(LastMigration {
@@ -52,20 +105,7 @@ pub(super) async fn get_last_migration(
                 id: row.try_get("id")?,
                 biggest_breaking_id: row.try_get("biggest_breaking_id")?,
             })
-        });
-    let last_migration = match last_migration_query_result {
-        Err(e) => {
-            if e.code() == Some("42P01") {
-                info!(error = ?e, schema = %schema, "Graphile Worker schema not found, installing...");
-                install_schema(executor, schema).await?;
-                return Ok(Default::default());
-            }
-
-            return Err(MigrateError::SqlError(e));
-        }
-        Ok(row) => row,
-    };
-    Ok(last_migration)
+        })
 }
 
 #[cfg(test)]
