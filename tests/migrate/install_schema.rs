@@ -49,7 +49,7 @@ async fn migration_install_schema_and_second_migration_does_not_harm() {
     .await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn concurrent_migrations_on_fresh_database_succeed() {
     with_test_db(|test_db| async move {
         query("drop schema if exists graphile_worker cascade")
