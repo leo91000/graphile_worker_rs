@@ -23,6 +23,7 @@ async fn local_queue_returns_jobs_on_shutdown() {
                 .concurrency(2)
                 .local_queue(LocalQueueConfig::builder().size(20).build())
                 .listen_os_shutdown_signals(false)
+                .shutdown_grace_period(Duration::from_millis(100))
                 .define_job::<ShutdownJob>()
                 .init()
                 .await
