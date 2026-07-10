@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.20](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.19...graphile_worker_migrations-v0.4.20) - 2026-07-10
+
+### Fixed
+
+- handle concurrent migrations
+
+### Other
+
+- cover concurrent migration branches
+
 ## [0.4.19](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.18...graphile_worker_migrations-v0.4.19) - 2026-06-27
 
 ### Other
