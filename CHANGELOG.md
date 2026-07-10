@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.13.4](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.3...graphile_worker-v0.13.4) - 2026-07-10
+
+### Fixed
+
+- handle concurrent migrations
+
+### Other
+
+- harden local queue shutdown timing
+- *(deps)* update rust to v1.97.0 ([#466](https://github.com/leo91000/graphile_worker_rs/pull/466))
+- run migration concurrency test on worker threads
+- cover concurrent migration branches
+- *(deps)* update dependency @iconify-json/lucide to v1.2.116 ([#464](https://github.com/leo91000/graphile_worker_rs/pull/464))
+- *(deps)* update rust crate rand to 0.10.2 ([#463](https://github.com/leo91000/graphile_worker_rs/pull/463))
+- *(deps)* update rust to v1.96.1 ([#462](https://github.com/leo91000/graphile_worker_rs/pull/462))
+- *(deps)* update all non-major dependencies ([#461](https://github.com/leo91000/graphile_worker_rs/pull/461))
+- *(deps)* update actions/checkout action to v7
+
 ## [0.13.3](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.2...graphile_worker-v0.13.3) - 2026-06-27
 
 ### Added
