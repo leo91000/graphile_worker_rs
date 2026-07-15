@@ -2,7 +2,7 @@
 name = "graphile_worker_migrations_macros"
 version = "0.1.1"
 edition = "2021"
-license-file = "LICENSE.md"
+license = "MIT"
 description = "Proc macros for graphile_worker_migrations"
 homepage = "https://docs.rs/graphile_worker_migrations"
 documentation = "https://docs.rs/graphile_worker_migrations"

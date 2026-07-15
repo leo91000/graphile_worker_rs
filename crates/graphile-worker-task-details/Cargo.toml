@@ -2,7 +2,7 @@
 name = "graphile_worker_task_details"
 version = "0.1.5"
 edition = "2021"
-license-file = "LICENSE.md"
+license = "MIT"
 description = "Task details for graphile_worker, mapping task IDs to identifiers"
 homepage = "https://docs.rs/graphile_worker"
 documentation = "https://docs.rs/graphile_worker"

@@ -2,7 +2,7 @@
 name = "graphile_worker_crontab_runner"
 version = "0.7.9"
 edition = "2021"
-license-file = "LICENSE.md"
+license = "MIT"
 description = "Crontab runner package for graphile worker, a high performance Rust/PostgreSQL job queue"
 homepage = "https://docs.rs/graphile_worker_crontab_runner"
 documentation = "https://docs.rs/graphile_worker_crontab_runner"

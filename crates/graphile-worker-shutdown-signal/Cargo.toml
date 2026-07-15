@@ -2,7 +2,7 @@
 name = "graphile_worker_shutdown_signal"
 version = "0.3.13"
 edition = "2021"
-license-file = "LICENSE.md"
+license = "MIT"
 description = "Migrations package for graphile_worker, a high performance Rust/PostgreSQL job queue"
 homepage = "https://docs.rs/graphile_worker_shutdown_signal"
 documentation = "https://docs.rs/graphile_worker_shutdown_signal"
