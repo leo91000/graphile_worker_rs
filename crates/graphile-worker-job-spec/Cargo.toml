@@ -2,7 +2,7 @@
 name = "graphile_worker_job_spec"
 version = "0.1.5"
 edition = "2021"
-license-file = "LICENSE.md"
+license = "MIT"
 description = "Job specification types for graphile_worker, a high performance Rust/PostgreSQL job queue"
 homepage = "https://docs.rs/graphile_worker"
 documentation = "https://docs.rs/graphile_worker"

@@ -2,7 +2,7 @@
 name = "graphile_worker_lifecycle_hooks"
 version = "0.3.4"
 edition = "2021"
-license-file = "LICENSE.md"
+license = "MIT"
 description = "Lifecycle hooks for graphile_worker, a high performance Rust/PostgreSQL job queue"
 homepage = "https://docs.rs/graphile_worker"
 documentation = "https://docs.rs/graphile_worker"
