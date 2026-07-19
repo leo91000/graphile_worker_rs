@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.20](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_handler-v0.5.19...graphile_worker_task_handler-v0.5.20) - 2026-07-19
+
+### Fixed
+
+- use SPDX license = "MIT" instead of license-file ([#473](https://github.com/leo91000/graphile_worker_rs/pull/473))
+
 ## [0.5.19](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_handler-v0.5.18...graphile_worker_task_handler-v0.5.19) - 2026-06-27
 
 ### Other

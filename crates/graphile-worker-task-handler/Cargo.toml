@@ -1,6 +1,6 @@
 [package]
 name = "graphile_worker_task_handler"
-version = "0.5.19"
+version = "0.5.20"
 edition = "2021"
 license = "MIT"
 description = "A library to handle tasks for the Graphile Worker project"

@@ -1,6 +1,6 @@
 [package]
 name = "graphile_worker_migrations_macros"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 license = "MIT"
 description = "Proc macros for graphile_worker_migrations"

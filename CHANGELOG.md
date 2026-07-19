@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.13.5](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.4...graphile_worker-v0.13.5) - 2026-07-19
+
+### Added
+
+- support custom WorkerUtils executors
+
+### Fixed
+
+- use SPDX license = "MIT" instead of license-file ([#473](https://github.com/leo91000/graphile_worker_rs/pull/473))
+
+### Other
+
+- cover WorkerUtils executor paths
+- *(deps)* update all non-major dependencies ([#479](https://github.com/leo91000/graphile_worker_rs/pull/479))
+- *(deps)* update rust crate futures to 0.3.33 ([#478](https://github.com/leo91000/graphile_worker_rs/pull/478))
+- *(deps)* update all non-major dependencies ([#476](https://github.com/leo91000/graphile_worker_rs/pull/476))
+- *(deps)* update rust crate tokio to 1.53.0 ([#475](https://github.com/leo91000/graphile_worker_rs/pull/475))
+- *(deps)* update all non-major dependencies ([#474](https://github.com/leo91000/graphile_worker_rs/pull/474))
+- *(deps)* update all non-major dependencies ([#472](https://github.com/leo91000/graphile_worker_rs/pull/472))
+- *(deps)* update dependency @iconify-json/lucide to v1.2.117 ([#471](https://github.com/leo91000/graphile_worker_rs/pull/471))
+- *(deps)* update rust crate uuid to 1.23.5 ([#469](https://github.com/leo91000/graphile_worker_rs/pull/469))
+
 ## [0.13.4](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.3...graphile_worker-v0.13.4) - 2026-07-10
 
 ### Fixed
