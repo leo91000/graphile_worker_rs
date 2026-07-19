@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.21](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.20...graphile_worker_migrations-v0.4.21) - 2026-07-19
+
+### Fixed
+
+- use SPDX license = "MIT" instead of license-file ([#473](https://github.com/leo91000/graphile_worker_rs/pull/473))
+
 ## [0.4.20](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.19...graphile_worker_migrations-v0.4.20) - 2026-07-10
 
 ### Fixed

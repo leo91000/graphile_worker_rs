@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.14](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_shutdown_signal-v0.3.13...graphile_worker_shutdown_signal-v0.3.14) - 2026-07-19
+
+### Fixed
+
+- use SPDX license = "MIT" instead of license-file ([#473](https://github.com/leo91000/graphile_worker_rs/pull/473))
+
 ## [0.3.13](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_shutdown_signal-v0.3.12...graphile_worker_shutdown_signal-v0.3.13) - 2026-05-12
 
 ### Other

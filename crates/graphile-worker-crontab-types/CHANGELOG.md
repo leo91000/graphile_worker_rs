@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.18](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_types-v0.5.17...graphile_worker_crontab_types-v0.5.18) - 2026-07-19
+
+### Fixed
+
+- use SPDX license = "MIT" instead of license-file ([#473](https://github.com/leo91000/graphile_worker_rs/pull/473))
+
 ## [0.5.17](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_types-v0.5.16...graphile_worker_crontab_types-v0.5.17) - 2026-06-27
 
 ### Other

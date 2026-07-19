@@ -1,6 +1,6 @@
 [package]
 name = "graphile_worker_admin_ui_client"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 license = "MIT"
 description = "Leptos WASM client for the embedded graphile_worker admin UI"

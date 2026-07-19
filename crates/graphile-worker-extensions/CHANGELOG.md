@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_extensions-v0.1.8...graphile_worker_extensions-v0.1.9) - 2026-07-19
+
+### Fixed
+
+- use SPDX license = "MIT" instead of license-file ([#473](https://github.com/leo91000/graphile_worker_rs/pull/473))
+
 ## [0.1.8](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_extensions-v0.1.7...graphile_worker_extensions-v0.1.8) - 2026-06-09
 
 ### Other
