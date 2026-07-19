@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use graphile_worker_task_handler::TaskHandler;
 
+use graphile_worker_database::DbExecutorArg;
 use graphile_worker_job::Job;
 use graphile_worker_job_spec::{JobKeyMode, JobSpec};
 use graphile_worker_queries::add_job::batch::add_jobs as insert_jobs;
@@ -15,6 +16,7 @@ use super::hooks::invoke_before_job_schedule;
 
 pub(crate) async fn add_jobs<T: TaskHandler + Clone>(
     utils: &WorkerUtils,
+    mut executor: impl DbExecutorArg,
     jobs: &[(T, &JobSpec)],
 ) -> Result<Vec<Job>, GraphileWorkerError> {
     if jobs.is_empty() {
@@ -33,7 +35,7 @@ pub(crate) async fn add_jobs<T: TaskHandler + Clone>(
     let task_details = utils.task_details.read().await;
 
     let added_jobs = insert_jobs(
-        &utils.database,
+        &mut executor,
         &utils.schema,
         &jobs_to_add,
         &task_details,
@@ -43,13 +45,14 @@ pub(crate) async fn add_jobs<T: TaskHandler + Clone>(
     .await?;
     drop(task_details);
 
-    analyze_jobs_after_large_batch(utils, jobs.len()).await;
+    analyze_jobs_after_large_batch(utils, &mut executor, jobs.len()).await;
 
     Ok(added_jobs)
 }
 
 pub(crate) async fn add_raw_jobs(
     utils: &WorkerUtils,
+    mut executor: impl DbExecutorArg,
     jobs: &[RawJobSpec],
 ) -> Result<Vec<Job>, GraphileWorkerError> {
     if jobs.is_empty() {
@@ -63,10 +66,10 @@ pub(crate) async fn add_raw_jobs(
 
     let (jobs_to_add, job_key_preserve_run_at) = prepare_batch_jobs(utils, job_inputs).await?;
     let task_details =
-        get_tasks_details(&utils.database, &utils.schema, unique_identifiers(jobs)).await?;
+        get_tasks_details(&mut executor, &utils.schema, unique_identifiers(jobs)).await?;
 
     let added_jobs = insert_jobs(
-        &utils.database,
+        &mut executor,
         &utils.schema,
         &jobs_to_add,
         &task_details,
@@ -76,7 +79,7 @@ pub(crate) async fn add_raw_jobs(
     .await?;
     drop(task_details);
 
-    analyze_jobs_after_large_batch(utils, jobs.len()).await;
+    analyze_jobs_after_large_batch(utils, &mut executor, jobs.len()).await;
 
     Ok(added_jobs)
 }

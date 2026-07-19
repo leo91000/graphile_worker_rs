@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
-use graphile_worker_database::{Database, Schema};
+use graphile_worker_database::{Database, DbExecutorArg, Schema};
 use graphile_worker_lifecycle_hooks::HookRegistry;
 
 use graphile_worker_queries::task_identifiers::SharedTaskDetails;
+
+use super::executor::WorkerUtilsWithExecutor;
 
 /// The WorkerUtils struct provides a set of utility methods for managing jobs.
 ///
@@ -70,5 +72,17 @@ impl WorkerUtils {
     pub fn with_use_local_time(mut self, use_local_time: bool) -> Self {
         self.use_local_time = use_local_time;
         self
+    }
+
+    /// Uses a caller-provided database executor for utility operations.
+    ///
+    /// This is useful when job operations must participate in an existing transaction.
+    /// The caller retains ownership of the executor and is responsible for committing or
+    /// rolling back transactions.
+    pub fn with_executor<E>(self, executor: E) -> WorkerUtilsWithExecutor<E>
+    where
+        E: DbExecutorArg,
+    {
+        WorkerUtilsWithExecutor::new(self, executor)
     }
 }

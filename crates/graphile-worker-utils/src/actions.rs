@@ -1,4 +1,4 @@
-use graphile_worker_database::{DbExecutor, DbValue};
+use graphile_worker_database::{DbExecutorArg, DbValue};
 use indoc::formatdoc;
 
 use super::client::WorkerUtils;
@@ -9,6 +9,7 @@ use graphile_worker_queries::schema_names::WorkerFunction;
 
 pub(super) async fn remove_job(
     utils: &WorkerUtils,
+    mut executor: impl DbExecutorArg,
     job_key: &str,
 ) -> Result<(), GraphileWorkerError> {
     let remove_job = WorkerFunction::RemoveJob.qualified(&utils.schema);
@@ -18,8 +19,7 @@ pub(super) async fn remove_job(
         "#
     );
 
-    utils
-        .database
+    executor
         .execute(&sql, vec![DbValue::Text(job_key.to_string())].into())
         .await?;
 
@@ -28,6 +28,7 @@ pub(super) async fn remove_job(
 
 pub(super) async fn complete_jobs(
     utils: &WorkerUtils,
+    executor: impl DbExecutorArg,
     ids: &[i64],
 ) -> Result<Vec<DbJob>, GraphileWorkerError> {
     let complete_jobs = WorkerFunction::CompleteJobs.qualified(&utils.schema);
@@ -37,11 +38,12 @@ pub(super) async fn complete_jobs(
         "#
     );
 
-    fetch_db_jobs(utils, &sql, vec![DbValue::I64Array(ids.to_vec())]).await
+    fetch_db_jobs(executor, &sql, vec![DbValue::I64Array(ids.to_vec())]).await
 }
 
 pub(super) async fn permanently_fail_jobs(
     utils: &WorkerUtils,
+    executor: impl DbExecutorArg,
     ids: &[i64],
     reason: &str,
 ) -> Result<Vec<DbJob>, GraphileWorkerError> {
@@ -53,7 +55,7 @@ pub(super) async fn permanently_fail_jobs(
     );
 
     fetch_db_jobs(
-        utils,
+        executor,
         &sql,
         vec![
             DbValue::I64Array(ids.to_vec()),
@@ -65,6 +67,7 @@ pub(super) async fn permanently_fail_jobs(
 
 pub(super) async fn reschedule_jobs(
     utils: &WorkerUtils,
+    executor: impl DbExecutorArg,
     ids: &[i64],
     options: RescheduleJobOptions,
 ) -> Result<Vec<DbJob>, GraphileWorkerError> {
@@ -82,7 +85,7 @@ pub(super) async fn reschedule_jobs(
     );
 
     fetch_db_jobs(
-        utils,
+        executor,
         &sql,
         vec![
             DbValue::I64Array(ids.to_vec()),
@@ -97,6 +100,7 @@ pub(super) async fn reschedule_jobs(
 
 pub(super) async fn force_unlock_workers(
     utils: &WorkerUtils,
+    mut executor: impl DbExecutorArg,
     worker_ids: &[&str],
 ) -> Result<(), GraphileWorkerError> {
     let force_unlock_workers = WorkerFunction::ForceUnlockWorkers.qualified(&utils.schema);
@@ -106,8 +110,7 @@ pub(super) async fn force_unlock_workers(
         "#
     );
 
-    utils
-        .database
+    executor
         .execute(
             &sql,
             vec![DbValue::TextArray(
@@ -124,12 +127,11 @@ pub(super) async fn force_unlock_workers(
 }
 
 async fn fetch_db_jobs(
-    utils: &WorkerUtils,
+    mut executor: impl DbExecutorArg,
     sql: &str,
     params: Vec<DbValue>,
 ) -> Result<Vec<DbJob>, GraphileWorkerError> {
-    let jobs = utils
-        .database
+    let jobs = executor
         .fetch_all(sql, params.into())
         .await?
         .iter()

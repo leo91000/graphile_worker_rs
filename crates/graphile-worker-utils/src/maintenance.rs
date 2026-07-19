@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use graphile_worker_database::DbExecutorArg;
 use graphile_worker_migrations::{migrate as run_migrations, MigrateError};
 
 use super::client::WorkerUtils;
@@ -14,9 +15,10 @@ use graphile_worker_recovery::{SweepStaleWorkersOptions, SweepStaleWorkersResult
 
 pub(super) async fn list_active_workers(
     utils: &WorkerUtils,
+    executor: impl DbExecutorArg,
     sweep_threshold: Duration,
 ) -> Result<Vec<ActiveWorkerRow>, GraphileWorkerError> {
-    list_heartbeat_workers(&utils.database, &utils.schema, sweep_threshold).await
+    list_heartbeat_workers(executor, &utils.schema, sweep_threshold).await
 }
 
 pub(super) async fn sweep_stale_workers(
