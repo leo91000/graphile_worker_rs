@@ -191,9 +191,18 @@ async fn worker_utils_routes_operations_through_sqlx_transaction() {
             .await
             .expect("Failed to remove keyed job through WorkerUtils transaction");
 
+        utils
+            .add_raw_job(
+                "worker_utils_transactional_single_raw_job",
+                json!({ "value": 5 }),
+                JobSpec::default(),
+            )
+            .await
+            .expect("Failed to add raw job through WorkerUtils transaction");
+
         let raw_jobs = [graphile_worker::RawJobSpec {
             identifier: "worker_utils_transactional_raw_job".to_string(),
-            payload: json!({ "value": 5 }),
+            payload: json!({ "value": 6 }),
             spec: JobSpec::default(),
         }];
         let raw_added = utils
@@ -203,9 +212,19 @@ async fn worker_utils_routes_operations_through_sqlx_transaction() {
         assert_eq!(raw_added[0].task_identifier(), &raw_jobs[0].identifier);
 
         utils
-            .add_batch_job(vec![TransactionalBatchJob { value: 6 }], JobSpec::default())
+            .add_batch_job(vec![TransactionalBatchJob { value: 7 }], JobSpec::default())
             .await
             .expect("Failed to add batch job through WorkerUtils transaction");
+
+        let large_spec = JobSpec::default();
+        let large_batch = (0..10_000)
+            .map(|value| (TransactionalJob { value }, &large_spec))
+            .collect::<Vec<_>>();
+        let large_batch_added = utils
+            .add_jobs(&large_batch)
+            .await
+            .expect("Failed to add large batch through WorkerUtils transaction");
+        assert_eq!(large_batch_added.len(), large_batch.len());
 
         utils
             .list_active_workers(std::time::Duration::from_secs(60))
@@ -222,6 +241,10 @@ async fn worker_utils_routes_operations_through_sqlx_transaction() {
             .expect("Failed to roll back transaction");
 
         assert_eq!(count_jobs(&test_db, TransactionalJob::IDENTIFIER).await, 0);
+        assert_eq!(
+            count_jobs(&test_db, "worker_utils_transactional_single_raw_job").await,
+            0
+        );
         assert_eq!(
             count_jobs(&test_db, "worker_utils_transactional_raw_job").await,
             0
