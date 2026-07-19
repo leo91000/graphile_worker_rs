@@ -49,7 +49,7 @@ impl WorkerUtils {
         payload: T,
         spec: JobSpec,
     ) -> Result<Job, GraphileWorkerError> {
-        add::add_job(self, payload, spec).await
+        add::add_job(self, &self.database, payload, spec).await
     }
 
     /// Adds a job to the queue with a raw identifier and payload.
@@ -90,7 +90,7 @@ impl WorkerUtils {
     where
         P: Serialize,
     {
-        add::add_raw_job(self, identifier, payload, spec).await
+        add::add_raw_job(self, &self.database, identifier, payload, spec).await
     }
 
     /// Adds multiple jobs of the same type to the queue in a single batch operation.
@@ -115,7 +115,7 @@ impl WorkerUtils {
         &self,
         jobs: &[(T, &JobSpec)],
     ) -> Result<Vec<Job>, GraphileWorkerError> {
-        add::add_jobs(self, jobs).await
+        add::add_jobs(self, &self.database, jobs).await
     }
 
     /// Adds multiple jobs with raw identifiers and payloads in a single batch operation.
@@ -137,7 +137,7 @@ impl WorkerUtils {
         )
     )]
     pub async fn add_raw_jobs(&self, jobs: &[RawJobSpec]) -> Result<Vec<Job>, GraphileWorkerError> {
-        add::add_raw_jobs(self, jobs).await
+        add::add_raw_jobs(self, &self.database, jobs).await
     }
 
     /// Adds a batch job to the queue with type safety.
@@ -159,6 +159,6 @@ impl WorkerUtils {
         payloads: Vec<T>,
         spec: JobSpec,
     ) -> Result<Job, GraphileWorkerError> {
-        add::add_batch_job(self, payloads, spec).await
+        add::add_batch_job(self, &self.database, payloads, spec).await
     }
 }

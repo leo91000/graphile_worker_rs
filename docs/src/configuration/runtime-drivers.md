@@ -97,6 +97,33 @@ graphile_worker = { version = "0.13", default-features = false, features = [
 `driver-tokio-postgres` enables `runtime-tokio` for Graphile Worker RS. Add a
 TLS feature only when the rest of your database stack needs one from this crate.
 
+## WorkerUtils With A Caller-Owned Executor
+
+`WorkerUtils::with_executor` keeps the high-level scheduling and job-management
+API while routing its database operations through a supported executor. This is
+the preferred API when a job must be committed atomically with application data.
+
+```rust,ignore
+let mut tx = pool.begin().await?;
+
+save_order(&mut tx, &order).await?;
+
+{
+    let mut utils = worker.create_utils().with_executor(&mut tx);
+    utils.add_job(SendOrderConfirmation { order_id: order.id }, JobSpec::default()).await?;
+}
+
+tx.commit().await?;
+```
+
+The facade borrows the executor but never commits or rolls it back. Drop the
+facade, or consume it with `into_inner`, before completing the transaction. It
+supports both SQLx and tokio-postgres executor types through `DbExecutorArg`.
+
+Maintenance operations that own their transaction or mutate shared maintenance
+state are intentionally not exposed by the facade: `cleanup`, `migrate`, and the
+stale-worker sweep methods.
+
 ## SQLx Driver Executor Arguments
 
 With `driver-sqlx`, the SQL helpers accept SQLx executors used by the tests:

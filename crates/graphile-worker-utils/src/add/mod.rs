@@ -2,6 +2,7 @@ use graphile_worker_task_handler::{BatchTaskHandler, TaskHandler};
 use serde::Serialize;
 
 use super::client::WorkerUtils;
+use graphile_worker_database::DbExecutorArg;
 use graphile_worker_job::Job;
 use graphile_worker_job_spec::JobSpec;
 use graphile_worker_queries::add_job::single::add_job as insert_job;
@@ -17,6 +18,7 @@ pub(super) use bulk::{add_jobs, add_raw_jobs};
 
 pub(super) async fn add_job<T: TaskHandler>(
     utils: &WorkerUtils,
+    mut executor: impl DbExecutorArg,
     payload: T,
     spec: JobSpec,
 ) -> Result<Job, GraphileWorkerError> {
@@ -25,7 +27,7 @@ pub(super) async fn add_job<T: TaskHandler>(
 
     let payload = invoke_before_job_schedule(utils, identifier, payload, &spec).await?;
     insert_job(
-        &utils.database,
+        &mut executor,
         &utils.schema,
         identifier,
         payload,
@@ -37,6 +39,7 @@ pub(super) async fn add_job<T: TaskHandler>(
 
 pub(super) async fn add_raw_job<P>(
     utils: &WorkerUtils,
+    mut executor: impl DbExecutorArg,
     identifier: &str,
     payload: P,
     spec: JobSpec,
@@ -48,7 +51,7 @@ where
 
     let payload = invoke_before_job_schedule(utils, identifier, payload, &spec).await?;
     insert_job(
-        &utils.database,
+        &mut executor,
         &utils.schema,
         identifier,
         payload,
@@ -60,6 +63,7 @@ where
 
 pub(super) async fn add_batch_job<T: BatchTaskHandler>(
     utils: &WorkerUtils,
+    mut executor: impl DbExecutorArg,
     payloads: Vec<T>,
     spec: JobSpec,
 ) -> Result<Job, GraphileWorkerError> {
@@ -87,7 +91,7 @@ pub(super) async fn add_batch_job<T: BatchTaskHandler>(
     }
 
     insert_job(
-        &utils.database,
+        &mut executor,
         &utils.schema,
         identifier,
         serde_json::Value::Array(payloads),

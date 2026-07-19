@@ -27,6 +27,36 @@ let utils = WorkerUtils::new(database, "graphile_worker");
 utils.migrate().await?;
 ```
 
+## Using An Existing Transaction
+
+Use `with_executor` when scheduling and job-management operations must be atomic
+with application database changes. It creates a scoped `WorkerUtils` facade that
+routes every exposed operation through the supplied executor while preserving the
+worker schema, hooks, task details, and timestamp configuration.
+
+```rust,ignore
+let mut tx = pool.begin().await?;
+
+update_application_state(&mut tx).await?;
+
+{
+    let mut utils = worker.create_utils().with_executor(&mut tx);
+    utils.add_jobs(&jobs).await?;
+}
+
+tx.commit().await?;
+```
+
+The caller owns the executor and remains responsible for committing or rolling
+back the transaction. `with_executor` accepts any supported `DbExecutorArg`,
+including SQLx and tokio-postgres transactions.
+
+The scoped facade supports scheduling, direct job management,
+`list_active_workers`, and `force_unlock_workers`. Operations that manage their
+own transactions or update shared maintenance state remain on the original
+`WorkerUtils`: `cleanup`, `migrate`, `sweep_stale_workers`, and
+`sweep_stale_workers_with_config`.
+
 ## Scheduling Jobs
 
 Use `add_job` when the task type is known at compile time. The task handler's

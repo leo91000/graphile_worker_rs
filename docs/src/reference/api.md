@@ -122,6 +122,8 @@ Use [`WorkerUtils`](https://docs.rs/graphile_worker/latest/graphile_worker/struc
 Important public types:
 
 - `WorkerUtils` - client for scheduling and maintenance operations.
+- `WorkerUtilsWithExecutor` - scoped client that runs supported utility operations
+  through a caller-provided executor or transaction.
 - `JobSpec` and `JobSpecBuilder` - optional job parameters.
 - `JobKeyMode` - job-key behavior: `Replace`, `PreserveRunAt`, or `UnsafeDedupe`.
 - `RawJobSpec` - raw batch scheduling input.
@@ -135,6 +137,11 @@ Common `WorkerUtils` methods include:
 - `remove_job`, `complete_jobs`, `permanently_fail_jobs`, and `reschedule_jobs`.
 - `list_active_workers`, `sweep_stale_workers`, `sweep_stale_workers_with_config`, and `force_unlock_workers`.
 - `cleanup` and `migrate`.
+
+Call `WorkerUtils::with_executor` to run scheduling and direct job-management
+methods through an existing `DbExecutorArg`. The returned facade does not expose
+`cleanup`, `migrate`, or stale-worker sweeps because those operations manage their
+own transaction or shared maintenance state.
 
 ```rust,ignore
 use graphile_worker::{JobKeyMode, JobSpec, WorkerUtils};

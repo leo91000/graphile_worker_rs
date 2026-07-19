@@ -16,12 +16,12 @@ impl WorkerUtils {
     ///
     /// Useful for cancelling scheduled jobs that haven't run yet.
     pub async fn remove_job(&self, job_key: &str) -> Result<(), GraphileWorkerError> {
-        actions::remove_job(self, job_key).await
+        actions::remove_job(self, &self.database, job_key).await
     }
 
     /// Marks multiple jobs as completed.
     pub async fn complete_jobs(&self, ids: &[i64]) -> Result<Vec<DbJob>, GraphileWorkerError> {
-        actions::complete_jobs(self, ids).await
+        actions::complete_jobs(self, &self.database, ids).await
     }
 
     /// Marks multiple jobs as permanently failed with a reason.
@@ -30,7 +30,7 @@ impl WorkerUtils {
         ids: &[i64],
         reason: &str,
     ) -> Result<Vec<DbJob>, GraphileWorkerError> {
-        actions::permanently_fail_jobs(self, ids, reason).await
+        actions::permanently_fail_jobs(self, &self.database, ids, reason).await
     }
 
     /// Reschedules multiple jobs with new parameters.
@@ -42,7 +42,7 @@ impl WorkerUtils {
         ids: &[i64],
         options: RescheduleJobOptions,
     ) -> Result<Vec<DbJob>, GraphileWorkerError> {
-        actions::reschedule_jobs(self, ids, options).await
+        actions::reschedule_jobs(self, &self.database, ids, options).await
     }
 
     /// Lists workers registered in the heartbeat table.
@@ -50,7 +50,7 @@ impl WorkerUtils {
         &self,
         sweep_threshold: Duration,
     ) -> Result<Vec<ActiveWorkerRow>, GraphileWorkerError> {
-        maintenance::list_active_workers(self, sweep_threshold).await
+        maintenance::list_active_workers(self, &self.database, sweep_threshold).await
     }
 
     /// Sweeps inactive workers and orphan locks, recovering their jobs.
@@ -78,7 +78,7 @@ impl WorkerUtils {
         &self,
         worker_ids: &[&str],
     ) -> Result<(), GraphileWorkerError> {
-        actions::force_unlock_workers(self, worker_ids).await
+        actions::force_unlock_workers(self, &self.database, worker_ids).await
     }
 
     /// Runs database cleanup tasks to maintain performance.
