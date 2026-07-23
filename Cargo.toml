@@ -45,7 +45,7 @@ async-lock = "3.4.2"
 async-signal = "0.2.14"
 async-std = "1.13.2"
 axum = "0.8.9"
-base64 = "0.22.1"
+base64 = "0.23.0"
 chrono = { version = "0.4.45", features = ["serde"] }
 clap = "4.6.4"
 criterion = "0.8.2"
