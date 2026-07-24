@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.13.6](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.5...graphile_worker-v0.13.6) - 2026-07-24
+
+### Other
+
+- *(deps)* update dependency @iconify-json/lucide to v1.2.119 ([#487](https://github.com/leo91000/graphile_worker_rs/pull/487))
+- *(deps)* update rust crate base64 to 0.23.0 ([#486](https://github.com/leo91000/graphile_worker_rs/pull/486))
+- *(deps)* update all non-major dependencies ([#485](https://github.com/leo91000/graphile_worker_rs/pull/485))
+- *(deps)* update rust crate tokio-util to 0.7.19 ([#484](https://github.com/leo91000/graphile_worker_rs/pull/484))
+- *(deps)* update all non-major dependencies ([#481](https://github.com/leo91000/graphile_worker_rs/pull/481))
+
 ## [0.13.5](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.4...graphile_worker-v0.13.5) - 2026-07-19
 
 ### Added
