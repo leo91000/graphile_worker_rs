@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_admin_ui-v0.2.3...graphile_worker_admin_ui-v0.2.4) - 2026-07-24
+
+### Other
+
+- *(deps)* update dependency @iconify-json/lucide to v1.2.119 ([#487](https://github.com/leo91000/graphile_worker_rs/pull/487))
+- *(deps)* update all non-major dependencies ([#481](https://github.com/leo91000/graphile_worker_rs/pull/481))
+
 ## [0.2.3](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_admin_ui-v0.2.2...graphile_worker_admin_ui-v0.2.3) - 2026-07-19
 
 ### Other
