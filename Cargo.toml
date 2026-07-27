@@ -73,7 +73,7 @@ rand = "0.10.2"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 serde_qs = "1.1.2"
-syn = "2.0.119"
+syn = "3.0.2"
 subtle = "2.6.1"
 thiserror = "2.0.19"
 tokio = { version = "1.53.1" }
