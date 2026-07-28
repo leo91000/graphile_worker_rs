@@ -7,7 +7,7 @@
   "devDependencies": {
     "@egoist/tailwindcss-icons": "1.9.2",
     "@iconify-json/lucide": "1.2.120",
-    "@iconify-json/tabler": "1.2.37",
+    "@iconify-json/tabler": "1.2.38",
     "@tailwindcss/cli": "4.3.3",
     "tailwindcss": "4.3.3"
   }
