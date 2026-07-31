@@ -47,7 +47,7 @@ async-std = "1.13.2"
 axum = "0.8.9"
 base64 = "0.23.0"
 chrono = { version = "0.4.45", features = ["serde"] }
-clap = "4.6.4"
+clap = "4.6.5"
 criterion = "0.8.2"
 deadpool-postgres = "0.14.1"
 derive_builder = "0.20.2"
