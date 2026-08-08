@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.13.6](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.5...graphile_worker-v0.13.6) - 2026-08-08
+
+### Other
+
+- *(deps)* update all non-major dependencies ([#499](https://github.com/leo91000/graphile_worker_rs/pull/499))
+- *(deps)* update all non-major dependencies ([#498](https://github.com/leo91000/graphile_worker_rs/pull/498))
+- *(deps)* update all non-major dependencies ([#497](https://github.com/leo91000/graphile_worker_rs/pull/497))
+- *(deps)* lock file maintenance ([#496](https://github.com/leo91000/graphile_worker_rs/pull/496))
+- *(deps)* update rust crate clap to 4.6.5 ([#495](https://github.com/leo91000/graphile_worker_rs/pull/495))
+- *(deps)* update dependency @iconify-json/lucide to v1.2.121 ([#494](https://github.com/leo91000/graphile_worker_rs/pull/494))
+- *(deps)* update dependency node to v24.18.1 ([#493](https://github.com/leo91000/graphile_worker_rs/pull/493))
+- *(deps)* update dependency @iconify-json/tabler to v1.2.38 ([#492](https://github.com/leo91000/graphile_worker_rs/pull/492))
+- *(deps)* update rust crate syn to 3.0.3 ([#491](https://github.com/leo91000/graphile_worker_rs/pull/491))
+- *(deps)* update rust crate syn to v3
+- *(deps)* update rust crate event-listener to 5.4.2 ([#490](https://github.com/leo91000/graphile_worker_rs/pull/490))
+- *(deps)* update dependency @iconify-json/lucide to v1.2.120 ([#489](https://github.com/leo91000/graphile_worker_rs/pull/489))
+- *(deps)* update actions/setup-node action to v7
+- *(deps)* update dependency @iconify-json/lucide to v1.2.119 ([#487](https://github.com/leo91000/graphile_worker_rs/pull/487))
+- *(deps)* update rust crate base64 to 0.23.0 ([#486](https://github.com/leo91000/graphile_worker_rs/pull/486))
+- *(deps)* update all non-major dependencies ([#485](https://github.com/leo91000/graphile_worker_rs/pull/485))
+- *(deps)* update rust crate tokio-util to 0.7.19 ([#484](https://github.com/leo91000/graphile_worker_rs/pull/484))
+- *(deps)* update all non-major dependencies ([#481](https://github.com/leo91000/graphile_worker_rs/pull/481))
+
 ## [0.13.5](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.4...graphile_worker-v0.13.5) - 2026-07-19
 
 ### Added
