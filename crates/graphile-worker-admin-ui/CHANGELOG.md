@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_admin_ui-v0.2.3...graphile_worker_admin_ui-v0.2.4) - 2026-08-08
+
+### Other
+
+- *(deps)* update all non-major dependencies ([#498](https://github.com/leo91000/graphile_worker_rs/pull/498))
+- *(deps)* lock file maintenance ([#496](https://github.com/leo91000/graphile_worker_rs/pull/496))
+- *(deps)* update dependency @iconify-json/lucide to v1.2.121 ([#494](https://github.com/leo91000/graphile_worker_rs/pull/494))
+- *(deps)* update dependency @iconify-json/tabler to v1.2.38 ([#492](https://github.com/leo91000/graphile_worker_rs/pull/492))
+- *(deps)* update dependency @iconify-json/lucide to v1.2.120 ([#489](https://github.com/leo91000/graphile_worker_rs/pull/489))
+- *(deps)* update dependency @iconify-json/lucide to v1.2.119 ([#487](https://github.com/leo91000/graphile_worker_rs/pull/487))
+- *(deps)* update all non-major dependencies ([#481](https://github.com/leo91000/graphile_worker_rs/pull/481))
+
 ## [0.2.3](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_admin_ui-v0.2.2...graphile_worker_admin_ui-v0.2.3) - 2026-07-19
 
 ### Other
