@@ -62,7 +62,7 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.20.0
           cache: npm
           cache-dependency-path: crates/graphile-worker-admin-ui/package-lock.json
       - uses: Swatinem/rust-cache@v2
