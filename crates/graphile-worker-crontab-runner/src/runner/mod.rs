@@ -1,9 +1,8 @@
 mod schedule;
 
-use std::cmp::Ordering;
+use std::{cmp::Ordering, convert::Infallible};
 
 use chrono::prelude::*;
-use futures::FutureExt;
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_database::{DbExecutorArg, Schema};
 use graphile_worker_lifecycle_hooks::HookRegistry;
@@ -82,22 +81,16 @@ impl<'a, E: DbExecutorArg, C: Clock> CronRunner<'a, E, C> {
         mut self,
         shutdown_signal: ShutdownSignal,
     ) -> Result<(), ScheduleCronJobError> {
-        let runner = self.run_with_retries().fuse();
-        let shutdown = shutdown_signal.fuse();
-        futures::pin_mut!(runner, shutdown);
-
-        futures::select_biased! {
-            _ = shutdown => Ok(()),
-            result = runner => result,
-        }
+        let runner = self.run_with_retries();
+        futures::pin_mut!(runner);
+        futures::future::select(shutdown_signal, runner).await;
+        Ok(())
     }
 
-    async fn run_with_retries(&mut self) -> Result<(), ScheduleCronJobError> {
+    async fn run_with_retries(&mut self) {
         let mut retry_delay = MIN_RETRY_DELAY;
         loop {
-            let Err(error) = self.run_until_error(&mut retry_delay).await else {
-                return Ok(());
-            };
+            let error = self.run_until_error(&mut retry_delay).await.unwrap_err();
             error!(
                 error = %error,
                 retry_delay_ms = retry_delay.num_milliseconds(),
@@ -111,7 +104,7 @@ impl<'a, E: DbExecutorArg, C: Clock> CronRunner<'a, E, C> {
     async fn run_until_error(
         &mut self,
         retry_delay: &mut chrono::Duration,
-    ) -> Result<(), ScheduleCronJobError> {
+    ) -> Result<Infallible, ScheduleCronJobError> {
         let start = self.clock.now();
         debug!(start = ?start, "cron:starting");
 

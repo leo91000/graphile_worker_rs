@@ -9,6 +9,7 @@ use support::*;
 
 #[tokio::test]
 async fn cron_retries_startup_with_capped_backoff_and_resets_after_a_healthy_tick() {
+    crate::helpers::enable_logs().await;
     with_test_db(|db| async move {
         db.worker_utils().migrate().await.unwrap();
         let executor = FaultyExecutor::new(db.database.clone());
