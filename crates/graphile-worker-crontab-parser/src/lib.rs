@@ -1,5 +1,6 @@
 use graphile_worker_crontab_types::Crontab;
 pub use nom::error::ErrorKind;
+use nom::Finish;
 use nom_crontab::nom_crontab;
 use thiserror::Error;
 
@@ -120,12 +121,8 @@ impl<'a> From<nom::Err<nom::error::Error<&'a str>>> for CrontabParseError {
 /// - `ts` - ISO8601 timestamp representing when this job was due to execute
 /// - `backfilled` - true if the task was "backfilled" (i.e. it wasn't scheduled on time), false otherwise
 pub fn parse_crontab(crontab: &str) -> Result<Vec<Crontab>, CrontabParseError> {
-    let (_, result) = nom_crontab(crontab).map_err(|error| {
-        let remaining = match &error {
-            nom::Err::Error(error) | nom::Err::Failure(error) => error.input,
-            nom::Err::Incomplete(_) => crontab,
-        };
-        let prefix = &crontab[..crontab.len() - remaining.len()];
+    let (_, result) = nom_crontab(crontab).finish().map_err(|error| {
+        let prefix = &crontab[..crontab.len() - error.input.len()];
         let line = prefix.bytes().filter(|byte| *byte == b'\n').count() + 1;
         let column = prefix
             .rsplit('\n')
@@ -134,7 +131,7 @@ pub fn parse_crontab(crontab: &str) -> Result<Vec<Crontab>, CrontabParseError> {
             .chars()
             .count()
             + 1;
-        let mut error = CrontabParseError::from(error);
+        let mut error = CrontabParseError::from(nom::Err::Error(error));
         error.msg = format!("line {line}, column {column}: {}", error.msg);
         error
     })?;
