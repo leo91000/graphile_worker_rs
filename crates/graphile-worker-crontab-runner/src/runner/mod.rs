@@ -8,7 +8,7 @@ use graphile_worker_crontab_types::Crontab;
 use graphile_worker_database::{DbExecutorArg, Schema};
 use graphile_worker_lifecycle_hooks::HookRegistry;
 use graphile_worker_shutdown_signal::ShutdownSignal;
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
 use crate::backfill::register_and_backfill_items;
 use crate::clock::{Clock, SystemClock};
@@ -16,6 +16,9 @@ use crate::sql::ScheduleCronJobError;
 use crate::utils::{round_date_minute, ONE_MINUTE};
 
 use self::schedule::emit_tick_and_schedule_jobs;
+
+const MIN_RETRY_DELAY: chrono::Duration = chrono::Duration::milliseconds(200);
+const MAX_RETRY_DELAY: chrono::Duration = chrono::Duration::seconds(60);
 
 pub async fn cron_main(
     executor: impl DbExecutorArg,
@@ -77,7 +80,37 @@ impl<'a, E: DbExecutorArg, C: Clock> CronRunner<'a, E, C> {
 
     pub async fn run(
         mut self,
-        mut shutdown_signal: ShutdownSignal,
+        shutdown_signal: ShutdownSignal,
+    ) -> Result<(), ScheduleCronJobError> {
+        let runner = self.run_with_retries().fuse();
+        let shutdown = shutdown_signal.fuse();
+        futures::pin_mut!(runner, shutdown);
+
+        futures::select_biased! {
+            _ = shutdown => Ok(()),
+            result = runner => result,
+        }
+    }
+
+    async fn run_with_retries(&mut self) -> Result<(), ScheduleCronJobError> {
+        let mut retry_delay = MIN_RETRY_DELAY;
+        loop {
+            let Err(error) = self.run_until_error(&mut retry_delay).await else {
+                return Ok(());
+            };
+            error!(
+                error = %error,
+                retry_delay_ms = retry_delay.num_milliseconds(),
+                "Cron failed; retrying registration and backfill"
+            );
+            self.clock.sleep_until(self.clock.now() + retry_delay).await;
+            retry_delay = (retry_delay + retry_delay / 2).min(MAX_RETRY_DELAY);
+        }
+    }
+
+    async fn run_until_error(
+        &mut self,
+        retry_delay: &mut chrono::Duration,
     ) -> Result<(), ScheduleCronJobError> {
         let start = self.clock.now();
         debug!(start = ?start, "cron:starting");
@@ -95,20 +128,7 @@ impl<'a, E: DbExecutorArg, C: Clock> CronRunner<'a, E, C> {
         let mut ts = round_date_minute(start, true);
 
         loop {
-            let should_shutdown = {
-                let sleep = self.clock.sleep_until(ts).fuse();
-                let shutdown = (&mut shutdown_signal).fuse();
-                futures::pin_mut!(sleep, shutdown);
-
-                futures::select_biased! {
-                    _ = shutdown => true,
-                    _ = sleep => false,
-                }
-            };
-
-            if should_shutdown {
-                break Ok(());
-            }
+            self.clock.sleep_until(ts).await;
 
             let current_ts = round_date_minute(self.clock.now(), false);
             let ts_delta = current_ts - ts;
@@ -132,6 +152,7 @@ impl<'a, E: DbExecutorArg, C: Clock> CronRunner<'a, E, C> {
             }
 
             self.emit_tick_and_schedule_jobs(ts).await?;
+            *retry_delay = MIN_RETRY_DELAY;
             ts += *ONE_MINUTE;
         }
     }

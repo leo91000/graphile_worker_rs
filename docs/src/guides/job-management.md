@@ -260,7 +260,8 @@ utils
 The available cleanup tasks are:
 
 - `GcTaskIdentifiers`: removes task identifiers no longer referenced by jobs.
-- `GcJobQueues`: removes queue records no longer referenced by jobs.
+- `GcJobQueues`: removes unlocked queue records no longer referenced by jobs.
+  Jobs without a queue do not prevent unused queues from being removed.
 - `DeletePermanentlyFailedJobs`: deletes unlocked jobs whose attempts have
   reached `max_attempts`.
 

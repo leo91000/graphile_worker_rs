@@ -17,7 +17,7 @@ pub enum CleanupTask {
     /// that the worker knows about will be preserved to support horizontal scaling.
     GcTaskIdentifiers,
 
-    /// Removes job queue records that are no longer referenced by any jobs.
+    /// Removes unlocked job queue records that are no longer referenced by any jobs.
     /// This helps keep the `_private_job_queues` table clean and smaller.
     GcJobQueues,
 
@@ -80,8 +80,10 @@ impl CleanupTask {
                 let sql = formatdoc!(
                     r#"
                         delete from {job_queues} job_queues
-                        where job_queues.id not in (
+                        where job_queues.locked_at is null
+                        and job_queues.id not in (
                             select jobs.job_queue_id from {jobs} jobs
+                            where jobs.job_queue_id is not null
                         );
                     "#
                 );

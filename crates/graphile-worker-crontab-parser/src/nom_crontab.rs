@@ -1,9 +1,9 @@
 use nom::{
     bytes::complete::take_while,
-    character::complete::{self, line_ending, multispace0, space0, space1},
-    combinator::opt,
-    multi::separated_list0,
-    sequence::{delimited, preceded},
+    character::complete::{self, line_ending, space0, space1},
+    combinator::{cut, eof, not, opt, value},
+    multi::many0,
+    sequence::{preceded, terminated},
     IResult, Parser,
 };
 
@@ -41,14 +41,13 @@ fn crontab_comment(input: &str) -> IResult<&str, Option<Crontab>> {
 }
 
 pub(crate) fn nom_crontab(input: &str) -> IResult<&str, Vec<Crontab>> {
-    let (input, crontabs) = delimited(
-        multispace0,
-        separated_list0(
-            line_ending,
-            nom::branch::alt((crontab_comment, crontab_line)),
-        ),
-        multispace0,
-    )
+    let (input, crontabs) = many0(preceded(
+        not(eof),
+        cut(terminated(
+            nom::branch::alt((crontab_comment, crontab_line, value(None, space0))),
+            preceded(space0, nom::branch::alt((line_ending, eof))),
+        )),
+    ))
     .parse(input)?;
 
     Ok((input, crontabs.into_iter().flatten().collect()))

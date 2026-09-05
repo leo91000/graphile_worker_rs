@@ -1,9 +1,9 @@
 use nom::{character::complete::satisfy, multi::many0, IResult, Parser};
 
 pub(crate) fn nom_task_identifier(input: &str) -> IResult<&str, String> {
-    let (input, first_char) = satisfy(|c| c.is_ascii_alphabetic()).parse(input)?;
+    let (input, first_char) = satisfy(|c| c.is_ascii_alphabetic() || c == '_').parse(input)?;
     let (input, mut task_identifier) = many0(satisfy(|c| {
-        c.is_ascii_alphanumeric() || c == ':' || c == '_' || c == '-'
+        c.is_ascii_alphanumeric() || c == ':' || c == '_' || c == '-' || c == '/'
     }))
     .parse(input)?;
 

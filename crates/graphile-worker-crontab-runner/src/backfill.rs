@@ -18,7 +18,7 @@ pub(crate) struct BackfillItemAndDate<'a, 'b> {
 
 pub(crate) struct BackfillAndUnknownItems<'a, 'b> {
     backfill_items_and_date: Vec<BackfillItemAndDate<'a, 'b>>,
-    unknown_identifiers: Vec<&'a String>,
+    unknown_identifiers: Vec<&'a str>,
 }
 
 pub(crate) fn get_backfill_and_unknown_items<'a, 'b>(
@@ -31,7 +31,7 @@ pub(crate) fn get_backfill_and_unknown_items<'a, 'b>(
     for crontab in crontabs {
         let known = known_crontabs
             .iter()
-            .find(|uc| uc.identifier() == crontab.task_identifier());
+            .find(|uc| uc.identifier() == crontab.identifier());
 
         if let Some(known) = known {
             let not_before = known
@@ -44,7 +44,7 @@ pub(crate) fn get_backfill_and_unknown_items<'a, 'b>(
                 not_before,
             });
         } else {
-            unknown_identifiers.push(crontab.task_identifier());
+            unknown_identifiers.push(crontab.identifier());
         }
     }
 
