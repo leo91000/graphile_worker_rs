@@ -6,6 +6,9 @@ use crate::clock::mock::MockClock;
 use crate::clock::Clock;
 use crate::utils::round_date_minute;
 
+#[path = "tests/shutdown.rs"]
+mod shutdown;
+
 fn test_time() -> DateTime<Local> {
     Local.with_ymd_and_hms(2024, 1, 15, 10, 30, 0).unwrap()
 }
