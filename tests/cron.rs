@@ -31,6 +31,8 @@ fn create_shutdown_signal() -> (ShutdownSignal, Arc<Notify>) {
 
 #[path = "cron/backfill.rs"]
 mod backfill;
+#[path = "cron/recovery.rs"]
+mod recovery;
 #[path = "cron/registration.rs"]
 mod registration;
 #[path = "cron/runner.rs"]

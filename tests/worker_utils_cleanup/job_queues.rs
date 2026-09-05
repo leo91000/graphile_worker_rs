@@ -78,6 +78,11 @@ async fn cleanup_with_gc_job_queues() {
             .expect("Failed to complete the last job");
 
         worker_utils
+            .add_raw_job("unqueued", serde_json::json!({}), JobSpec::default())
+            .await
+            .expect("Failed to add unqueued job");
+
+        worker_utils
             .cleanup(&[CleanupTask::GcJobQueues])
             .await
             .expect("Failed to cleanup job queues");
@@ -93,6 +98,28 @@ async fn cleanup_with_gc_job_queues() {
             remaining_queue_names, expected_queues,
             "Only non-empty job queues should remain after cleanup"
         );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn cleanup_preserves_unused_locked_queues() {
+    with_test_db(|test_db| async move {
+        let utils = test_db.worker_utils();
+        utils.migrate().await.unwrap();
+        safe_query(
+            "insert into graphile_worker._private_job_queues (queue_name, locked_at, locked_by)
+             values ('locked', now(), 'worker'), ('unused', null, null)",
+        )
+        .execute(&test_db.test_pool)
+        .await
+        .unwrap();
+
+        utils.cleanup(&[CleanupTask::GcJobQueues]).await.unwrap();
+        let queues = test_db.get_job_queues().await;
+        assert_eq!(queues.len(), 1);
+        assert_eq!(queues[0].queue_name, "locked");
+        assert_eq!(queues[0].locked_by.as_deref(), Some("worker"));
     })
     .await;
 }

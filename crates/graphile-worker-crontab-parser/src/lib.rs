@@ -62,9 +62,9 @@ impl<'a> From<nom::Err<nom::error::Error<&'a str>>> for CrontabParseError {
 /// these separated by commas.
 ///
 /// The task identifier should match the following regexp
-/// `/^[_a-zA-Z][_a-zA-Z0-9:_-]*$/` (namely it should start with an alphabetic
-/// character and it should only contain alphanumeric characters, colon, underscore
-/// and hyphen). It should be the name of one of your Graphile Worker tasks.
+/// `/^[_a-zA-Z][_a-zA-Z0-9:/_-]*$/` (namely it should start with an ASCII letter
+/// or underscore, followed by ASCII letters, numbers, colon, slash, underscore,
+/// or hyphen). It should be the name of one of your Graphile Worker tasks.
 ///
 /// The `opts` must always be prefixed with a `?` if provided and details
 /// configuration for the task such as what should be done in the event that the
@@ -120,7 +120,24 @@ impl<'a> From<nom::Err<nom::error::Error<&'a str>>> for CrontabParseError {
 /// - `ts` - ISO8601 timestamp representing when this job was due to execute
 /// - `backfilled` - true if the task was "backfilled" (i.e. it wasn't scheduled on time), false otherwise
 pub fn parse_crontab(crontab: &str) -> Result<Vec<Crontab>, CrontabParseError> {
-    let (_, result) = nom_crontab(crontab)?;
+    let (_, result) = nom_crontab(crontab).map_err(|error| {
+        let remaining = match &error {
+            nom::Err::Error(error) | nom::Err::Failure(error) => error.input,
+            nom::Err::Incomplete(_) => crontab,
+        };
+        let prefix = &crontab[..crontab.len() - remaining.len()];
+        let line = prefix.bytes().filter(|byte| *byte == b'\n').count() + 1;
+        let column = prefix
+            .rsplit('\n')
+            .next()
+            .unwrap_or_default()
+            .chars()
+            .count()
+            + 1;
+        let mut error = CrontabParseError::from(error);
+        error.msg = format!("line {line}, column {column}: {}", error.msg);
+        error
+    })?;
     Ok(result)
 }
 

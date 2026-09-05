@@ -154,7 +154,12 @@ Examples:
 ```
 
 Task identifiers must start with a letter or underscore. After that they may
-contain letters, numbers, colon, underscore, or hyphen.
+contain letters, numbers, colon, slash, underscore, or hyphen. For example,
+`emails/daily` is a valid task identifier.
+
+The entire crontab must be valid: malformed entries or trailing text produce an
+error with a line and column instead of silently accepting a partial schedule.
+Blank lines, comment lines starting with `#`, and surrounding spaces are allowed.
 
 ## Options
 
@@ -256,3 +261,15 @@ The cron runner checks schedule times and inserts regular jobs for matching
 entries. If time advances by multiple matching intervals, the runner catches up
 by scheduling the missed ticks it observes. Jobs are then processed by the same
 registered task handlers as jobs added through the regular job APIs.
+
+If registration, backfill, or scheduling fails, cron logs the error and retries
+indefinitely. The delay starts at 200 ms, grows by a factor of 1.5 to a maximum of
+60 seconds, and resets after a successful tick. Shutdown interrupts database
+waits and retry delays.
+
+After an error, the runner repeats registration and backfill before scheduling
+new ticks. Only known entries with a configured `fill` window recover missed
+executions; entries without `fill` resume at the next tick. Each entry's `id`
+keeps its scheduling history independent from other entries for the same task.
+All scheduling errors are retried, including persistent permission or schema
+errors, so monitor cron error logs and correct persistent failures.
