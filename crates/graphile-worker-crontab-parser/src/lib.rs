@@ -18,6 +18,8 @@ pub struct CrontabParseError {
     pub error_kind: ErrorKind,
 }
 
+pub type Result<T> = core::result::Result<T, CrontabParseError>;
+
 impl<'a> From<nom::Err<nom::error::Error<&'a str>>> for CrontabParseError {
     fn from(e: nom::Err<nom::error::Error<&'a str>>) -> Self {
         let msg = format!("{e:?}");
@@ -120,7 +122,7 @@ impl<'a> From<nom::Err<nom::error::Error<&'a str>>> for CrontabParseError {
 ///
 /// - `ts` - ISO8601 timestamp representing when this job was due to execute
 /// - `backfilled` - true if the task was "backfilled" (i.e. it wasn't scheduled on time), false otherwise
-pub fn parse_crontab(crontab: &str) -> Result<Vec<Crontab>, CrontabParseError> {
+pub fn parse_crontab(crontab: &str) -> Result<Vec<Crontab>> {
     let (_, result) = nom_crontab(crontab).finish().map_err(|error| {
         let prefix = &crontab[..crontab.len() - error.input.len()];
         let line = prefix.bytes().filter(|byte| *byte == b'\n').count() + 1;

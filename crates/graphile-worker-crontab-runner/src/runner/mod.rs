@@ -12,7 +12,7 @@ use tracing::{debug, error, warn};
 use crate::backfill::register_and_backfill_items;
 use crate::clock::{Clock, SystemClock};
 use crate::sql::ScheduleCronJobError;
-use crate::utils::{round_date_minute, ONE_MINUTE};
+use crate::utils::{round_date_minute, yield_now, ONE_MINUTE};
 
 use self::schedule::emit_tick_and_schedule_jobs;
 
@@ -121,6 +121,7 @@ impl<'a, E: DbExecutorArg, C: Clock> CronRunner<'a, E, C> {
         let mut ts = round_date_minute(start, true);
 
         loop {
+            yield_now().await;
             self.clock.sleep_until(ts).await;
 
             let current_ts = round_date_minute(self.clock.now(), false);

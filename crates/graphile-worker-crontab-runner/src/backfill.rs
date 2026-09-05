@@ -8,7 +8,7 @@ use crate::{
         get_known_crontabs, insert_unknown_crontabs, schedule_cron_jobs, CrontabJob, KnownCrontab,
         ScheduleCronJobError,
     },
-    utils::{round_date_minute, ONE_MINUTE},
+    utils::{round_date_minute, yield_now, ONE_MINUTE},
 };
 
 pub(crate) struct BackfillItemAndDate<'a, 'b> {
@@ -88,6 +88,7 @@ where
         );
 
         while &ts < start_time {
+            yield_now().await;
             let time_ago = (start_time.to_owned() - ts.to_owned()).num_seconds();
 
             let to_backfill: Vec<CrontabJob> = backfill_items_and_date
