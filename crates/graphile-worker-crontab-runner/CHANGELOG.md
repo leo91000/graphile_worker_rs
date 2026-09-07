@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.7.11](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.7.10...graphile_worker_crontab_runner-v0.7.11) - 2026-09-07
+
+### Fixed
+
+- yield during cron catch-up and backfill
+- backport cron recovery and queue cleanup fixes
+
+### Other
+
+- express cron recovery completion invariants
+
 ## [0.7.10](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.7.9...graphile_worker_crontab_runner-v0.7.10) - 2026-07-19
 
 ### Fixed

@@ -1,6 +1,6 @@
 [package]
 name = "graphile_worker_lifecycle_hooks"
-version = "0.3.5"
+version = "0.3.6"
 edition = "2021"
 license = "MIT"
 description = "Lifecycle hooks for graphile_worker, a high performance Rust/PostgreSQL job queue"
