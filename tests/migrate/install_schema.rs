@@ -23,7 +23,7 @@ async fn migration_install_schema_and_second_migration_does_not_harm() {
 
         let migrations = test_db.get_migrations().await;
 
-        assert_eq!(migrations.len(), 20);
+        assert_eq!(migrations.len(), 21);
         let m0 = &migrations[0];
         assert_eq!(m0.id, 1);
 
@@ -75,9 +75,9 @@ async fn concurrent_migrations_on_fresh_database_succeed() {
         result_4.expect("fourth concurrent migration should succeed");
 
         let migrations = test_db.get_migrations().await;
-        assert_eq!(migrations.len(), 20);
+        assert_eq!(migrations.len(), 21);
         assert_eq!(migrations.first().map(|migration| migration.id), Some(1));
-        assert_eq!(migrations.last().map(|migration| migration.id), Some(20));
+        assert_eq!(migrations.last().map(|migration| migration.id), Some(21));
     })
     .await;
 }

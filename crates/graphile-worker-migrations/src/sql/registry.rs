@@ -9,7 +9,7 @@ mod tests {
 
     #[test]
     fn generated_migrations_are_ordered() {
-        assert_eq!(GRAPHILE_WORKER_MIGRATIONS.len(), 20);
+        assert_eq!(GRAPHILE_WORKER_MIGRATIONS.len(), 21);
         for (index, migration) in GRAPHILE_WORKER_MIGRATIONS.iter().enumerate() {
             assert_eq!(migration.migration_number(), index as u32 + 1);
             assert!(!migration.stmts.is_empty());

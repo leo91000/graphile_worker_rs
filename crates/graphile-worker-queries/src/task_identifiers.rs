@@ -30,7 +30,7 @@ pub async fn get_tasks_details(
     let schema = schema.into();
     let tasks = schema.private_table("tasks");
     let insert_tasks_query = format!(
-        "insert into {tasks} as tasks (identifier) select unnest($1::text[]) on conflict do nothing"
+        "insert into {tasks} as tasks (identifier) select distinct i from unnest($1::text[]) as u(i) where not exists (select 1 from {tasks} as existing where existing.identifier = u.i) on conflict do nothing"
     );
     executor
         .execute(

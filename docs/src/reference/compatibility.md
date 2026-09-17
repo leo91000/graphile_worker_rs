@@ -175,3 +175,21 @@ Related pages:
 - [Workers](../concepts/workers.md)
 - [Migrations](../operations/migrations.md)
 - [Job management](../guides/job-management.md)
+
+## Revision 21 and Node 0.18
+
+Rust and Node migration numbers are not interchangeable checkpoints. Rust
+revision 19 contains keyed-job concurrency safeguards, and Rust revision 20
+adds worker recovery. Node revision 19 is a pool-locking compatibility marker;
+Node revision 20 avoids consuming existing task and queue identities.
+
+Rust revision 21 installs that identity fix while retaining Rust's advisory key
+locks and missing-result error. It also creates recovery objects when upgrading
+from Node revision 20. Existing Rust recovery rows and applied migration ledger
+entries remain intact. Tests cover both revision-20 upgrade paths with locked
+jobs and repeat migration. The Node fixture uses its official revision-20 SQL
+on the compatible revision-18 schema; this is not a full mixed-worker runtime test.
+
+Run the Rust migrator before enabling Rust recovery against a Node-created
+schema. Do not treat equal migration numbers as proof of identical migration
+history or rewrite existing ledger entries to make the numbers match.

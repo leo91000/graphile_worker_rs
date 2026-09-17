@@ -4,6 +4,7 @@ pub mod complete_job;
 pub(crate) mod duration;
 pub mod errors;
 pub mod fail_job;
+mod fetch_query_cache;
 pub mod get_job;
 mod job_query_helpers;
 pub mod recover_workers;

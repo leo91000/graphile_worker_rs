@@ -160,3 +160,9 @@ queue configuration for that worker.
 This preserves flag filtering semantics: jobs with forbidden flags are skipped
 by the worker, and eligible jobs are fetched directly from PostgreSQL with the
 forbidden flag filter applied.
+
+A batch claims at most one job from each named queue. Other jobs in that queue
+remain unclaimed until the selected job releases its queue lock, including when
+another worker fetches the next batch. Unnamed jobs can still run concurrently.
+Because candidates are limited before deduplication, a batch can contain fewer
+jobs than its configured size when many candidates share a queue.

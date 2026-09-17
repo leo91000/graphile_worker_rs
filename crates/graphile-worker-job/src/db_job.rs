@@ -47,6 +47,7 @@ pub struct DbJob {
     /// When the job is scheduled to run
     pub(crate) run_at: DateTime<Utc>,
     /// How many times this job has been attempted
+    /// Attempts started, including the current execution (1 on its first run).
     pub(crate) attempts: i16,
     /// Maximum number of retry attempts before considering the job permanently failed
     pub(crate) max_attempts: i16,

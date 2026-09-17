@@ -222,3 +222,15 @@ custom flag names while adding jobs; it passes them through to the database.
 
 For changing jobs after they have been scheduled, see
 [Job Management](./job-management.md).
+
+When replacing an unlocked keyed job, two JSON array payloads are concatenated:
+`[1, 2]` followed by `[3]` becomes `[1, 2, 3]`. If either payload is not an array,
+the incoming payload replaces the old one. `unsafe_dedupe` leaves the payload
+unchanged. `preserve_run_at` preserves the old time only before the first attempt;
+a retried job uses the incoming time.
+
+The job's `attempts` counts executions started, including the current execution.
+A handler sees `1` on its first run, while a newly scheduled, unclaimed job has
+`0`. Repeated insertion or registration of an existing task or named queue does
+not normally consume another task/queue identity. Concurrent first insertions
+may still consume identities through PostgreSQL conflict handling; gaps are valid.

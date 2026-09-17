@@ -27,6 +27,7 @@ pub struct Job {
     #[builder(default = "Utc::now()")]
     pub(crate) run_at: DateTime<Utc>,
     #[builder(default)]
+    /// Attempts started, including the current execution (1 on its first run).
     pub(crate) attempts: i16,
     #[builder(default = "25")]
     pub(crate) max_attempts: i16,

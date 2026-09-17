@@ -215,3 +215,25 @@ PostgreSQL container:
 ```bash
 just test-docker-all-matrices
 ```
+
+## Proxies Without Persistent Prepared Statements
+
+SQLx uses persistent named statements by default. For a proxy that cannot
+preserve them, configure the database wrapper before using a fresh pool:
+
+```rust,ignore
+let database = graphile_worker::sqlx::SqlxDatabase::new(pool)
+    .with_prepared_statements(false);
+let worker = graphile_worker::WorkerOptions::default()
+    .database(database)
+    // Register task handlers here.
+    .init()
+    .await?;
+```
+
+This setting also applies to transactions opened through `Database::begin`.
+Raw SQLx pool/connection/transaction executors retain their normal SQLx behavior.
+SQLx may reuse statements already cached on an existing pool; use a fresh pool
+(and set its statement cache capacity to zero if other application code shares
+it). The tokio-postgres driver already issues unnamed statements. This controls
+server-side statements independently of the worker's SQL-text cache.

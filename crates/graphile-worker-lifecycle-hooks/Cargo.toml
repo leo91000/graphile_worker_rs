@@ -21,6 +21,7 @@ chrono.workspace = true
 serde_json.workspace = true
 sqlx = { workspace = true, optional = true }
 futures.workspace = true
+tracing.workspace = true
 
 [features]
 default = ["runtime-tokio", "driver-sqlx"]
