@@ -72,8 +72,8 @@ mod observer_recovery_tests {
         Arc,
     };
 
-    #[test]
-    fn panicking_observers_do_not_abort_emission_or_other_observers() {
+    #[tokio::test]
+    async fn panicking_observers_do_not_abort_emission_or_other_observers() {
         let count = Arc::new(AtomicUsize::new(0));
         let mut registry = HookRegistry::new();
         registry.on(JobComplete, |_| -> std::future::Ready<()> {
@@ -90,11 +90,13 @@ mod observer_recovery_tests {
             }
         });
         for _ in 0..2 {
-            futures::executor::block_on(registry.emit(JobCompleteContext {
-                job: Arc::new(graphile_worker_job::Job::builder().build()),
-                worker_id: "worker".into(),
-                duration: std::time::Duration::ZERO,
-            }));
+            registry
+                .emit(JobCompleteContext {
+                    job: Arc::new(graphile_worker_job::Job::builder().build()),
+                    worker_id: "worker".into(),
+                    duration: std::time::Duration::ZERO,
+                })
+                .await;
         }
         assert_eq!(count.load(Ordering::SeqCst), 2);
     }

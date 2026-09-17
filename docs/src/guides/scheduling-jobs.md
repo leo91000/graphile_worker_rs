@@ -145,7 +145,7 @@ The supported modes are:
 | Mode | Behavior visible from the scheduler |
 | --- | --- |
 | `JobKeyMode::Replace` | Replaces the existing keyed job data. This is the default mode when a key is used. |
-| `JobKeyMode::PreserveRunAt` | Updates the keyed job but keeps its existing `run_at`. |
+| `JobKeyMode::PreserveRunAt` | Updates the keyed job and keeps its existing `run_at` only before the first attempt; retried jobs use the incoming time. |
 | `JobKeyMode::UnsafeDedupe` | Deduplicates without replacing the existing `run_at`; supported for single-job scheduling only. |
 
 When a keyed job is updated, the stored job is reused and its revision is

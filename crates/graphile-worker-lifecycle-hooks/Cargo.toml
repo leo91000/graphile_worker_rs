@@ -36,3 +36,6 @@ runtime-async-std = [
   "graphile_worker_job/runtime-async-std",
 ]
 driver-sqlx = ["graphile_worker_database/driver-sqlx", "sqlx"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

@@ -168,3 +168,5 @@ Database benchmark: manual `tests/fetch_benchmark.rs`, 1,000 fetch/return cycles
 Additional isolated upgrade check: installed **all 20 official upstream SQL migrations** at the pinned SHA, then ran the Rust CLI migrator twice on PostgreSQL **18.6 and 12.22**. Locked jobs, queue locks and migration rows 1–20 remained byte-for-byte unchanged; revision 21, recovery heartbeat and locked-key replacement worked. PostgreSQL 12 validates the documented database minimum for this migration, not the entire test suite.
 
 Full cross-language worker differential testing and local cross-OS testing were not performed. Neither the official-SQL upgrade checks nor the regression fixture prove every Node/Rust runtime interoperability scenario.
+
+PR review follow-up: the observer regression uses the repository-standard Tokio test runtime; the packaged migration range and PreserveRunAt mode table now match revision 21 and the SQL first-attempt condition.
