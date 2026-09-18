@@ -98,7 +98,7 @@ release as completed. Existing shutdown deadlines and assertions are retained.
 
 TTL and shutdown returns share a queue-owned pending-return buffer. Draining into
 this buffer happens before awaiting the database; cancellation or exhausted
-retries therefore retain the claims for a subsequent return. Only successful
+retries therefore retain the claims for a subsequent return. Only a successfully
 acknowledged return clears the buffer. Pending returns are separate from jobs that
 handlers can consume because a failed response may follow a committed return.
 Consumers waiting for the cache lock also recheck the terminal Released state.

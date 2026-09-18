@@ -197,7 +197,7 @@ cleanup paths also assumed `pg_terminate_backend` completed synchronously.
 Three fault-injection regressions failed on the earlier source: exhausted TTL
 retries, cancellation during a TTL return, and cancellation during release each
 lost the claim. Returns now move claims into a queue-owned pending-return buffer
-and clear it only after a acknowledged database return. This buffer is
+and clear it only after an acknowledged database return. This buffer is
 separate from consumable jobs: an uncertain database response must not expose a
 possibly returned claim to a handler. TTL cancellation and subsequent shutdown
 therefore preserve the claims. Further controlled tests cover a consumer waiting
