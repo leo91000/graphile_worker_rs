@@ -1,3 +1,5 @@
+use std::sync::atomic::Ordering;
+
 use graphile_worker_lifecycle_hooks::{LocalQueueMode, LocalQueueSetModeContext};
 use tracing::trace;
 
@@ -8,7 +10,12 @@ impl LocalQueue {
     pub(in crate::local_queue) async fn set_mode(&self, new_mode: LocalQueueMode) {
         let mut mode = self.0.mode.write().await;
         let old_mode = *mode;
-        if old_mode == new_mode || old_mode == LocalQueueMode::Released {
+        if old_mode == new_mode
+            || old_mode == LocalQueueMode::Released
+            || (old_mode == LocalQueueMode::TtlExpired
+                && new_mode == LocalQueueMode::Polling
+                && !self.0.ttl_return_complete.load(Ordering::Acquire))
+        {
             return;
         }
         trace!(?old_mode, ?new_mode, "LocalQueue mode transition");

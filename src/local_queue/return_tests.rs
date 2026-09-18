@@ -17,6 +17,8 @@ struct ReturnDriver {
     fail: AtomicBool,
     block: AtomicBool,
     calls: AtomicUsize,
+    fetch_calls: AtomicUsize,
+    allow_fetch: AtomicBool,
 }
 
 #[derive(Debug)]
@@ -48,7 +50,14 @@ impl DbExecutor for TestDriver {
         _sql: &'a str,
         _params: DbParams,
     ) -> BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
-        Box::pin(async { panic!("unexpected fetch") })
+        Box::pin(async move {
+            assert!(
+                self.0.allow_fetch.load(Ordering::SeqCst),
+                "unexpected fetch"
+            );
+            self.0.fetch_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(Vec::new())
+        })
     }
 }
 
@@ -72,14 +81,18 @@ impl DatabaseDriver for TestDriver {
     }
 }
 
-/// Seeds a claimed job without starting unrelated fetch or timer tasks.
-async fn queue_with_claim(driver: Arc<ReturnDriver>) -> LocalQueue {
+/// Supplies inert queue configuration for fault-injection scenarios.
+fn queue_params(driver: Arc<ReturnDriver>) -> LocalQueueParams {
+    static NEXT_WORKER: AtomicUsize = AtomicUsize::new(0);
     let (job_signal_sender, _rx) = runtime::channel(1);
-    let queue: LocalQueue = LocalQueueParams {
+    LocalQueueParams {
         config: LocalQueueConfig::default(),
         database: Database::new(TestDriver(driver)),
         schema: "graphile_worker".into(),
-        worker_id: "return-test".into(),
+        worker_id: format!(
+            "return-test-{}",
+            NEXT_WORKER.fetch_add(1, Ordering::Relaxed)
+        ),
         task_details: Default::default(),
         poll_interval: Duration::from_secs(1),
         continuous: true,
@@ -88,9 +101,12 @@ async fn queue_with_claim(driver: Arc<ReturnDriver>) -> LocalQueue {
         job_signal_sender,
         use_local_time: false,
     }
-    .into();
+}
+
+/// Seeds a claimed job without starting unrelated fetch or timer tasks.
+async fn queue_with_claim(driver: Arc<ReturnDriver>) -> LocalQueue {
+    let queue: LocalQueue = queue_params(driver).into();
     *queue.0.mode.write().await = LocalQueueMode::Waiting;
-    queue.0.run_complete.store(true, Ordering::Release);
     queue
         .0
         .job_queue
@@ -108,16 +124,17 @@ async fn ttl_failure_retains_claims_for_release() {
     let queue = queue_with_claim(driver.clone()).await;
     queue.set_mode_ttl_expired().await;
     assert_eq!(driver.calls.load(Ordering::SeqCst), 20);
-    assert_eq!(queue.0.pending_returns.lock().await.len(), 1);
+    assert_eq!(queue.0.pending_returns.lock().await.jobs.len(), 1);
     assert!(
         queue.get_job(&[]).await.is_none(),
         "uncertain returns must not reach handlers"
     );
+    assert_eq!(*queue.0.mode.read().await, LocalQueueMode::TtlExpired);
     driver.fail.store(false, Ordering::SeqCst);
     queue.release().await.unwrap();
     assert_eq!(driver.calls.load(Ordering::SeqCst), 21);
     assert!(queue.0.job_queue.lock().await.is_empty());
-    assert!(queue.0.pending_returns.lock().await.is_empty());
+    assert!(queue.0.pending_returns.lock().await.jobs.is_empty());
 }
 
 /// Cancelling a TTL return must leave its claims available to awaited shutdown.
@@ -131,12 +148,12 @@ async fn cancelled_ttl_return_retains_claims() {
         futures::pin_mut!(ttl);
         assert!(futures::poll!(ttl.as_mut()).is_pending());
     }
-    assert_eq!(queue.0.pending_returns.lock().await.len(), 1);
+    assert_eq!(queue.0.pending_returns.lock().await.jobs.len(), 1);
     driver.block.store(false, Ordering::SeqCst);
     queue.release().await.unwrap();
     assert_eq!(driver.calls.load(Ordering::SeqCst), 2);
     assert!(queue.0.job_queue.lock().await.is_empty());
-    assert!(queue.0.pending_returns.lock().await.is_empty());
+    assert!(queue.0.pending_returns.lock().await.jobs.is_empty());
 }
 
 /// Cancelling a release caller must permit the next caller to finish its return.
@@ -150,12 +167,12 @@ async fn cancelled_release_retains_claims() {
         futures::pin_mut!(release);
         assert!(futures::poll!(release.as_mut()).is_pending());
     }
-    assert_eq!(queue.0.pending_returns.lock().await.len(), 1);
+    assert_eq!(queue.0.pending_returns.lock().await.jobs.len(), 1);
     driver.block.store(false, Ordering::SeqCst);
     queue.release().await.unwrap();
     assert_eq!(driver.calls.load(Ordering::SeqCst), 2);
     assert!(queue.0.job_queue.lock().await.is_empty());
-    assert!(queue.0.pending_returns.lock().await.is_empty());
+    assert!(queue.0.pending_returns.lock().await.jobs.is_empty());
 }
 
 /// A consumer waiting behind a return must recheck the terminal shutdown mode.
@@ -211,5 +228,93 @@ async fn release_returns_ttl_backlog_and_in_flight_fetch() {
     fetch.await.unwrap();
     assert_eq!(driver.calls.load(Ordering::SeqCst), 2);
     assert!(queue.0.job_queue.lock().await.is_empty());
-    assert!(queue.0.pending_returns.lock().await.is_empty());
+    assert!(queue.0.pending_returns.lock().await.jobs.is_empty());
+}
+
+/// The public conversion builds an unstarted queue whose release must finish.
+#[tokio::test]
+async fn unstarted_queue_release_does_not_wait_for_a_fetch_loop() {
+    let driver = Arc::new(ReturnDriver::default());
+    let queue: LocalQueue = queue_params(driver.clone()).into();
+    tokio::time::timeout(Duration::from_secs(1), queue.release())
+        .await
+        .expect("an unstarted queue has no fetch loop to await")
+        .unwrap();
+    assert_eq!(driver.calls.load(Ordering::SeqCst), 0);
+}
+
+/// An uncertain response blocks batch and direct reclaims across sibling queues.
+#[tokio::test(start_paused = true)]
+async fn uncertain_return_blocks_same_worker_reclaims_until_acknowledged() {
+    let driver = Arc::new(ReturnDriver::default());
+    driver.fail.store(true, Ordering::SeqCst);
+    driver.allow_fetch.store(true, Ordering::SeqCst);
+    let queue = queue_with_claim(driver.clone()).await;
+    let mut sibling_params = queue_params(driver.clone());
+    sibling_params.worker_id = queue.0.worker_id.clone();
+    let sibling: LocalQueue = sibling_params.into();
+    *sibling.0.mode.write().await = LocalQueueMode::Polling;
+    let independent: LocalQueue = queue_params(driver.clone()).into();
+    {
+        let mut ttl = Box::pin(queue.set_mode_ttl_expired());
+        assert!(futures::poll!(ttl.as_mut()).is_pending());
+        assert_eq!(driver.calls.load(Ordering::SeqCst), 1);
+        // A transport error is indistinguishable from a committed return whose
+        // response was lost. Neither sibling fetch path may reclaim that job.
+        sibling.fetch().await;
+        assert!(sibling.get_job(&["flag".into()]).await.is_none());
+        assert_eq!(driver.fetch_calls.load(Ordering::SeqCst), 0);
+        assert!(queue.get_job(&[]).await.is_none());
+        assert_eq!(*queue.0.mode.read().await, LocalQueueMode::TtlExpired);
+        assert!(independent.get_job(&["flag".into()]).await.is_none());
+        assert_eq!(driver.fetch_calls.load(Ordering::SeqCst), 1);
+    }
+    // Cancelling the caller does not reopen the gate while claims remain pending.
+    sibling.fetch().await;
+    assert_eq!(driver.fetch_calls.load(Ordering::SeqCst), 1);
+    driver.fail.store(false, Ordering::SeqCst);
+    queue.release().await.unwrap();
+    sibling.fetch().await;
+    assert_eq!(driver.fetch_calls.load(Ordering::SeqCst), 2);
+    assert_eq!(driver.calls.load(Ordering::SeqCst), 2);
+}
+
+/// Multiple uncertain returns do not prevent sequential shutdown from draining them.
+#[tokio::test]
+async fn sibling_pending_returns_can_finish_in_either_order() {
+    let driver = Arc::new(ReturnDriver::default());
+    driver.block.store(true, Ordering::SeqCst);
+    let first = queue_with_claim(driver.clone()).await;
+    let mut params = queue_params(driver.clone());
+    params.worker_id = first.0.worker_id.clone();
+    let second: LocalQueue = params.into();
+    *second.0.mode.write().await = LocalQueueMode::Waiting;
+    second
+        .0
+        .job_queue
+        .lock()
+        .await
+        .push_back(Job::builder().id(2).build());
+    for queue in [&second, &first] {
+        let mut ttl = Box::pin(queue.set_mode_ttl_expired());
+        assert!(futures::poll!(ttl.as_mut()).is_pending());
+    }
+    driver.block.store(false, Ordering::SeqCst);
+    first.release().await.unwrap();
+    assert!(first.0.claims.try_fetch().is_none());
+    second.release().await.unwrap();
+    assert!(first.0.claims.try_fetch().is_some());
+    assert_eq!(driver.calls.load(Ordering::SeqCst), 4);
+}
+
+/// A successful TTL return permits demand to resume polling after acknowledgement.
+#[tokio::test]
+async fn acknowledged_ttl_return_allows_polling() {
+    let driver = Arc::new(ReturnDriver::default());
+    let queue = queue_with_claim(driver.clone()).await;
+    queue.set_mode_ttl_expired().await;
+    assert!(queue.get_job(&[]).await.is_none());
+    assert_eq!(*queue.0.mode.read().await, LocalQueueMode::Polling);
+    assert!(queue.0.claims.try_fetch().is_some());
+    assert_eq!(driver.calls.load(Ordering::SeqCst), 1);
 }

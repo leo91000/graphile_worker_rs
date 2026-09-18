@@ -51,35 +51,45 @@ impl LocalQueue {
         if *mode != LocalQueueMode::Waiting {
             return;
         }
+        self.0.ttl_return_complete.store(false, Ordering::Release);
         *mode = LocalQueueMode::TtlExpired;
         drop(mode);
 
         debug!("LocalQueue TTL expired, returning jobs to database");
 
-        if let Err(error) = self.return_cached_jobs().await {
-            error!(error = %error, "Failed to return jobs after TTL expiry (exhausted retries)");
+        match self.return_cached_jobs().await {
+            Ok(()) => self.0.ttl_return_complete.store(true, Ordering::Release),
+            Err(error) => {
+                error!(error = %error, "Failed to return jobs after TTL expiry (exhausted retries)");
+            }
         }
     }
 
     /// Retains claims until their return succeeds, including if this future is cancelled.
     async fn return_cached_jobs(&self) -> Result<(), LocalQueueError> {
         // Claims whose return may have committed must not reach a handler.
-        // Keep them separately from the consumable cache until an idempotent
-        // return succeeds. Cancellation retains this queue-owned backlog.
+        // Keep them separately from the consumable cache. Their shared permit
+        // prevents same-worker reclaims until the return succeeds, even if
+        // a committed response was lost. Cancellation retains both.
         let mut pending = self.0.pending_returns.lock().await;
-        pending.extend(self.0.job_queue.lock().await.drain(..));
-        if pending.is_empty() {
+        if pending.permit.is_none() {
+            pending.permit = Some(self.0.claims.begin_return().await);
+        }
+        pending.jobs.extend(self.0.job_queue.lock().await.drain(..));
+        if pending.jobs.is_empty() {
+            pending.permit = None;
             return Ok(());
         }
         Self::return_jobs_with_retry(
             &self.0.database,
-            &pending,
+            &pending.jobs,
             &self.0.schema,
             &self.0.worker_id,
         )
         .await?;
-        let jobs_count = pending.len();
-        pending.clear();
+        let jobs_count = pending.jobs.len();
+        pending.jobs.clear();
+        pending.permit = None;
         drop(pending);
         self.0
             .hooks

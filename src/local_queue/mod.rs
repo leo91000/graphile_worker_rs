@@ -13,6 +13,7 @@ use tracing::warn;
 use graphile_worker_queries::task_identifiers::SharedTaskDetails;
 
 mod cache;
+mod claims;
 mod config;
 mod fetch;
 mod jobs;
@@ -82,6 +83,7 @@ impl LocalQueue {
 
         let shutdown_signal = params.shutdown_signal.clone();
         let queue: LocalQueue = params.into();
+        queue.0.run_complete.store(false, Ordering::Release);
 
         let queue_clone = queue.clone();
         let run_task = runtime::spawn(async move {

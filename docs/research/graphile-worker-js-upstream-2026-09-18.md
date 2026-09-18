@@ -197,7 +197,7 @@ cleanup paths also assumed `pg_terminate_backend` completed synchronously.
 Three fault-injection regressions failed on the earlier source: exhausted TTL
 retries, cancellation during a TTL return, and cancellation during release each
 lost the claim. Returns now move claims into a queue-owned pending-return buffer
-and clear it only after a successful idempotent database return. This buffer is
+and clear it only after a acknowledged database return. This buffer is
 separate from consumable jobs: an uncertain database response must not expose a
 possibly returned claim to a handler. TTL cancellation and subsequent shutdown
 therefore preserve the claims. Further controlled tests cover a consumer waiting
@@ -210,3 +210,30 @@ only the UUID fixture's sessions. They now poll `pg_stat_activity` with a ten-se
 bound before dropping that database. PostgreSQL 13+ retains its FORCE path. No
 assertions or database compatibility checks were removed. This follow-up receives
 fresh local validation, exact-head CI and another review before merging.
+
+
+A further release-contract check reproduced a hang through the existing public
+`LocalQueueParams -> LocalQueue` conversion: that conversion does not start a
+fetch loop, so waiting for its completion never finished. Unstarted state now
+starts with run completion true; `LocalQueue::new` sets it false synchronously
+before spawning the loop. A one-second bounded regression failed before this
+correction. The existing in-flight-fetch and concurrent-release tests continue
+to require started queues to await their real loop completion.
+
+## Second return review follow-up
+
+The review of `060d711` requested changes for two valid races. The cache now
+holds its mode read lock through the pop. A failed TTL return previously allowed
+`get_job` to change TtlExpired back to Polling; the strengthened regression failed
+on the old source (Polling versus expected TtlExpired). Polling now resumes only
+after acknowledgement. Since sibling local queues share a worker ID, all their
+batch and direct database fetches also share a claim boundary. A counted return
+permit is retained with the pending claims across failures and cancellation,
+preventing a lost-response retry from unlocking a newer same-worker claim.
+Returns do not exclude each other, preserving sequential shutdown progress.
+Fault-injection regressions cover blocked sibling batch/direct fetches, another
+worker continuing to fetch, cancellation, acknowledgement reopening the gate,
+and multiple pending returns completed in the opposite order. The public
+unstarted-constructor shutdown regression is included in the same update.
+Validation results and exact delivery heads are recorded in the durable run
+checkpoint and final report. No applied migration is changed by this follow-up.

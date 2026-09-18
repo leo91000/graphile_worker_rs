@@ -99,8 +99,30 @@ release as completed. Existing shutdown deadlines and assertions are retained.
 TTL and shutdown returns share a queue-owned pending-return buffer. Draining into
 this buffer happens before awaiting the database; cancellation or exhausted
 retries therefore retain the claims for a subsequent return. Only successful
-idempotent return clears the buffer. Pending returns are separate from jobs that
+acknowledged return clears the buffer. Pending returns are separate from jobs that
 handlers can consume because a failed response may follow a committed return.
 Consumers waiting for the cache lock also recheck the terminal Released state.
 Fault-injection tests cover exhausted retries with virtual time, both cancellation
 paths, waiting consumers and an interrupted TTL return with an in-flight fetch.
+
+
+The public conversion from LocalQueueParams creates unstarted state. Its run is
+therefore initially complete, and the spawning constructor marks it active before
+starting the background loop. This preserves release for both public construction
+paths without allowing a started queue to skip awaiting its fetch loop.
+
+Local Queue retries exclude new claims across all in-process queues with the
+same worker ID. A shared read/write boundary lets fetch SQL run concurrently,
+but return operations first await existing fetches and retain a counted permit
+with their pending claims. The permit survives cancellation and exhausted
+retries, and is removed only after acknowledgement. Returns can run concurrently
+so sequential shutdown cannot deadlock behind another queue's pending return.
+This avoids treating owner-and-ID SQL predicates as a unique claim identity;
+`locked_at` is also unsuitable because explicit clocks and transaction time can
+repeat. No migration or public job representation changes are needed. Worker
+IDs remain unique across processes; independent low-level query clients must
+not fetch under an active Local Queue's worker ID.
+
+The cache holds its mode read guard through removing a job, giving shutdown's
+Released transition a single ordering boundary. TTL expiry remains non-polling
+until the return is acknowledged, including after failure or cancellation.
