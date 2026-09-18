@@ -49,7 +49,10 @@ impl LocalQueue {
         }
     }
 
-    async fn fetch(&self) {
+    pub(super) async fn fetch(&self) {
+        let Some(claim_guard) = self.0.claims.try_fetch() else {
+            return;
+        };
         if !self.try_start_fetch() {
             return;
         }
@@ -77,6 +80,7 @@ impl LocalQueue {
         )
         .await;
         drop(task_details);
+        drop(claim_guard);
 
         self.end_fetch();
         self.0.state_notify.notify_one();

@@ -203,3 +203,7 @@ internals.
   a bottleneck.
 - Raise `queue_count` only after measuring; it increases parallel fetch capacity
   and the number of jobs a worker can hold locally.
+
+Avoid assigning a random queue name to every job. Queue rows add lookup and
+locking overhead, and high cardinality can reduce fetch throughput. Leave
+`queue_name` unset for jobs that do not need serialization.

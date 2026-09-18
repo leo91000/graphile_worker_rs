@@ -71,6 +71,7 @@ fn admin_help_documents_embedded_ui_options() {
     assert!(stdout.contains("GRAPHILE_WORKER_ADMIN_PASSWORD"));
 }
 
+/// Exercises CLI job administration and cleans its isolated database across PostgreSQL versions.
 #[tokio::test]
 async fn cli_manages_job_lifecycle_with_database_url_flag() {
     let Ok(source_url) = std::env::var("DATABASE_URL") else {
@@ -528,8 +529,47 @@ async fn cli_manages_job_lifecycle_with_database_url_flag() {
     let source_pool = PgPool::connect(&source_url)
         .await
         .expect("failed to reconnect to source database");
+    let version: i32 = sqlx::query_scalar("select current_setting('server_version_num')::int")
+        .fetch_one(&source_pool)
+        .await
+        .expect("failed to read test server version");
+    let force = if version >= 130_000 {
+        " WITH (FORCE)"
+    } else {
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "ALTER DATABASE {database_name} ALLOW_CONNECTIONS false"
+        )))
+        .execute(&source_pool)
+        .await
+        .expect("failed to disable test database connections");
+        sqlx::query("select pg_terminate_backend(pid) from pg_stat_activity where datname = $1")
+            .bind(&database_name)
+            .execute(&source_pool)
+            .await
+            .expect("failed to terminate test database connections");
+        // Termination is asynchronous on PostgreSQL 12. ALLOW_CONNECTIONS
+        // is already false, so wait until this fixture has no remaining sessions.
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let connected: bool = sqlx::query_scalar(
+                    "select exists(select 1 from pg_stat_activity where datname = $1)",
+                )
+                .bind(&database_name)
+                .fetch_one(&source_pool)
+                .await
+                .expect("Failed to inspect test database connections");
+                if !connected {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("Timed out waiting for test database sessions to terminate");
+        ""
+    };
     sqlx::query(sqlx::AssertSqlSafe(format!(
-        "DROP DATABASE {database_name} WITH (FORCE)"
+        "DROP DATABASE {database_name}{force}"
     )))
     .execute(&source_pool)
     .await

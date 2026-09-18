@@ -90,3 +90,52 @@ async fn tokio_postgres_listener_reconnects_after_connection_loss() {
     notify(&database, &channel, "after-reconnect").await;
     expect_notification(&mut stream, &channel, "after-reconnect").await;
 }
+
+/// Verifies the opt-out against server prepared statements in both query paths.
+#[cfg(feature = "driver-sqlx")]
+#[tokio::test]
+async fn sqlx_can_disable_persistent_statements_including_transactions() {
+    use ::sqlx::Row;
+    for enabled in [true, false] {
+        let pool = ::sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .connect(&database_url())
+            .await
+            .unwrap();
+        let database =
+            Database::from(SqlxDatabase::new(pool.clone()).with_prepared_statements(enabled));
+        let sql = "select $1::int as upstream_prepared_statement_test";
+        database
+            .execute(sql, vec![DbValue::I32(1)].into())
+            .await
+            .unwrap();
+        let row = database
+            .fetch_one(sql, vec![DbValue::I32(2)].into())
+            .await
+            .unwrap();
+        assert_eq!(
+            row.try_get::<i32>("upstream_prepared_statement_test")
+                .unwrap(),
+            2
+        );
+        let tx = database.begin().await.unwrap();
+        let tx_sql = "select $1::int as upstream_transaction_statement_test";
+        tx.execute(tx_sql, vec![DbValue::I32(3)].into())
+            .await
+            .unwrap();
+        let row = tx
+            .fetch_one(tx_sql, vec![DbValue::I32(4)].into())
+            .await
+            .unwrap();
+        assert_eq!(
+            row.try_get::<i32>("upstream_transaction_statement_test")
+                .unwrap(),
+            4
+        );
+        tx.commit().await.unwrap();
+        let rows = ::sqlx::raw_sql("select count(*)::int as count from pg_prepared_statements where statement like 'select $1::int as upstream_%_test'")
+            .fetch_all(&pool).await.unwrap();
+        assert_eq!(rows[0].get::<i32, _>("count"), if enabled { 2 } else { 0 });
+        pool.close().await;
+    }
+}

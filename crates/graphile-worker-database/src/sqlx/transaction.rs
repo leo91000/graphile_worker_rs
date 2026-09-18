@@ -6,13 +6,16 @@ use super::rows::sqlx_row_to_db_row;
 use crate::{DbError, DbExecutor, DbParams, DbRow, TransactionDriver};
 
 pub(super) struct SqlxTransaction {
+    prepared_statements: bool,
     tx: Mutex<Option<sqlx::Transaction<'static, Postgres>>>,
 }
 
 impl SqlxTransaction {
-    pub(super) fn new(tx: sqlx::Transaction<'static, Postgres>) -> Self {
+    /// Carries the database wrapper's statement policy into a SQLx transaction.
+    pub(super) fn new(tx: sqlx::Transaction<'static, Postgres>, prepared_statements: bool) -> Self {
         Self {
             tx: Mutex::new(Some(tx)),
+            prepared_statements,
         }
     }
 }
@@ -30,6 +33,7 @@ impl DbExecutor for SqlxTransaction {
                 .ok_or_else(|| DbError::new("transaction has already been committed"))?;
 
             bind_params(sql, &params)
+                .persistent(self.prepared_statements)
                 .execute(tx.as_mut())
                 .await
                 .map(|result| result.rows_affected())
@@ -48,7 +52,10 @@ impl DbExecutor for SqlxTransaction {
                 .as_mut()
                 .ok_or_else(|| DbError::new("transaction has already been committed"))?;
 
-            let rows = bind_params(sql, &params).fetch_all(tx.as_mut()).await?;
+            let rows = bind_params(sql, &params)
+                .persistent(self.prepared_statements)
+                .fetch_all(tx.as_mut())
+                .await?;
             rows.into_iter().map(sqlx_row_to_db_row).collect()
         })
     }

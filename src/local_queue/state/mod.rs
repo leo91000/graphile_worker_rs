@@ -14,6 +14,7 @@ use graphile_worker_runtime as runtime;
 use crate::background_tasks::TaskSlot;
 use graphile_worker_queries::task_identifiers::SharedTaskDetails;
 
+use super::claims::{ClaimCoordinator, PendingReturns};
 use super::{LocalQueueConfig, LocalQueueParams, LocalQueueSignalSender};
 
 pub(super) struct RefetchDelayState {
@@ -39,6 +40,9 @@ impl Default for RefetchDelayState {
 pub(super) struct LocalQueueState {
     pub(super) mode: runtime::RwLock<LocalQueueMode>,
     pub(super) job_queue: runtime::Mutex<VecDeque<Job>>,
+    pub(super) pending_returns: runtime::Mutex<PendingReturns>,
+    pub(super) claims: Arc<ClaimCoordinator>,
+    pub(super) ttl_return_complete: AtomicBool,
     pub(super) job_signal_sender: LocalQueueSignalSender,
     pub(super) fetch_in_progress: AtomicBool,
     pub(super) fetch_again: AtomicBool,
@@ -49,6 +53,8 @@ pub(super) struct LocalQueueState {
     pub(super) refetch_delay_task: TaskSlot,
     pub(super) ttl_timer_task: TaskSlot,
     pub(super) run_complete_notify: runtime::Notify,
+    pub(super) run_complete: AtomicBool,
+    pub(super) release_complete: runtime::Mutex<bool>,
     pub(super) config: LocalQueueConfig,
     pub(super) database: Database,
     pub(super) schema: Schema,
@@ -61,10 +67,14 @@ pub(super) struct LocalQueueState {
 }
 
 impl LocalQueueState {
+    /// Initializes queue coordination without starting background tasks.
     pub(super) fn new(params: LocalQueueParams) -> Self {
         Self {
             mode: runtime::RwLock::new(LocalQueueMode::Starting),
             job_queue: runtime::Mutex::new(VecDeque::new()),
+            pending_returns: runtime::Mutex::new(PendingReturns::default()),
+            claims: ClaimCoordinator::for_worker(&params.worker_id),
+            ttl_return_complete: AtomicBool::new(false),
             job_signal_sender: params.job_signal_sender,
             fetch_in_progress: AtomicBool::new(false),
             fetch_again: AtomicBool::new(false),
@@ -75,6 +85,8 @@ impl LocalQueueState {
             refetch_delay_task: TaskSlot::empty("local_queue_refetch_delay"),
             ttl_timer_task: TaskSlot::empty("local_queue_ttl"),
             run_complete_notify: runtime::Notify::new(),
+            run_complete: AtomicBool::new(true),
+            release_complete: runtime::Mutex::new(false),
             config: params.config,
             database: params.database,
             schema: params.schema,

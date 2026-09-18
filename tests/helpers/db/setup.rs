@@ -7,9 +7,54 @@ use super::super::sql::safe_query;
 use super::types::TestDatabase;
 
 impl TestDatabase {
+    /// Removes only this UUID fixture, using cleanup supported by its PostgreSQL version.
     async fn drop(&self) {
         self.test_pool.close().await;
-        safe_query(format!("DROP DATABASE {} WITH (FORCE)", self.name))
+        let version: i32 = sqlx::query_scalar("select current_setting('server_version_num')::int")
+            .fetch_one(&self.source_pool)
+            .await
+            .expect("Failed to read test server version");
+        let force = if version >= 130_000 {
+            " WITH (FORCE)"
+        } else {
+            // PostgreSQL 12 lacks DROP DATABASE ... WITH (FORCE). Prevent new
+            // test-driver connections before terminating this fixture's sessions.
+            safe_query(format!(
+                "ALTER DATABASE {} ALLOW_CONNECTIONS false",
+                self.name
+            ))
+            .execute(&self.source_pool)
+            .await
+            .expect("Failed to disable test database connections");
+            sqlx::query(
+                "select pg_terminate_backend(pid) from pg_stat_activity where datname = $1",
+            )
+            .bind(&self.name)
+            .execute(&self.source_pool)
+            .await
+            .expect("Failed to terminate test database connections");
+            // Termination is asynchronous on PostgreSQL 12. ALLOW_CONNECTIONS
+            // is already false, so wait until this fixture has no remaining sessions.
+            tokio::time::timeout(std::time::Duration::from_secs(10), async {
+                loop {
+                    let connected: bool = sqlx::query_scalar(
+                        "select exists(select 1 from pg_stat_activity where datname = $1)",
+                    )
+                    .bind(&self.name)
+                    .fetch_one(&self.source_pool)
+                    .await
+                    .expect("Failed to inspect test database connections");
+                    if !connected {
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                }
+            })
+            .await
+            .expect("Timed out waiting for test database sessions to terminate");
+            ""
+        };
+        safe_query(format!("DROP DATABASE {}{force}", self.name))
             .execute(&self.source_pool)
             .await
             .expect("Failed to drop test database");
@@ -85,6 +130,7 @@ pub async fn create_test_database() -> TestDatabase {
     }
 }
 
+/// Runs a fixture on a local task set and cleans its database even after a test panic.
 pub async fn with_test_db<F, Fut>(test_fn: F)
 where
     F: FnOnce(TestDatabase) -> Fut + 'static,

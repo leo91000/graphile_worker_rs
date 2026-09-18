@@ -21,6 +21,7 @@ chrono.workspace = true
 serde_json.workspace = true
 sqlx = { workspace = true, optional = true }
 futures.workspace = true
+tracing.workspace = true
 
 [features]
 default = ["runtime-tokio", "driver-sqlx"]
@@ -35,3 +36,6 @@ runtime-async-std = [
   "graphile_worker_job/runtime-async-std",
 ]
 driver-sqlx = ["graphile_worker_database/driver-sqlx", "sqlx"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

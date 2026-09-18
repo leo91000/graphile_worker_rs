@@ -357,3 +357,9 @@ impl Plugin for MetricsAndValidationPlugin {
 
 See the repository examples in `examples/hooks.rs` and `examples/hooks/*.rs`
 for a runnable version with logging, metrics, validation, and sample jobs.
+
+Observer hooks run concurrently. A panic during construction or polling of an
+observer future is logged with the event name; other observers and worker
+cleanup continue. This applies to unwinding panics; `panic = "abort"` terminates
+the process. Interceptors retain their explicit control-flow semantics and are
+not treated as observers.

@@ -52,7 +52,7 @@ Migration SQL is bundled in the `graphile_worker_migrations` crate under
 `src/sql`. At runtime the crate loads those files into the
 `GRAPHILE_WORKER_MIGRATIONS` registry in revision order.
 
-The current package contains revisions `1` through `20`. The revisions marked as
+The current package contains revisions `1` through `22`. The revisions marked as
 breaking in the registry are:
 
 ```text
@@ -119,3 +119,17 @@ migrate(&database, "my_worker_schema").await?;
 Packaged migration SQL uses the `:GRAPHILE_WORKER_SCHEMA` placeholder
 internally. The migration executor replaces that placeholder with the escaped
 schema name before executing each SQL statement.
+
+## Separate Migration and Worker Roles
+
+A deployment can use a schema-owning migration role and a more restricted worker
+role. Apply migrations with the owner first, then start workers against the
+current revision. The worker needs `USAGE` on the selected schema, table access
+for queue operations, sequence access for inserts, and execution privileges on
+the schema's functions. The migration ledger must also be readable.
+
+Privileges must cover newly created objects after upgrades (including recovery
+tables when recovery is enabled); use appropriate default privileges for the
+role that creates those objects. A restricted worker cannot install a missing
+schema or apply a pending migration. Provision and validate the grants on an
+isolated database before rolling out this arrangement.

@@ -9,6 +9,7 @@ struct TaskRow {
     identifier: String,
 }
 
+/// Builds the task-ID lookup used to restrict claims to registered handlers.
 fn task_rows_to_details(tasks: Vec<TaskRow>) -> TaskDetails {
     let mut details = TaskDetails::new();
     for row in tasks {
@@ -17,6 +18,10 @@ fn task_rows_to_details(tasks: Vec<TaskRow>) -> TaskDetails {
     details
 }
 
+/// Registers missing task identifiers and returns their database IDs.
+///
+/// Already registered names are filtered before insertion so repeated worker
+/// initialization does not consume task identity values.
 #[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn get_tasks_details(
     mut executor: impl DbExecutorArg,
@@ -30,7 +35,7 @@ pub async fn get_tasks_details(
     let schema = schema.into();
     let tasks = schema.private_table("tasks");
     let insert_tasks_query = format!(
-        "insert into {tasks} as tasks (identifier) select unnest($1::text[]) on conflict do nothing"
+        "insert into {tasks} as tasks (identifier) select distinct i from unnest($1::text[]) as u(i) where not exists (select 1 from {tasks} as existing where existing.identifier = u.i) on conflict do nothing"
     );
     executor
         .execute(

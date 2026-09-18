@@ -13,6 +13,12 @@ concurrency:
   cancel-in-progress: true
 jobs:
   test:
+    name: test (PostgreSQL ${{ matrix.postgres }})
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        postgres: [14, 15, 16, 17, 18]
     timeout-minutes: 20
     runs-on: ubuntu-24.04-arm
     env:
@@ -20,7 +26,7 @@ jobs:
       DATABASE_URL: postgres://testuser:testpassword@localhost:5432/testdb
     services:
       postgres:
-        image: postgres:18
+        image: postgres:${{ matrix.postgres }}
         env:
           POSTGRES_USER: testuser
           POSTGRES_PASSWORD: testpassword

@@ -7,13 +7,29 @@ use crate::{Database, DatabaseDriver, DbError, DbTransaction, Notification, Noti
 #[derive(Clone, Debug)]
 pub struct SqlxDatabase {
     pub(super) pool: PgPool,
+    pub(super) prepared_statements: bool,
 }
 
 impl SqlxDatabase {
+    /// Wraps a SQLx pool with persistent named statements enabled by default.
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            prepared_statements: true,
+        }
     }
 
+    /// Controls persistent named statements for this database and its transactions.
+    ///
+    /// Enabled by default. Disable for proxies that cannot preserve prepared
+    /// statements across transactions. Configure this before using the pool;
+    /// existing statements cached by SQLx may otherwise still be reused.
+    pub fn with_prepared_statements(mut self, enabled: bool) -> Self {
+        self.prepared_statements = enabled;
+        self
+    }
+
+    /// Borrows the underlying pool for operations outside the database wrapper.
     pub fn pool(&self) -> &PgPool {
         &self.pool
     }
@@ -63,7 +79,10 @@ impl DatabaseDriver for SqlxDatabase {
     fn begin<'a>(&'a self) -> crate::BoxFuture<'a, Result<DbTransaction, DbError>> {
         Box::pin(async move {
             let tx = self.pool.begin().await?;
-            Ok(DbTransaction::new(Box::new(SqlxTransaction::new(tx))))
+            Ok(DbTransaction::new(Box::new(SqlxTransaction::new(
+                tx,
+                self.prepared_statements,
+            ))))
         })
     }
 

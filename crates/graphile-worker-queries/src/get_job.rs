@@ -10,6 +10,10 @@ use super::job_query_helpers::{
 };
 use super::task_identifiers::TaskDetails;
 
+/// Claims the next eligible job, incrementing its attempts and locking its queue.
+///
+/// Only registered tasks and jobs without forbidden flags are considered.
+/// An explicit `now` uses local time; otherwise PostgreSQL supplies the clock.
 pub async fn get_job(
     mut executor: impl DbExecutorArg,
     task_details: &TaskDetails,
@@ -32,16 +36,17 @@ pub async fn get_job(
     };
     let now_param = if has_now { Some(next_param) } else { None };
 
-    let flag_clause = flag_param
-        .map(|p| get_flag_clause(flags_to_skip, p))
-        .unwrap_or_default();
-    let jobs = schema.private_table("jobs");
-    let queue_clause = get_queue_clause(&schema);
-    let update_queue_clause = get_update_queue_clause(&schema, 1, now_param);
-    let now_clause = get_now_clause(now_param);
+    let sql = super::fetch_query_cache::fetch_query(&schema, has_flags, has_now, false, || {
+        let flag_clause = flag_param
+            .map(|p| get_flag_clause(flags_to_skip, p))
+            .unwrap_or_default();
+        let jobs = schema.private_table("jobs");
+        let queue_clause = get_queue_clause(&schema);
+        let update_queue_clause = get_update_queue_clause(&schema, 1, now_param);
+        let now_clause = get_now_clause(now_param);
 
-    let sql = formatdoc!(
-        r#"
+        formatdoc!(
+            r#"
             with j as (
                 select jobs.job_queue_id, jobs.priority, jobs.run_at, jobs.id
                     from {jobs} as jobs
@@ -64,7 +69,8 @@ pub async fn get_job(
                         where jobs.id = j.id
                         returning *
         "#
-    );
+        )
+    });
 
     let mut params = vec![
         DbValue::Text(worker_id.to_string()),

@@ -1,4 +1,5 @@
-use futures::future::BoxFuture;
+use futures::{future::BoxFuture, FutureExt};
+use std::panic::AssertUnwindSafe;
 
 use crate::context::{
     CronJobScheduledContext, CronTickContext, JobCompleteContext, JobFailContext, JobFetchContext,
@@ -20,6 +21,7 @@ macro_rules! define_observer_event {
             type Context = $context;
             type Output = ();
 
+            /// Registers an observer without giving it control over worker execution.
             fn register_boxed(
                 hooks: &mut TypeErasedHooks,
                 handler: Box<
@@ -31,10 +33,37 @@ macro_rules! define_observer_event {
         }
 
         impl Emittable for $context {
+            /// Runs observers concurrently and contains construction and polling panics.
+            ///
+            /// Aborting panics and application side effects cannot be undone here.
             fn emit_to(self, hooks: &TypeErasedHooks) -> BoxFuture<'_, ()> {
                 Box::pin(async move {
                     if let Some(handlers) = hooks.get_handlers::<$event>() {
-                        let futures: Vec<_> = handlers.iter().map(|h| h(self.clone())).collect();
+                        let futures: Vec<_> = handlers
+                            .iter()
+                            .map(|handler| {
+                                let ctx = self.clone();
+                                async move {
+                                    // Capture both handler construction and future polling panics.
+                                    if let Err(error) =
+                                        AssertUnwindSafe(async { handler(ctx).await })
+                                            .catch_unwind()
+                                            .await
+                                    {
+                                        let message = error
+                                            .downcast_ref::<String>()
+                                            .map(String::as_str)
+                                            .or_else(|| error.downcast_ref::<&str>().copied())
+                                            .unwrap_or("observer panicked");
+                                        tracing::error!(
+                                            event = stringify!($event),
+                                            message,
+                                            "Lifecycle observer panicked"
+                                        );
+                                    }
+                                }
+                            })
+                            .collect();
                         futures::future::join_all(futures).await;
                     }
                 })

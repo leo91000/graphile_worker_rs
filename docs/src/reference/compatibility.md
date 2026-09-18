@@ -175,3 +175,45 @@ Related pages:
 - [Workers](../concepts/workers.md)
 - [Migrations](../operations/migrations.md)
 - [Job management](../guides/job-management.md)
+
+## Revision 21 and Node 0.18
+
+Rust and Node migration numbers are not interchangeable checkpoints. Rust
+revision 19 contains keyed-job concurrency safeguards, and Rust revision 20
+adds worker recovery. Node revision 19 is a pool-locking compatibility marker;
+Node revision 20 avoids consuming existing task and queue identities.
+
+Rust revision 21 installs that identity fix while retaining Rust's advisory key
+locks and missing-result error. It also creates recovery objects when upgrading
+from Node revision 20. Existing Rust recovery rows and applied migration ledger
+entries remain intact. Tests cover both revision-20 upgrade paths with locked
+jobs and repeat migration. The Node fixture uses its official revision-20 SQL
+on the compatible revision-18 schema; this is not a full mixed-worker runtime test.
+
+Run the Rust migrator before enabling Rust recovery against a Node-created
+schema. Do not treat equal migration numbers as proof of identical migration
+history or rewrite existing ledger entries to make the numbers match.
+
+## Revision 22 and replaced jobs
+
+Rust revision 22 adds a private `_private_job_retirements` table to distinguish a replaced
+locked job from an ordinary job on its final attempt. Rust recovery returns both
+jobs' locks, but only restores an attempt for the ordinary job. The replacement
+retains its original job and queue locks until completion, failure or recovery,
+preserving named-queue serialization. Explicit `reschedule_jobs` calls clear the
+marker, allowing intentional administrative retries.
+
+Existing rows are not retroactively classified: replacement events before this
+revision cannot be inferred from the old schema without confusing legitimate
+final attempts. Migration history and existing jobs are preserved. This Rust
+recovery extension is not a claim that Node has identical recovery semantics.
+
+Node v0.18.0's `src/sql/returnJobs.ts` and older Rust return queries do not
+consult this marker. Deploy the updated Rust return paths to obtain this
+protection; sharing the new schema alone does not fix an older worker's local
+queue return behavior. The shared `recover_dead_worker_jobs` SQL function does
+honor the marker after migration 22.
+
+The marker also records `remove_job` on a locked job and eligible
+`permanently_fail_jobs` operations. Automatic recovery respects those decisions;
+explicit `reschedule_jobs` remains available to retry them deliberately.

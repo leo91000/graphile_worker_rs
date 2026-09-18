@@ -10,6 +10,11 @@ use super::job_query_helpers::{
 };
 use super::task_identifiers::TaskDetails;
 
+/// Claims eligible jobs and their named queues for one worker.
+///
+/// Candidates are locked before selecting at most one job per named queue;
+/// unnamed jobs remain independent. The candidate limit can therefore yield
+/// fewer than `batch_size` jobs. `now = None` uses PostgreSQL time.
 pub async fn batch_get_jobs(
     mut executor: impl DbExecutorArg,
     task_details: &TaskDetails,
@@ -33,17 +38,18 @@ pub async fn batch_get_jobs(
     };
     let now_param = if has_now { Some(next_param) } else { None };
 
-    let flag_clause = flag_param
-        .map(|p| get_flag_clause(flags_to_skip, p))
-        .unwrap_or_default();
-    let jobs = schema.private_table("jobs");
-    let queue_clause = get_queue_clause(&schema);
-    let update_queue_clause = get_update_queue_clause(&schema, 1, now_param);
-    let now_clause = get_now_clause(now_param);
+    let sql = super::fetch_query_cache::fetch_query(&schema, has_flags, has_now, true, || {
+        let flag_clause = flag_param
+            .map(|p| get_flag_clause(flags_to_skip, p))
+            .unwrap_or_default();
+        let jobs = schema.private_table("jobs");
+        let queue_clause = get_queue_clause(&schema);
+        let update_queue_clause = get_update_queue_clause(&schema, 1, now_param);
+        let now_clause = get_now_clause(now_param);
 
-    let sql = formatdoc!(
-        r#"
-            with j as (
+        formatdoc!(
+            r#"
+            with j_raw as (
                 select jobs.job_queue_id, jobs.priority, jobs.run_at, jobs.id
                     from {jobs} as jobs
                     where jobs.is_available = true
@@ -55,6 +61,12 @@ pub async fn batch_get_jobs(
                     limit $3::int
                     for update
                     skip locked
+                ), j as (
+                    select distinct on (job_queue_id, case when job_queue_id is null then id end)
+                        job_queue_id, priority, run_at, id
+                    from j_raw
+                    order by job_queue_id, case when job_queue_id is null then id end,
+                        priority asc, run_at asc, id asc
                 ) {update_queue_clause}
                     update {jobs} as jobs
                         set
@@ -65,7 +77,8 @@ pub async fn batch_get_jobs(
                         where jobs.id = j.id
                         returning *
         "#
-    );
+        )
+    });
 
     let mut params = vec![
         DbValue::Text(worker_id.to_string()),

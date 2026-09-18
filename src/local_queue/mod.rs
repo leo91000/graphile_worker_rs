@@ -1,3 +1,4 @@
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -12,6 +13,7 @@ use tracing::warn;
 use graphile_worker_queries::task_identifiers::SharedTaskDetails;
 
 mod cache;
+mod claims;
 mod config;
 mod fetch;
 mod jobs;
@@ -69,6 +71,10 @@ pub struct LocalQueueParams {
 }
 
 impl LocalQueue {
+    /// Starts a local fetch loop and, when supplied, its shutdown listener.
+    ///
+    /// The configuration must be valid for the polling interval. Call `release`
+    /// to await cleanup and return cached claims before discarding the queue.
     pub fn new(params: LocalQueueParams) -> Self {
         params
             .config
@@ -77,6 +83,7 @@ impl LocalQueue {
 
         let shutdown_signal = params.shutdown_signal.clone();
         let queue: LocalQueue = params.into();
+        queue.0.run_complete.store(false, Ordering::Release);
 
         let queue_clone = queue.clone();
         let run_task = runtime::spawn(async move {
@@ -98,6 +105,7 @@ impl LocalQueue {
         queue
     }
 
+    /// Runs fetching and records completion for every waiting release caller.
     async fn run(&self) {
         self.0
             .hooks
@@ -109,9 +117,13 @@ impl LocalQueue {
         self.set_mode(LocalQueueMode::Polling).await;
         self.schedule_fetch().await;
 
-        self.0.run_complete_notify.notify_one();
+        self.0.run_complete.store(true, Ordering::Release);
+        self.0.run_complete_notify.notify_waiters();
     }
 }
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(all(test, feature = "runtime-tokio"))]
+mod return_tests;

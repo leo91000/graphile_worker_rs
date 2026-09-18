@@ -148,6 +148,20 @@ Returning jobs is retried internally. Jobs that are already running are handled
 by the worker's normal shutdown behavior; the local queue release path is for
 jobs that were fetched into the local cache but not yet claimed by a handler.
 
+Claims being returned are kept separately from jobs available to handlers. If
+return retries fail or the return future is cancelled, a subsequent return or
+awaited release retries those pending claims. This avoids losing their IDs or
+running a job whose database return may already have committed. Until a return
+is acknowledged, every local queue in the process with that worker ID pauses
+new database claims, including direct fetches. This prevents a retry from
+unlocking a newer same-worker claim after a lost database response. Other
+workers can continue fetching. Failed TTL returns remain paused until an
+awaited release succeeds; do not discard a queue after a failed release.
+
+Worker IDs must remain unique across processes. Low-level query calls outside
+Local Queue do not participate in this in-process coordination and must not
+reuse an active local queue's worker ID for fetching.
+
 Choose `ttl` based on how much work you are comfortable locking inside one
 process if handlers are slower than the local batch drain rate.
 
@@ -160,3 +174,9 @@ queue configuration for that worker.
 This preserves flag filtering semantics: jobs with forbidden flags are skipped
 by the worker, and eligible jobs are fetched directly from PostgreSQL with the
 forbidden flag filter applied.
+
+A batch claims at most one job from each named queue. Other jobs in that queue
+remain unclaimed until the selected job releases its queue lock, including when
+another worker fetches the next batch. Unnamed jobs can still run concurrently.
+Because candidates are limited before deduplication, a batch can contain fewer
+jobs than its configured size when many candidates share a queue.
