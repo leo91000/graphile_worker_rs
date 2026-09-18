@@ -33,12 +33,13 @@ now configures both direct queries and transactions created by that wrapper.
 Defaults and raw SQLx executors remain unchanged; configure a fresh pool before
 use, since SQLx can reuse statements previously cached by other callers.
 
-A PostgreSQL 14/15/16/17/18 test matrix is prepared following upstream, but the
-existing OAuth connection cannot push workflow changes. The matrix patch is
-preserved separately; the library-port branch retains PostgreSQL 18 CI. Node
-version and Jest OS matrices do not transfer to Rust; existing Rust binary
-targets and driver coverage remain in place. See the audit ledger for the
-precise blocker and unblock condition.
+The Test workflow covers PostgreSQL 14, 15, 16, 17 and 18, matching the actual
+upstream matrix. Matrix execution is limited to two concurrent jobs and keeps
+fail-fast disabled, so every database version reports a result. Existing Rust
+test and documentation-test commands and driver coverage remain unchanged.
+Node version and Jest OS matrices do not transfer to Rust. PostgreSQL 12 remains
+the documented minimum; the audit separately exercised its migration and
+recovery regressions without raising that minimum.
 
 ## Replaced jobs and Rust recovery
 

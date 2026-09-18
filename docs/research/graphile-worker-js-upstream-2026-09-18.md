@@ -40,7 +40,7 @@ previously pending port; no unresolved entry is removed by advancing a date.
 | [#543](https://github.com/graphile/worker/pull/543), `bb03d1cd6bcabbab0e59c1db5c5c7651e46f2b5e` | Already in main: nested identifiers and strict parser tests preserve options, payload and following entries. |
 | [#463](https://github.com/graphile/worker/pull/463) | Older cleanup gap remains fixed in main: null queue references are excluded from NOT IN and locked queues are retained; `worker_utils_cleanup/job_queues.rs` covers both. |
 | [#502](https://github.com/graphile/worker/pull/502), `0ec5c7eb745635071ad8460466c5eb96d3fb2755` | Already in main: migration runner handles initialization clashes, preserves non-clash errors and tests concurrent migrators. |
-| [#625](https://github.com/graphile/worker/pull/625), `9dcec769c8e86ddfe8b05af4c5289e5a18382339` | Prepared Test workflow matrix for PostgreSQL 14, 15, 16, 17 and 18, matching actual upstream CI. Existing test/doc-test commands and coverage jobs are retained; matrix concurrency is capped at two and fail-fast is disabled. Delivery and validation are recorded below. Node 22/24/26 jobs do not apply to compiled Rust. |
+| [#625](https://github.com/graphile/worker/pull/625), `9dcec769c8e86ddfe8b05af4c5289e5a18382339` | Implemented Test workflow matrix for PostgreSQL 14, 15, 16, 17 and 18, matching actual upstream CI. Existing test/doc-test commands and coverage jobs are retained; matrix concurrency is capped at two and fail-fast is disabled. Delivery and validation are recorded below. Node 22/24/26 jobs do not apply to compiled Rust. |
 
 Open upstream [#633](https://github.com/graphile/worker/pull/633) (explicit
 migration entrypoints) and [#634](https://github.com/graphile/worker/pull/634)
@@ -127,3 +127,15 @@ controlled SQL reproduction. Required pre-commit gates remain `just lint` and
 `just test-docker`; exact results and final GitHub checks are recorded in the
 persistent run checkpoint and delivery report. Builds use two jobs and tests
 two threads to fit the container.
+
+The PostgreSQL matrix change supersedes the historical September 17 #625
+workflow-delivery deferral if delivered through an existing authorized GitHub
+connection. It covers 14–18, not just the newly added 16–18 versions. Exact
+delivery, review and CI status is retained in the persistent checkpoint.
+
+The recovery implementation at `9248664c17e446b5ec221339c80b9c66038e0ae8`
+passed `just lint`, `just test-docker` (437 passed, five ignored), mdBook,
+and all three OpenTelemetry feature checks. The tokio-postgres focused run
+passed 21 checks (11 migration, five retirement, five upstream scenarios).
+The matrix change receives the same required local gates before commit and
+all exact-head GitHub checks before merge.
