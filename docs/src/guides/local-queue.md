@@ -148,6 +148,11 @@ Returning jobs is retried internally. Jobs that are already running are handled
 by the worker's normal shutdown behavior; the local queue release path is for
 jobs that were fetched into the local cache but not yet claimed by a handler.
 
+Claims being returned are kept separately from jobs available to handlers. If
+return retries fail or the return future is cancelled, a subsequent return or
+awaited release retries those pending claims. This avoids losing their IDs or
+running a job whose database return may already have committed.
+
 Choose `ttl` based on how much work you are comfortable locking inside one
 process if handlers are slower than the local batch drain rate.
 

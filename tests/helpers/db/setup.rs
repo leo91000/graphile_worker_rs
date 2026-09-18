@@ -33,6 +33,25 @@ impl TestDatabase {
             .execute(&self.source_pool)
             .await
             .expect("Failed to terminate test database connections");
+            // Termination is asynchronous on PostgreSQL 12. ALLOW_CONNECTIONS
+            // is already false, so wait until this fixture has no remaining sessions.
+            tokio::time::timeout(std::time::Duration::from_secs(10), async {
+                loop {
+                    let connected: bool = sqlx::query_scalar(
+                        "select exists(select 1 from pg_stat_activity where datname = $1)",
+                    )
+                    .bind(&self.name)
+                    .fetch_one(&self.source_pool)
+                    .await
+                    .expect("Failed to inspect test database connections");
+                    if !connected {
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                }
+            })
+            .await
+            .expect("Timed out waiting for test database sessions to terminate");
             ""
         };
         safe_query(format!("DROP DATABASE {}{force}", self.name))

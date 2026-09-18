@@ -547,6 +547,25 @@ async fn cli_manages_job_lifecycle_with_database_url_flag() {
             .execute(&source_pool)
             .await
             .expect("failed to terminate test database connections");
+        // Termination is asynchronous on PostgreSQL 12. ALLOW_CONNECTIONS
+        // is already false, so wait until this fixture has no remaining sessions.
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let connected: bool = sqlx::query_scalar(
+                    "select exists(select 1 from pg_stat_activity where datname = $1)",
+                )
+                .bind(&database_name)
+                .fetch_one(&source_pool)
+                .await
+                .expect("Failed to inspect test database connections");
+                if !connected {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("Timed out waiting for test database sessions to terminate");
         ""
     };
     sqlx::query(sqlx::AssertSqlSafe(format!(

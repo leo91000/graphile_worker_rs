@@ -42,6 +42,7 @@ impl LocalQueue {
         }
     }
 
+    /// Takes a cached job only if shutdown has not completed its mode transition.
     async fn get_job_from_cache(&self) -> Option<Job> {
         {
             let mode = *self.0.mode.read().await;
@@ -54,6 +55,10 @@ impl LocalQueue {
         }
 
         let mut job_queue = self.0.job_queue.lock().await;
+        // A return may have held this lock while shutdown changed the mode.
+        if *self.0.mode.read().await == LocalQueueMode::Released {
+            return None;
+        }
         if let Some(job) = job_queue.pop_front() {
             let remaining = job_queue.len();
             drop(job_queue);

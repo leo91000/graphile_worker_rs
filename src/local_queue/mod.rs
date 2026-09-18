@@ -122,3 +122,6 @@ impl LocalQueue {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(all(test, feature = "runtime-tokio"))]
+mod return_tests;

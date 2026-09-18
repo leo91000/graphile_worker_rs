@@ -88,8 +88,19 @@ the committed marker, and permits ordinary attempt restoration on the next run.
 
 CI exposed an existing race between an in-flight batch fetch and release.
 Released is now terminal. Release callers serialize until cleanup completes;
-they first wake and await the fetch loop, then abort timers and drain the cache.
+they cancel an active TTL return, wake and await the fetch loop, then abort any
+late-created timers and return the remaining claims.
 Run completion is persistent, so a caller cannot miss a completion notification.
 This preserves ownership of late fetched jobs until the return operation has
 finished and prevents Worker::run from treating another caller's in-progress
 release as completed. Existing shutdown deadlines and assertions are retained.
+
+
+TTL and shutdown returns share a queue-owned pending-return buffer. Draining into
+this buffer happens before awaiting the database; cancellation or exhausted
+retries therefore retain the claims for a subsequent return. Only successful
+idempotent return clears the buffer. Pending returns are separate from jobs that
+handlers can consume because a failed response may follow a committed return.
+Consumers waiting for the cache lock also recheck the terminal Released state.
+Fault-injection tests cover exhausted retries with virtual time, both cancellation
+paths, waiting consumers and an interrupted TTL return with an in-flight fetch.

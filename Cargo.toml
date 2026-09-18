@@ -236,7 +236,7 @@ tracing-opentelemetry-32 = { workspace = true, optional = true }
 [dev-dependencies]
 sqlx = { workspace = true, features = ["runtime-tokio", "tls-rustls"] }
 deadpool-postgres.workspace = true
-tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time", "test-util"] }
 tokio-postgres = { workspace = true, features = [
   "array-impls",
   "with-chrono-0_4",

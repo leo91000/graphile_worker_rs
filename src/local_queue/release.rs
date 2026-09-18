@@ -56,35 +56,46 @@ impl LocalQueue {
 
         debug!("LocalQueue TTL expired, returning jobs to database");
 
-        let jobs: Vec<Job> = self.0.job_queue.lock().await.drain(..).collect();
-        if !jobs.is_empty() {
-            let jobs_count = jobs.len();
-            if let Err(e) = Self::return_jobs_with_retry(
-                &self.0.database,
-                &jobs,
-                &self.0.schema,
-                &self.0.worker_id,
-            )
-            .await
-            {
-                error!(error = %e, "Failed to return jobs after TTL expiry (exhausted retries)");
-            } else {
-                self.0
-                    .hooks
-                    .emit(LocalQueueReturnJobsContext {
-                        worker_id: self.0.worker_id.clone(),
-                        jobs_count,
-                    })
-                    .await;
-            }
+        if let Err(error) = self.return_cached_jobs().await {
+            error!(error = %error, "Failed to return jobs after TTL expiry (exhausted retries)");
         }
+    }
+
+    /// Retains claims until their return succeeds, including if this future is cancelled.
+    async fn return_cached_jobs(&self) -> Result<(), LocalQueueError> {
+        // Claims whose return may have committed must not reach a handler.
+        // Keep them separately from the consumable cache until an idempotent
+        // return succeeds. Cancellation retains this queue-owned backlog.
+        let mut pending = self.0.pending_returns.lock().await;
+        pending.extend(self.0.job_queue.lock().await.drain(..));
+        if pending.is_empty() {
+            return Ok(());
+        }
+        Self::return_jobs_with_retry(
+            &self.0.database,
+            &pending,
+            &self.0.schema,
+            &self.0.worker_id,
+        )
+        .await?;
+        let jobs_count = pending.len();
+        pending.clear();
+        drop(pending);
+        self.0
+            .hooks
+            .emit(LocalQueueReturnJobsContext {
+                worker_id: self.0.worker_id.clone(),
+                jobs_count,
+            })
+            .await;
+        Ok(())
     }
 
     /// Stops fetching and returns cached claims before completing shutdown.
     ///
     /// Concurrent callers wait for the same cleanup. An in-flight fetch finishes
     /// before the cache is drained, and Released is terminal. If returning jobs
-    /// exhausts its retries, the error is returned and the jobs remain cached for
+    /// exhausts its retries, the error is returned and the claims remain pending for
     /// a later release attempt.
     pub async fn release(&self) -> Result<(), LocalQueueError> {
         // Concurrent callers must all observe completed cleanup, not just the
@@ -103,6 +114,10 @@ impl LocalQueue {
         // registered its waiter.
         self.0.state_notify.notify_one();
 
+        // Stop a TTL return before awaiting fetch completion. Cancellation keeps
+        // its backlog available to the final return below.
+        self.0.ttl_timer_task.abort();
+
         // An in-flight fetch may still append jobs to the cache. Wait for it
         // before draining; Released is terminal so it cannot restart the loop.
         loop {
@@ -118,29 +133,7 @@ impl LocalQueue {
 
         debug!("LocalQueue releasing, returning jobs to database");
 
-        let jobs: Vec<Job> = self.0.job_queue.lock().await.drain(..).collect();
-        if !jobs.is_empty() {
-            let jobs_count = jobs.len();
-            if let Err(error) = Self::return_jobs_with_retry(
-                &self.0.database,
-                &jobs,
-                &self.0.schema,
-                &self.0.worker_id,
-            )
-            .await
-            {
-                self.0.job_queue.lock().await.extend(jobs);
-                return Err(error);
-            }
-
-            self.0
-                .hooks
-                .emit(LocalQueueReturnJobsContext {
-                    worker_id: self.0.worker_id.clone(),
-                    jobs_count,
-                })
-                .await;
-        }
+        self.return_cached_jobs().await?;
 
         *release_complete = true;
 

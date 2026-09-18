@@ -39,6 +39,7 @@ impl Default for RefetchDelayState {
 pub(super) struct LocalQueueState {
     pub(super) mode: runtime::RwLock<LocalQueueMode>,
     pub(super) job_queue: runtime::Mutex<VecDeque<Job>>,
+    pub(super) pending_returns: runtime::Mutex<Vec<Job>>,
     pub(super) job_signal_sender: LocalQueueSignalSender,
     pub(super) fetch_in_progress: AtomicBool,
     pub(super) fetch_again: AtomicBool,
@@ -68,6 +69,7 @@ impl LocalQueueState {
         Self {
             mode: runtime::RwLock::new(LocalQueueMode::Starting),
             job_queue: runtime::Mutex::new(VecDeque::new()),
+            pending_returns: runtime::Mutex::new(Vec::new()),
             job_signal_sender: params.job_signal_sender,
             fetch_in_progress: AtomicBool::new(false),
             fetch_again: AtomicBool::new(false),

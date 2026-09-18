@@ -186,3 +186,27 @@ The review bot's description check is inapplicable: the repository owner
 explicitly requires an empty PR body. Intent, implementation and validation
 remain in these committed reports, the ADR, review replies and final delivery
 report. The PR description is not populated to satisfy a conflicting suggestion.
+
+## TTL return and PostgreSQL 12 cleanup follow-up
+
+Review of the documentation head `381f2a4` passed function-documentation coverage
+but identified three valid findings outside the diff. TTL expiry discarded its
+claims after exhausting database-return retries; both PostgreSQL 12 fixture
+cleanup paths also assumed `pg_terminate_backend` completed synchronously.
+
+Three fault-injection regressions failed on the earlier source: exhausted TTL
+retries, cancellation during a TTL return, and cancellation during release each
+lost the claim. Returns now move claims into a queue-owned pending-return buffer
+and clear it only after a successful idempotent database return. This buffer is
+separate from consumable jobs: an uncertain database response must not expose a
+possibly returned claim to a handler. TTL cancellation and subsequent shutdown
+therefore preserve the claims. Further controlled tests cover a consumer waiting
+across the Released transition and an interrupted TTL return alongside an
+in-flight fetch. The real twenty-attempt retry policy is tested with virtual
+Tokio time; cancellation tests control future polling and use bounded waits.
+
+Both PostgreSQL 12 cleanup paths still disable new connections and terminate
+only the UUID fixture's sessions. They now poll `pg_stat_activity` with a ten-second
+bound before dropping that database. PostgreSQL 13+ retains its FORCE path. No
+assertions or database compatibility checks were removed. This follow-up receives
+fresh local validation, exact-head CI and another review before merging.
