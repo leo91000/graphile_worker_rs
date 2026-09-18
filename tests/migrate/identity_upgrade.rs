@@ -139,3 +139,25 @@ async fn identity_fix_allows_existing_names_after_sequence_exhaustion() {
         assert_eq!(db.get_jobs().await.len(), 2);
     }).await;
 }
+
+#[tokio::test]
+async fn retirement_marker_upgrade_preserves_existing_final_attempts() {
+    with_test_db(|db| async move {
+        install_revision_20(&db, false).await;
+        let tx = db.database.begin().await.unwrap();
+        GRAPHILE_WORKER_MIGRATIONS[20].execute(&tx, "graphile_worker").await.unwrap();
+        tx.execute("insert into graphile_worker.migrations(id, breaking) values (21, false)", DbParams::new()).await.unwrap();
+        tx.commit().await.unwrap();
+        db.add_job("existing", json!({}), graphile_worker::JobSpec { max_attempts: Some(1), ..Default::default() }).await;
+        query("update graphile_worker._private_jobs set locked_by = 'owner', locked_at = now(), attempts = 1").execute(&db.test_pool).await.unwrap();
+        let before = db.get_jobs().await;
+        migrate(&db.database, "graphile_worker").await.unwrap();
+        assert_eq!(db.get_jobs().await, before);
+        let marker: bool = sqlx::query_scalar("select exists (select 1 from graphile_worker._private_job_retirements)").fetch_one(&db.test_pool).await.unwrap();
+        assert!(!marker, "existing final attempts must not be guessed to be replacements");
+        query("select graphile_worker.recover_dead_worker_jobs(array['owner'])").execute(&db.test_pool).await.unwrap();
+        let jobs = db.get_jobs().await;
+        assert_eq!(jobs[0].attempts, 0);
+        assert!(jobs[0].locked_by.is_none());
+    }).await;
+}

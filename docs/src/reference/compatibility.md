@@ -193,3 +193,27 @@ on the compatible revision-18 schema; this is not a full mixed-worker runtime te
 Run the Rust migrator before enabling Rust recovery against a Node-created
 schema. Do not treat equal migration numbers as proof of identical migration
 history or rewrite existing ledger entries to make the numbers match.
+
+## Revision 22 and replaced jobs
+
+Rust revision 22 adds a private `_private_job_retirements` table to distinguish a replaced
+locked job from an ordinary job on its final attempt. Rust recovery returns both
+jobs' locks, but only restores an attempt for the ordinary job. The replacement
+retains its original job and queue locks until completion, failure or recovery,
+preserving named-queue serialization. Explicit `reschedule_jobs` calls clear the
+marker, allowing intentional administrative retries.
+
+Existing rows are not retroactively classified: replacement events before this
+revision cannot be inferred from the old schema without confusing legitimate
+final attempts. Migration history and existing jobs are preserved. This Rust
+recovery extension is not a claim that Node has identical recovery semantics.
+
+Node v0.18.0's `src/sql/returnJobs.ts` and older Rust return queries do not
+consult this marker. Deploy the updated Rust return paths to obtain this
+protection; sharing the new schema alone does not fix an older worker's local
+queue return behavior. The shared `recover_dead_worker_jobs` SQL function does
+honor the marker after migration 22.
+
+The marker also records `remove_job` on a locked job and eligible
+`permanently_fail_jobs` operations. Automatic recovery respects those decisions;
+explicit `reschedule_jobs` remains available to retry them deliberately.

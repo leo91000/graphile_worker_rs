@@ -9,7 +9,32 @@ use super::types::TestDatabase;
 impl TestDatabase {
     async fn drop(&self) {
         self.test_pool.close().await;
-        safe_query(format!("DROP DATABASE {} WITH (FORCE)", self.name))
+        let version: i32 = sqlx::query_scalar("select current_setting('server_version_num')::int")
+            .fetch_one(&self.source_pool)
+            .await
+            .expect("Failed to read test server version");
+        let force = if version >= 130_000 {
+            " WITH (FORCE)"
+        } else {
+            // PostgreSQL 12 lacks DROP DATABASE ... WITH (FORCE). Prevent new
+            // test-driver connections before terminating this fixture's sessions.
+            safe_query(format!(
+                "ALTER DATABASE {} ALLOW_CONNECTIONS false",
+                self.name
+            ))
+            .execute(&self.source_pool)
+            .await
+            .expect("Failed to disable test database connections");
+            sqlx::query(
+                "select pg_terminate_backend(pid) from pg_stat_activity where datname = $1",
+            )
+            .bind(&self.name)
+            .execute(&self.source_pool)
+            .await
+            .expect("Failed to terminate test database connections");
+            ""
+        };
+        safe_query(format!("DROP DATABASE {}{force}", self.name))
             .execute(&self.source_pool)
             .await
             .expect("Failed to drop test database");

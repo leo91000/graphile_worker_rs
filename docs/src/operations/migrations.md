@@ -52,7 +52,7 @@ Migration SQL is bundled in the `graphile_worker_migrations` crate under
 `src/sql`. At runtime the crate loads those files into the
 `GRAPHILE_WORKER_MIGRATIONS` registry in revision order.
 
-The current package contains revisions `1` through `21`. The revisions marked as
+The current package contains revisions `1` through `22`. The revisions marked as
 breaking in the registry are:
 
 ```text

@@ -170,3 +170,15 @@ Additional isolated upgrade check: installed **all 20 official upstream SQL migr
 Full cross-language worker differential testing and local cross-OS testing were not performed. Neither the official-SQL upgrade checks nor the regression fixture prove every Node/Rust runtime interoperability scenario.
 
 PR review follow-up: the observer regression uses the repository-standard Tokio test runtime; the packaged migration range and PreserveRunAt mode table now match revision 21 and the SQL first-attempt condition.
+
+## September 18 review follow-up
+
+The re-review found that Rust recovery could revive an upstream-style retired
+keyed job by decrementing its exhausted attempts. Reproduced on PostgreSQL 18
+with revision 21: after replacement and recover_dead_worker_jobs, the obsolete
+payload had attempts=24/max_attempts=25 and is_available=true alongside the new
+payload. Clearing locks during replacement would strand queued failure/return
+paths, so migration 22 instead records a private superseded marker and preserves
+ownership until release. All three attempt-restoring paths honor that marker;
+ordinary final attempts and explicit administrative rescheduling still recover.
+See ADR 0002 and `tests/superseded_recovery.rs`. Migrations 1–21 remain unchanged.
