@@ -101,3 +101,17 @@ Its exact-head PostgreSQL 14–18 matrix, all three coverage variants, Check,
 documentation build and Codecov checks passed before re-review was requested.
 Review approval and main CI remain separate delivery gates, recorded in the
 final audit report and durable run checkpoint.
+
+## Review follow-up
+
+The adapter regression now uses distinct current and baseline feature sets,
+including telemetry versions and driver features unique to each side. It asserts
+each profile label and both exact feature arguments, so copying or swapping the
+feature lists fails the test.
+
+The Check and Release-plz workflows pin their previously mutable checkout,
+Rust-toolchain and cache actions to the commits resolved from their existing
+refs on September 18. Existing action inputs and toolchain selection are
+preserved. Release checkout disables credential persistence; release-plz still
+receives its token explicitly. This workflow does not sign tags or run a separate
+git push, matching the [documented API-based authentication contract](https://release-plz.dev/docs/github/persist-credentials).

@@ -118,12 +118,29 @@ class ApiCheckTests(unittest.TestCase):
             def checks(commands, **kwargs):
                 calls.extend(commands)
                 return 100
-            features = {"features": {"default": [], "opentelemetry_0_30": [], "opentelemetry_0_31": []}}
+            current = {"features": {name: [] for name in (
+                "default", "driver-sqlx", "opentelemetry_0_30", "opentelemetry_0_32",
+            )}}
+            baseline = {"features": {name: [] for name in (
+                "default", "driver-tokio-postgres", "opentelemetry_0_31",
+            )}}
             with patch.dict(os.environ, {"GRAPHILE_SEMVER_CHECKS_BIN": "/real/checker"}), \
-                    patch.object(adapter, "metadata", return_value=features), \
+                    patch.object(adapter, "metadata", side_effect=[current, baseline]), \
                     patch.object(adapter, "run_checks", side_effect=checks):
                 self.assertEqual(adapter.main(args), 100)
-            self.assertEqual(len(calls), 3)
+            self.assertEqual(
+                [(label, adapter.option(command, "--current-features"),
+                  adapter.option(command, "--baseline-features")) for label, command in calls],
+                [
+                    ("without telemetry", "default,driver-sqlx", "default,driver-tokio-postgres"),
+                    ("opentelemetry_0_30", "default,driver-sqlx,opentelemetry_0_30",
+                     "default,driver-tokio-postgres"),
+                    ("opentelemetry_0_31", "default,driver-sqlx",
+                     "default,driver-tokio-postgres,opentelemetry_0_31"),
+                    ("opentelemetry_0_32", "default,driver-sqlx,opentelemetry_0_32",
+                     "default,driver-tokio-postgres"),
+                ],
+            )
             for _, command in calls:
                 self.assertEqual(command[0], "/real/checker")
                 self.assertEqual(adapter.option(command, "--release-type"), "minor")
