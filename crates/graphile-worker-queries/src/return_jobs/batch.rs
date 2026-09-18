@@ -3,6 +3,10 @@ use graphile_worker_job::Job;
 
 use crate::errors::Result;
 
+/// Returns jobs still owned by this worker and releases their named queues.
+///
+/// Ordinary claims regain their consumed attempt; explicitly retired jobs stay
+/// exhausted. Empty input is a no-op. This uses the current migrated schema.
 pub async fn return_jobs(
     mut executor: impl DbExecutorArg,
     jobs: &[Job],

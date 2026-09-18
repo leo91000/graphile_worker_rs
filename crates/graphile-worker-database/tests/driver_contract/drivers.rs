@@ -91,6 +91,7 @@ async fn tokio_postgres_listener_reconnects_after_connection_loss() {
     expect_notification(&mut stream, &channel, "after-reconnect").await;
 }
 
+/// Verifies the opt-out against server prepared statements in both query paths.
 #[cfg(feature = "driver-sqlx")]
 #[tokio::test]
 async fn sqlx_can_disable_persistent_statements_including_transactions() {

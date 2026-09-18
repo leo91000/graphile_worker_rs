@@ -172,3 +172,17 @@ During validation, downstream main advanced to
 `b6b8f470cd387ac62edbcfc1ea2eb34f0f883808` through the Lucide icon dependency
 update in PR #525. That main revision is incorporated before final validation;
 the initial audit baseline remains `93045ddeb5fe45b81222312efb0255cd94d50028`.
+
+## Documentation review follow-up
+
+The final functional review covered `62067076f1d404b09438374e8f5963fc7c7d98e0`
+with no actionable correctness findings. Its aggregate function-documentation
+check warned about missing Rustdoc, so affected queue, recovery, registration,
+SQLx and observer contracts now have function documentation, alongside the
+failure scenarios guarded by the regression tests. This follow-up changes
+comments only and receives the required validation and another review.
+
+The review bot's description check is inapplicable: the repository owner
+explicitly requires an empty PR body. Intent, implementation and validation
+remain in these committed reports, the ADR, review replies and final delivery
+report. The PR description is not populated to satisfy a conflicting suggestion.

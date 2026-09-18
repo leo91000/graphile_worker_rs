@@ -7,6 +7,7 @@ use super::super::sql::safe_query;
 use super::types::TestDatabase;
 
 impl TestDatabase {
+    /// Removes only this UUID fixture, using cleanup supported by its PostgreSQL version.
     async fn drop(&self) {
         self.test_pool.close().await;
         let version: i32 = sqlx::query_scalar("select current_setting('server_version_num')::int")
@@ -110,6 +111,7 @@ pub async fn create_test_database() -> TestDatabase {
     }
 }
 
+/// Runs a fixture on a local task set and cleans its database even after a test panic.
 pub async fn with_test_db<F, Fut>(test_fn: F)
 where
     F: FnOnce(TestDatabase) -> Fut + 'static,

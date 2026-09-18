@@ -11,6 +11,7 @@ pub(super) struct SqlxTransaction {
 }
 
 impl SqlxTransaction {
+    /// Carries the database wrapper's statement policy into a SQLx transaction.
     pub(super) fn new(tx: sqlx::Transaction<'static, Postgres>, prepared_statements: bool) -> Self {
         Self {
             tx: Mutex::new(Some(tx)),

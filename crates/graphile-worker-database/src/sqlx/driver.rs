@@ -11,6 +11,7 @@ pub struct SqlxDatabase {
 }
 
 impl SqlxDatabase {
+    /// Wraps a SQLx pool with persistent named statements enabled by default.
     pub fn new(pool: PgPool) -> Self {
         Self {
             pool,
@@ -28,6 +29,7 @@ impl SqlxDatabase {
         self
     }
 
+    /// Borrows the underlying pool for operations outside the database wrapper.
     pub fn pool(&self) -> &PgPool {
         &self.pool
     }

@@ -1,5 +1,6 @@
 use super::*;
 
+/// Requires bounded shutdown to return cached jobs before slow handlers complete.
 #[tokio::test]
 async fn local_queue_returns_jobs_on_shutdown() {
     with_test_db(|test_db| async move {
@@ -84,6 +85,7 @@ async fn local_queue_returns_jobs_on_shutdown() {
     .await;
 }
 
+/// Checks that cache expiry releases claims for other workers.
 #[tokio::test]
 async fn local_queue_returns_jobs_on_ttl_expiry() {
     with_test_db(|test_db| async move {
@@ -172,6 +174,7 @@ async fn local_queue_returns_jobs_on_ttl_expiry() {
     .await;
 }
 
+/// Guards the awaited shutdown contract while handler work is still running.
 #[tokio::test]
 async fn local_queue_release_waits_for_run_loop() {
     with_test_db(|test_db| async move {
@@ -231,6 +234,7 @@ async fn local_queue_release_waits_for_run_loop() {
     .await;
 }
 
+/// Controls fetch completion to expose late-cache insertion and premature release.
 #[tokio::test]
 async fn release_waits_for_in_flight_fetch_and_other_releasers() {
     use graphile_worker::local_queue::{LocalQueue, LocalQueueParams};

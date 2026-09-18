@@ -13,6 +13,7 @@ use serde_json::json;
 
 mod helpers;
 
+/// Exercises each terminal or attempt-restoring path with the same owned job.
 async fn release(db: &helpers::TestDatabase, job: &Job, mode: &str) {
     match mode {
         "sweep" => {
@@ -62,6 +63,7 @@ async fn release(db: &helpers::TestDatabase, job: &Job, mode: &str) {
     }
 }
 
+/// Prevents obsolete payload revival without losing the owner's queue-unlock path.
 #[tokio::test]
 async fn replaced_locked_jobs_stay_retired_and_release_their_queues() {
     for mode in [
@@ -109,6 +111,7 @@ async fn replaced_locked_jobs_stay_retired_and_release_their_queues() {
     }
 }
 
+/// Distinguishes legitimate final attempts from explicitly retired jobs.
 #[tokio::test]
 async fn ordinary_final_attempts_are_recovered() {
     for mode in ["sweep", "return", "shutdown"] {
@@ -145,6 +148,7 @@ async fn ordinary_final_attempts_are_recovered() {
     }
 }
 
+/// Keeps administrative retirement intact until an explicit reschedule.
 #[tokio::test]
 async fn explicitly_removed_or_permanently_failed_jobs_are_not_recovered() {
     for mode in ["sweep", "return", "shutdown"] {
@@ -173,6 +177,7 @@ async fn explicitly_removed_or_permanently_failed_jobs_are_not_recovered() {
     }
 }
 
+/// Reproduces a stale statement snapshot after waiting for a replacement row lock.
 #[tokio::test]
 async fn recovery_waits_for_concurrent_retirement_before_restoring_attempts() {
     use std::time::Duration;
@@ -206,6 +211,7 @@ async fn recovery_waits_for_concurrent_retirement_before_restoring_attempts() {
     }
 }
 
+/// Requires deliberate revival to see and remove a concurrently committed marker.
 #[tokio::test]
 async fn explicit_reschedule_clears_concurrently_committed_retirement() {
     use std::time::Duration;

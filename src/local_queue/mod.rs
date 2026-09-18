@@ -70,6 +70,10 @@ pub struct LocalQueueParams {
 }
 
 impl LocalQueue {
+    /// Starts a local fetch loop and, when supplied, its shutdown listener.
+    ///
+    /// The configuration must be valid for the polling interval. Call `release`
+    /// to await cleanup and return cached claims before discarding the queue.
     pub fn new(params: LocalQueueParams) -> Self {
         params
             .config
@@ -99,6 +103,7 @@ impl LocalQueue {
         queue
     }
 
+    /// Runs fetching and records completion for every waiting release caller.
     async fn run(&self) {
         self.0
             .hooks

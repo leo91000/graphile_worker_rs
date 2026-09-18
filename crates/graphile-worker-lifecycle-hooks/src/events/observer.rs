@@ -21,6 +21,7 @@ macro_rules! define_observer_event {
             type Context = $context;
             type Output = ();
 
+            /// Registers an observer without giving it control over worker execution.
             fn register_boxed(
                 hooks: &mut TypeErasedHooks,
                 handler: Box<
@@ -32,6 +33,9 @@ macro_rules! define_observer_event {
         }
 
         impl Emittable for $context {
+            /// Runs observers concurrently and contains construction and polling panics.
+            ///
+            /// Aborting panics and application side effects cannot be undone here.
             fn emit_to(self, hooks: &TypeErasedHooks) -> BoxFuture<'_, ()> {
                 Box::pin(async move {
                     if let Some(handlers) = hooks.get_handlers::<$event>() {

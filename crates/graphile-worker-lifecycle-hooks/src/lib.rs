@@ -72,6 +72,7 @@ mod observer_recovery_tests {
         Arc,
     };
 
+    /// Checks that both panic phases leave other observers and later emissions usable.
     #[tokio::test]
     async fn panicking_observers_do_not_abort_emission_or_other_observers() {
         let count = Arc::new(AtomicUsize::new(0));

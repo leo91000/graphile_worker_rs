@@ -10,6 +10,10 @@ use super::job_query_helpers::{
 };
 use super::task_identifiers::TaskDetails;
 
+/// Claims the next eligible job, incrementing its attempts and locking its queue.
+///
+/// Only registered tasks and jobs without forbidden flags are considered.
+/// An explicit `now` uses local time; otherwise PostgreSQL supplies the clock.
 pub async fn get_job(
     mut executor: impl DbExecutorArg,
     task_details: &TaskDetails,

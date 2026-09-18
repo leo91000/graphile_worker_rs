@@ -12,6 +12,7 @@ use super::config::{calculate_retry_delay, RETURN_JOBS_RETRY_OPTIONS};
 use super::{LocalQueue, LocalQueueError};
 
 impl LocalQueue {
+    /// Retries transient return failures using the bounded, jittered retry policy.
     async fn return_jobs_with_retry(
         database: &Database,
         jobs: &[Job],
@@ -44,6 +45,7 @@ impl LocalQueue {
         }
     }
 
+    /// Returns cached claims when a waiting queue reaches its TTL.
     pub(super) async fn set_mode_ttl_expired(&self) {
         let mut mode = self.0.mode.write().await;
         if *mode != LocalQueueMode::Waiting {
@@ -78,6 +80,12 @@ impl LocalQueue {
         }
     }
 
+    /// Stops fetching and returns cached claims before completing shutdown.
+    ///
+    /// Concurrent callers wait for the same cleanup. An in-flight fetch finishes
+    /// before the cache is drained, and Released is terminal. If returning jobs
+    /// exhausts its retries, the error is returned and the jobs remain cached for
+    /// a later release attempt.
     pub async fn release(&self) -> Result<(), LocalQueueError> {
         // Concurrent callers must all observe completed cleanup, not just the
         // transition to Released. A cancelled caller leaves this false for retry.

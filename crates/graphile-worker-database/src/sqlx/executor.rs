@@ -5,6 +5,7 @@ use super::params::bind_params;
 use super::rows::sqlx_row_to_db_row;
 use crate::{DbError, DbExecutor, DbExecutorArg, DbParams, DbRow};
 
+/// Executes bound SQL with the caller's persistent-statement policy.
 async fn execute_with_executor<'e, E>(
     executor: E,
     sql: &str,
@@ -22,6 +23,7 @@ where
         .map_err(Into::into)
 }
 
+/// Fetches typed driver rows with the caller's persistent-statement policy.
 async fn fetch_all_with_executor<'e, E>(
     executor: E,
     sql: &str,

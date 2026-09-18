@@ -10,6 +10,10 @@ thread_local! {
     static QUERIES: RefCell<HashMap<Key, Arc<str>>> = RefCell::default();
 }
 
+/// Reuses SQL text for one schema and fetch shape on the current thread.
+///
+/// Bound values are never cached. Clearing at capacity bounds memory retained
+/// by applications that visit many tenant schemas.
 pub(crate) fn fetch_query(
     schema: &Schema,
     flags: bool,
@@ -36,6 +40,7 @@ pub(crate) fn fetch_query(
 mod tests {
     use super::*;
 
+    /// Guards against cross-tenant query reuse and unbounded thread-local retention.
     #[test]
     fn caches_each_shape_and_schema_without_retaining_unbounded_tenants() {
         for schema in [Schema::default(), Schema::new("quoted\"schema")] {

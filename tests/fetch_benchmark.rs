@@ -9,6 +9,10 @@ use serde_json::json;
 mod helpers;
 
 // Run explicitly; database latency makes this unsuitable as a performance assertion.
+/// Measures mixed-queue fetch/return cycles while checking claims and lock release.
+///
+/// This manual database workload has no performance threshold because latency
+/// noise would make a speed assertion unreliable.
 #[tokio::test]
 #[ignore = "manual database fetch benchmark"]
 async fn benchmark_cached_fetch_with_mixed_queues() {

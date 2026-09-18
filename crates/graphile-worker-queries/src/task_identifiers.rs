@@ -9,6 +9,7 @@ struct TaskRow {
     identifier: String,
 }
 
+/// Builds the task-ID lookup used to restrict claims to registered handlers.
 fn task_rows_to_details(tasks: Vec<TaskRow>) -> TaskDetails {
     let mut details = TaskDetails::new();
     for row in tasks {
@@ -17,6 +18,10 @@ fn task_rows_to_details(tasks: Vec<TaskRow>) -> TaskDetails {
     details
 }
 
+/// Registers missing task identifiers and returns their database IDs.
+///
+/// Already registered names are filtered before insertion so repeated worker
+/// initialization does not consume task identity values.
 #[tracing::instrument(skip_all, err, fields(otel.kind="client", db.system="postgresql"))]
 pub async fn get_tasks_details(
     mut executor: impl DbExecutorArg,

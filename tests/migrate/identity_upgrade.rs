@@ -1,5 +1,6 @@
 use super::*;
 
+/// Builds either historical revision-20 schema before exercising an upgrade.
 async fn install_revision_20(db: &helpers::TestDatabase, upstream: bool) {
     db.database
         .execute("create schema graphile_worker", DbParams::new())
@@ -34,6 +35,7 @@ async fn install_revision_20(db: &helpers::TestDatabase, upstream: bool) {
     }
 }
 
+/// Checks existing jobs, locks and recovery data survive either upgrade history.
 async fn check_upgrade(db: helpers::TestDatabase, upstream: bool) {
     install_revision_20(&db, upstream).await;
     db.add_job(
@@ -108,16 +110,19 @@ async fn check_upgrade(db: helpers::TestDatabase, upstream: bool) {
     assert_eq!(jobs[1].payload, json!([3]));
 }
 
+/// Covers upgrade from Rust's revision 20 with its existing recovery objects.
 #[tokio::test]
 async fn identity_fix_upgrades_rust_revision_20_without_losing_jobs() {
     with_test_db(|db| check_upgrade(db, false)).await;
 }
 
+/// Covers upstream's distinct revision 20 and installation of Rust recovery objects.
 #[tokio::test]
 async fn identity_fix_upgrades_upstream_revision_20_with_recovery_support() {
     with_test_db(|db| check_upgrade(db, true)).await;
 }
 
+/// Proves known task and queue names remain usable when identity sequences are full.
 #[tokio::test]
 async fn identity_fix_allows_existing_names_after_sequence_exhaustion() {
     with_test_db(|db| async move {
@@ -140,6 +145,7 @@ async fn identity_fix_allows_existing_names_after_sequence_exhaustion() {
     }).await;
 }
 
+/// Ensures migration cannot misclassify historical ordinary final attempts as retired.
 #[tokio::test]
 async fn retirement_marker_upgrade_preserves_existing_final_attempts() {
     with_test_db(|db| async move {

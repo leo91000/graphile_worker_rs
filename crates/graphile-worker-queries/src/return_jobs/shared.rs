@@ -4,6 +4,7 @@ use graphile_worker_database::DbValue;
 use graphile_worker_job::Job;
 
 use crate::duration::duration_as_millis_i64;
+/// Binds the owner, bigint job ID, bounded delay and optional recovery error.
 pub(super) fn recovery_params(
     worker_id: &str,
     job: &Job,

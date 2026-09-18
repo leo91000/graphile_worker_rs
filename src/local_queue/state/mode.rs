@@ -4,6 +4,7 @@ use tracing::trace;
 use super::super::LocalQueue;
 
 impl LocalQueue {
+    /// Emits genuine mode transitions while preventing a released queue restarting.
     pub(in crate::local_queue) async fn set_mode(&self, new_mode: LocalQueueMode) {
         let mut mode = self.0.mode.write().await;
         let old_mode = *mode;

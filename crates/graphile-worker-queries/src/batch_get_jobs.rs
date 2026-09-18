@@ -10,6 +10,11 @@ use super::job_query_helpers::{
 };
 use super::task_identifiers::TaskDetails;
 
+/// Claims eligible jobs and their named queues for one worker.
+///
+/// Candidates are locked before selecting at most one job per named queue;
+/// unnamed jobs remain independent. The candidate limit can therefore yield
+/// fewer than `batch_size` jobs. `now = None` uses PostgreSQL time.
 pub async fn batch_get_jobs(
     mut executor: impl DbExecutorArg,
     task_details: &TaskDetails,

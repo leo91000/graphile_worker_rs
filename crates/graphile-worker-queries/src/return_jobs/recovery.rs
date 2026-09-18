@@ -6,6 +6,11 @@ use graphile_worker_job::Job;
 use super::shared::recovery_params;
 use crate::errors::Result;
 
+/// Releases an owned job after interruption without retry backoff.
+///
+/// An optional delay moves `run_at` forward, and an optional error replaces the
+/// last error. Retired jobs stay exhausted; ordinary claims regain an attempt.
+/// The current migrated schema preserves queue ownership until this release.
 pub async fn return_job_for_recovery(
     mut executor: impl DbExecutorArg,
     job: &Job,

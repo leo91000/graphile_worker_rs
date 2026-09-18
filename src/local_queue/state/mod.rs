@@ -63,6 +63,7 @@ pub(super) struct LocalQueueState {
 }
 
 impl LocalQueueState {
+    /// Initializes queue coordination without starting background tasks.
     pub(super) fn new(params: LocalQueueParams) -> Self {
         Self {
             mode: runtime::RwLock::new(LocalQueueMode::Starting),

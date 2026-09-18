@@ -7,6 +7,7 @@ use serde_json::json;
 
 mod helpers;
 
+/// Reproduces upstream queue deduplication while preserving independent unnamed work.
 #[tokio::test]
 async fn batch_fetch_serializes_named_queues_without_dropping_unnamed_jobs() {
     with_test_db(|db| async move {
@@ -92,6 +93,7 @@ async fn batch_fetch_serializes_named_queues_without_dropping_unnamed_jobs() {
     .await;
 }
 
+/// Guards finite task and queue identities against repeated insertion of known names.
 #[tokio::test]
 async fn repeated_registration_and_insertion_do_not_consume_identities() {
     with_test_db(|db| async move {
@@ -111,6 +113,7 @@ async fn repeated_registration_and_insertion_do_not_consume_identities() {
     }).await;
 }
 
+/// Ensures SQL-text reuse never leaks one call's schema, flags, clock or limit.
 #[tokio::test]
 async fn cached_fetch_queries_keep_schema_flags_time_and_batch_values_separate() {
     use graphile_worker::sql::{get_job::get_job, return_jobs::batch::return_jobs};
@@ -182,6 +185,7 @@ async fn cached_fetch_queries_keep_schema_flags_time_and_batch_values_separate()
     .await;
 }
 
+/// Exercises bigint job IDs through batched failure and queue unlocking.
 #[tokio::test]
 async fn batched_failure_accepts_job_ids_above_int32() {
     use graphile_worker::sql::fail_job::batch::{fail_jobs, FailedJob};
@@ -204,6 +208,7 @@ async fn batched_failure_accepts_job_ids_above_int32() {
     }).await;
 }
 
+/// Checks concurrent claimers cannot run two jobs from the same named queue.
 #[tokio::test]
 async fn concurrent_batch_fetches_share_only_unnamed_work() {
     with_test_db(|db| async move {

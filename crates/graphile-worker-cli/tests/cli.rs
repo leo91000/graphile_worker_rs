@@ -71,6 +71,7 @@ fn admin_help_documents_embedded_ui_options() {
     assert!(stdout.contains("GRAPHILE_WORKER_ADMIN_PASSWORD"));
 }
 
+/// Exercises CLI job administration and cleans its isolated database across PostgreSQL versions.
 #[tokio::test]
 async fn cli_manages_job_lifecycle_with_database_url_flag() {
     let Ok(source_url) = std::env::var("DATABASE_URL") else {
