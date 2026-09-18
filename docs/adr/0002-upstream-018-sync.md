@@ -83,3 +83,13 @@ concurrent permanently_fail_jobs/reschedule_jobs reproduction returned a revived
 job with its retirement marker still present when both operations used a single
 statement snapshot. The regression now verifies that rescheduling waits, clears
 the committed marker, and permits ordinary attempt restoration on the next run.
+
+## Local-queue release completion
+
+CI exposed an existing race between an in-flight batch fetch and release.
+Released is now terminal. Release callers serialize until cleanup completes;
+they first wake and await the fetch loop, then abort timers and drain the cache.
+Run completion is persistent, so a caller cannot miss a completion notification.
+This preserves ownership of late fetched jobs until the return operation has
+finished and prevents Worker::run from treating another caller's in-progress
+release as completed. Existing shutdown deadlines and assertions are retained.

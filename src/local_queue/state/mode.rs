@@ -7,7 +7,7 @@ impl LocalQueue {
     pub(in crate::local_queue) async fn set_mode(&self, new_mode: LocalQueueMode) {
         let mut mode = self.0.mode.write().await;
         let old_mode = *mode;
-        if old_mode == new_mode {
+        if old_mode == new_mode || old_mode == LocalQueueMode::Released {
             return;
         }
         trace!(?old_mode, ?new_mode, "LocalQueue mode transition");

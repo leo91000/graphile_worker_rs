@@ -230,3 +230,82 @@ async fn local_queue_release_waits_for_run_loop() {
     })
     .await;
 }
+
+#[tokio::test]
+async fn release_waits_for_in_flight_fetch_and_other_releasers() {
+    use graphile_worker::local_queue::{LocalQueue, LocalQueueParams};
+    use graphile_worker::sql::task_identifiers::get_tasks_details;
+    use tokio::sync::Notify;
+
+    with_test_db(|db| async move {
+        db.worker_utils().migrate().await.unwrap();
+        db.worker_utils()
+            .add_job(ShutdownJob { id: 1 }, JobSpec::default())
+            .await
+            .unwrap();
+        let tasks = get_tasks_details(
+            &db.database,
+            "graphile_worker",
+            vec![ShutdownJob::IDENTIFIER.into()],
+        )
+        .await
+        .unwrap();
+        let fetched = Arc::new(Notify::new());
+        let allow_cache = Arc::new(Notify::new());
+        let mut hooks = HookRegistry::default();
+        let fetched_hook = fetched.clone();
+        let allow_hook = allow_cache.clone();
+        hooks.on(LocalQueueGetJobsComplete, move |_| {
+            let fetched = fetched_hook.clone();
+            let allow = allow_hook.clone();
+            async move {
+                fetched.notify_one();
+                allow.notified().await;
+            }
+        });
+        let (job_signal_sender, _rx) = graphile_worker_runtime::channel(1);
+        let queue = LocalQueue::new(LocalQueueParams {
+            config: LocalQueueConfig::builder().size(2).build(),
+            database: db.database.clone(),
+            schema: "graphile_worker".into(),
+            worker_id: "release-race".into(),
+            task_details: tasks.into(),
+            poll_interval: Duration::from_secs(1),
+            continuous: true,
+            shutdown_signal: None,
+            hooks: Arc::new(hooks),
+            job_signal_sender,
+            use_local_time: false,
+        });
+        tokio::time::timeout(Duration::from_secs(5), fetched.notified())
+            .await
+            .unwrap();
+        let first = queue.release();
+        let second = queue.release();
+        futures::pin_mut!(first, second);
+        assert!(
+            futures::poll!(first.as_mut()).is_pending(),
+            "release must wait for the fetched jobs to reach the cache"
+        );
+        assert!(
+            futures::poll!(second.as_mut()).is_pending(),
+            "concurrent release must wait for the same cleanup"
+        );
+        allow_cache.notify_one();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            first.await.unwrap();
+            second.await.unwrap();
+        })
+        .await
+        .expect("release must finish after the fetch resumes");
+        let jobs = db.get_jobs().await;
+        assert_eq!(jobs.len(), 1);
+        assert!(
+            jobs[0].locked_by.is_none(),
+            "the in-flight fetched job must be returned"
+        );
+        assert_eq!(jobs[0].attempts, 0);
+        assert!(queue.get_job(&[]).await.is_none(), "Released is terminal");
+    })
+    .await;
+}

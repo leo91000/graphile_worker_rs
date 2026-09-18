@@ -1,3 +1,4 @@
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -109,7 +110,8 @@ impl LocalQueue {
         self.set_mode(LocalQueueMode::Polling).await;
         self.schedule_fetch().await;
 
-        self.0.run_complete_notify.notify_one();
+        self.0.run_complete.store(true, Ordering::Release);
+        self.0.run_complete_notify.notify_waiters();
     }
 }
 

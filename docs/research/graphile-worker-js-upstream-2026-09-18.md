@@ -139,3 +139,36 @@ and all three OpenTelemetry feature checks. The tokio-postgres focused run
 passed 21 checks (11 migration, five retirement, five upstream scenarios).
 The matrix change receives the same required local gates before commit and
 all exact-head GitHub checks before merge.
+
+A full PostgreSQL 12 run additionally found the same PostgreSQL-13-only DROP
+DATABASE syntax in the separate CLI integration fixture. All of that test's
+job-lifecycle assertions passed before cleanup failed with SQLSTATE 42601.
+Its cleanup now also selects the supported syntax by server version and only
+terminates connections to the UUID-named fixture. No lifecycle assertions or
+production operations were removed or changed.
+
+## Shutdown race exposed by CI
+
+The combined-driver coverage job on `cddbaa6a785205e82cb59119fd6cd23d154b9c56`
+failed the existing local_queue_returns_jobs_on_shutdown timeout
+([CI evidence](https://github.com/leo91000/graphile_worker_rs/actions/runs/35343264278/job/105593845558)).
+Source inspection found that an in-flight fetch could append jobs after release
+had drained the cache and change Released back to Waiting. A concurrent release
+also returned before the first caller completed cleanup. A controlled regression
+pauses the fetch-completion hook, begins two release calls, then resumes the
+fetch. It failed against the earlier source because the second release returned
+early. The corrected release serializes callers, preserves Released as a terminal
+state, uses persistent run-completion state, and drains only after fetching ends.
+A stored wake-up permit also closes the mode-check/wait registration race.
+Failed return attempts preserve cached jobs for a later release retry.
+
+All 19 local-queue tests passed after this correction, including the original
+shutdown timeout and the new controlled concurrency regression. The existing
+timeout and queue-return assertions remain unchanged. This is a downstream
+shutdown correction exposed while validating the upstream ports, not a claim
+that upstream contains the same defect or implementation.
+
+During validation, downstream main advanced to
+`b6b8f470cd387ac62edbcfc1ea2eb34f0f883808` through the Lucide icon dependency
+update in PR #525. That main revision is incorporated before final validation;
+the initial audit baseline remains `93045ddeb5fe45b81222312efb0255cd94d50028`.
