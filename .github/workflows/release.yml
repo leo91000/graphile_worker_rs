@@ -13,6 +13,11 @@ jobs:
   release-plz:
     name: Release-plz
     runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_JOBS: 2
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/release-api
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -20,8 +25,31 @@ jobs:
           fetch-depth: 0
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-      - name: Run release-plz
-        uses: MarcoIeni/release-plz-action@v0.5
+      - name: Install API checker
+        uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab
+        with:
+          tool: cargo-semver-checks@0.50
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@b874e25ea559687bec77e281e9b271aa1367b624
+        env:
+          BINSTALL_VERSION: 1.23.0
+      - name: Install release-plz
+        run: cargo-binstall release-plz@0.3.168 --force --strategies=crate-meta-data,compile --no-confirm
+      - name: Configure git user
+        uses: release-plz/git-config@59144859caf016f8b817a2ac9b051578729173c4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Configure supported API checks
+        run: |
+          echo "GRAPHILE_SEMVER_CHECKS_BIN=$(command -v cargo-semver-checks)" >> "$GITHUB_ENV"
+          echo "$GITHUB_WORKSPACE/.github/scripts/semver-bin" >> "$GITHUB_PATH"
+      - name: Prepare release PR
+        run: release-plz release-pr --git-token "$GITHUB_TOKEN" --repo-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" --forge github -o json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - name: Run existing release automation
+        run: release-plz release --git-token "$GITHUB_TOKEN" --forge github -o json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

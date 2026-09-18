@@ -25,6 +25,8 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Release API adapter regressions
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
       - name: Rustfmt
         run: cargo fmt --all -- --check
       - name: Check OpenTelemetry 0.30 feature
