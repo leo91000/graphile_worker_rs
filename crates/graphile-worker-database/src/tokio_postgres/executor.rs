@@ -148,7 +148,7 @@ impl DbExecutorArg for &deadpool_postgres::Client {
         sql: &'a str,
         params: DbParams,
     ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
-        Box::pin(async move { execute_with_deadpool_client(*self, sql, params).await })
+        Box::pin(async move { execute_with_deadpool_client(self, sql, params).await })
     }
 
     fn fetch_all<'a>(
@@ -156,7 +156,7 @@ impl DbExecutorArg for &deadpool_postgres::Client {
         sql: &'a str,
         params: DbParams,
     ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
-        Box::pin(async move { fetch_all_with_deadpool_client(*self, sql, params).await })
+        Box::pin(async move { fetch_all_with_deadpool_client(self, sql, params).await })
     }
 }
 

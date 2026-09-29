@@ -39,6 +39,9 @@ test-docker:
   DATABASE_URL='postgres://postgres:postgres@localhost:54233/postgres' cargo test --all
   docker rm -f graphile-worker-rs-test
 
+test-docker-tls:
+  bash .github/scripts/test_tokio_postgres_tls.sh
+
 test-docker-runtime runtime="runtime-tokio" driver="driver-sqlx":
   #!/usr/bin/env bash
   set -euo pipefail

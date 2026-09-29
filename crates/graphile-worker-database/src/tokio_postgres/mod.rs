@@ -2,33 +2,61 @@ mod executor;
 mod listener;
 mod params;
 mod rows;
+mod tls;
 mod transaction;
 
-use ::tokio_postgres::NoTls;
 use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
 
 use self::transaction::TokioPostgresTransaction;
 use crate::{Database, DatabaseDriver, DbError, DbTransaction, NotificationStream};
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct TokioPostgresDatabase {
     pool: Pool,
-    config: Option<::tokio_postgres::Config>,
+    listener_config: Option<ListenerConfig>,
+}
+
+#[derive(Clone)]
+struct ListenerConfig {
+    config: ::tokio_postgres::Config,
+    tls: tls::Connector,
+}
+
+impl std::fmt::Debug for TokioPostgresDatabase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TokioPostgresDatabase")
+            .field("pool", &self.pool)
+            .field("has_listener", &self.listener_config.is_some())
+            .finish()
+    }
 }
 
 impl TokioPostgresDatabase {
+    /// Wraps a caller-built pool without a dedicated LISTEN connection.
+    /// Use [`Self::from_config`] or [`Self::from_url`] to enable notifications.
     pub fn new(pool: Pool) -> Self {
-        Self { pool, config: None }
+        Self {
+            pool,
+            listener_config: None,
+        }
     }
 
     pub fn pool(&self) -> &Pool {
         &self.pool
     }
 
+    /// Creates a pool and listener using the selected TLS feature.
+    /// Native TLS takes precedence when both TLS features are enabled.
+    /// `PGSSLROOTCERT` may name a PEM file containing additional trusted roots.
+    #[allow(clippy::clone_on_copy)] // NoTls is Copy; TLS connectors are only Clone.
     pub fn from_config(config: ::tokio_postgres::Config, max_size: usize) -> Result<Self, DbError> {
+        let tls = tls::connector()?;
+        // The no-TLS connector is Copy; both TLS connectors require cloning.
+        #[allow(clippy::clone_on_copy)]
+        let pool_tls = tls.clone();
         let manager = Manager::from_config(
             config.clone(),
-            NoTls,
+            pool_tls,
             ManagerConfig {
                 recycling_method: RecyclingMethod::Fast,
             },
@@ -39,7 +67,7 @@ impl TokioPostgresDatabase {
             .map_err(|error| DbError::new(error.to_string()))?;
         Ok(Self {
             pool,
-            config: Some(config),
+            listener_config: Some(ListenerConfig { config, tls }),
         })
     }
 
@@ -88,6 +116,6 @@ impl DatabaseDriver for TokioPostgresDatabase {
         &'a self,
         channel: &'a str,
     ) -> crate::BoxFuture<'a, Result<Option<NotificationStream>, DbError>> {
-        Box::pin(async move { listener::listen(self.config.clone(), channel).await })
+        Box::pin(async move { listener::listen(self.listener_config.clone(), channel).await })
     }
 }

@@ -45,3 +45,21 @@ jobs:
         run: cargo nextest run --all
       - name: Doc tests
         run: cargo test --all --doc
+  tokio-postgres-tls:
+    name: tokio-postgres TLS (${{ matrix.protocol }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        protocol: [TLSv1.2, TLSv1.3]
+    env:
+      TLS_MAX_PROTOCOL_VERSION: ${{ matrix.protocol }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Test TLS-only PostgreSQL
+        run: bash .github/scripts/test_tokio_postgres_tls.sh
