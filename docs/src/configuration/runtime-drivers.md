@@ -30,8 +30,16 @@ crates:
 
 | Feature | Notes |
 | --- | --- |
-| `tls-rustls` | Default TLS backend. |
-| `tls-native-tls` | Native TLS backend. |
+| `tls-rustls` | Default TLS backend for SQLx and tokio-postgres. |
+| `tls-native-tls` | Native TLS backend for SQLx and tokio-postgres. |
+
+When both TLS features are enabled, native TLS takes precedence. The
+tokio-postgres driver uses public certificate roots with rustls and the system
+root store with native TLS. Set `PGSSLROOTCERT` to a PEM file to add a private
+root certificate for either backend. An unset, empty, or `system` value keeps
+the selected backend's default roots; `system` does not change `sslmode` or
+switch Rustls to the platform root store. Use `sslmode=require` in the connection
+URL when the connection must be encrypted.
 
 Driver features choose which PostgreSQL client integration is compiled:
 
@@ -49,7 +57,8 @@ The combinations exercised by the repository test matrix are:
 | --- | --- | --- | --- |
 | `runtime-tokio` | `driver-sqlx` | `tls-rustls` | Default tested path. |
 | `runtime-async-std` | `driver-sqlx` | `tls-rustls` | Tested SQLx async-std path. |
-| `runtime-tokio` | `driver-tokio-postgres` | Not added by the matrix command | Tested tokio-postgres path. |
+| `runtime-tokio` | `driver-tokio-postgres` | Not added by the matrix command | Tested plaintext tokio-postgres path. |
+| `runtime-tokio` | `driver-tokio-postgres` | `tls-rustls` and `tls-native-tls` | Tested against TLS-only PostgreSQL. |
 
 `driver-tokio-postgres` is Tokio-only. The repository runtime test command
 rejects `driver-tokio-postgres` with any runtime other than `runtime-tokio`.
@@ -91,11 +100,14 @@ To use the tokio-postgres driver:
 [dependencies]
 graphile_worker = { version = "0.13", default-features = false, features = [
   "driver-tokio-postgres",
+  "tls-rustls",
 ] }
 ```
 
-`driver-tokio-postgres` enables `runtime-tokio` for Graphile Worker RS. Add a
-TLS feature only when the rest of your database stack needs one from this crate.
+`driver-tokio-postgres` enables `runtime-tokio` for Graphile Worker RS. The
+selected TLS backend is used for both pooled queries and the LISTEN connection,
+including listener reconnections. The `TokioPostgresDatabase::new(pool)` path
+cannot configure the separate LISTEN connection and continues to use polling.
 
 ## WorkerUtils With A Caller-Owned Executor
 

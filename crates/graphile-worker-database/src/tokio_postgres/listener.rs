@@ -1,15 +1,17 @@
 use std::time::Duration;
 
-use ::tokio_postgres::{AsyncMessage, Client, NoTls};
+use ::tokio_postgres::{AsyncMessage, Client};
 use tokio::sync::{mpsc::UnboundedSender, oneshot};
 
 use crate::{escape_identifier, DbError, Notification, NotificationStream};
+
+use super::ListenerConfig;
 
 const INITIAL_LISTENER_RECONNECT_DELAY: Duration = Duration::from_millis(50);
 const MAX_LISTENER_RECONNECT_DELAY: Duration = Duration::from_secs(5);
 
 pub(super) async fn listen(
-    config: Option<::tokio_postgres::Config>,
+    config: Option<ListenerConfig>,
     channel: &str,
 ) -> Result<Option<NotificationStream>, DbError> {
     let Some(config) = config else {
@@ -39,12 +41,17 @@ fn next_reconnect_delay(delay: Duration) -> Duration {
     }
 }
 
+// TLS connectors need cloning; the no-TLS connector also happens to be Copy.
+#[allow(clippy::clone_on_copy)]
 async fn connect_listener(
-    config: &::tokio_postgres::Config,
+    config: &ListenerConfig,
     listen_sql: &str,
     tx: &UnboundedSender<Result<Notification, DbError>>,
 ) -> Result<(Client, oneshot::Receiver<()>), DbError> {
-    let (client, connection) = config.connect(NoTls).await?;
+    // The no-TLS connector is Copy; both TLS connectors require cloning.
+    #[allow(clippy::clone_on_copy)]
+    let tls = config.tls.clone();
+    let (client, connection) = config.config.connect(tls).await?;
     let (closed_tx, closed_rx) = oneshot::channel();
     let tx = tx.clone();
 
@@ -78,7 +85,7 @@ async fn connect_listener(
 }
 
 async fn run_reconnecting_listener(
-    config: ::tokio_postgres::Config,
+    config: ListenerConfig,
     listen_sql: String,
     tx: UnboundedSender<Result<Notification, DbError>>,
     mut client: Client,

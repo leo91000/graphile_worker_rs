@@ -15,6 +15,7 @@ readme = "README.md"
 chrono.workspace = true
 deadpool-postgres = { workspace = true, optional = true }
 futures.workspace = true
+graphile_worker_postgres_tls = { workspace = true, optional = true }
 serde_json.workspace = true
 sqlx = { workspace = true, optional = true }
 thiserror.workspace = true
@@ -31,6 +32,7 @@ default = ["driver-sqlx"]
 driver-sqlx = ["sqlx"]
 driver-tokio-postgres = [
   "deadpool-postgres",
+  "dep:graphile_worker_postgres_tls",
   "tokio",
   "tokio-postgres/runtime",
   "tokio-stream",
@@ -40,8 +42,8 @@ runtime-tokio = [
   "tokio-postgres?/runtime",
 ]
 runtime-async-std = ["sqlx?/runtime-async-std"]
-tls-native-tls = ["sqlx?/tls-native-tls"]
-tls-rustls = ["sqlx?/tls-rustls"]
+tls-native-tls = ["sqlx?/tls-native-tls", "graphile_worker_postgres_tls?/tls-native-tls"]
+tls-rustls = ["sqlx?/tls-rustls", "graphile_worker_postgres_tls?/tls-rustls"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
