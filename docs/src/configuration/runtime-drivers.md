@@ -36,7 +36,9 @@ crates:
 When both TLS features are enabled, native TLS takes precedence. The
 tokio-postgres driver uses public certificate roots with rustls and the system
 root store with native TLS. Set `PGSSLROOTCERT` to a PEM file to add a private
-root certificate for either backend. Use `sslmode=require` in the connection
+root certificate for either backend. An unset, empty, or `system` value keeps
+the selected backend's default roots; `system` does not change `sslmode` or
+switch Rustls to the platform root store. Use `sslmode=require` in the connection
 URL when the connection must be encrypted.
 
 Driver features choose which PostgreSQL client integration is compiled:

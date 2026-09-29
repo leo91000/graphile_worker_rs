@@ -25,6 +25,7 @@ graphile_worker_crontab_runner = { path = "crates/graphile-worker-crontab-runner
 graphile_worker_crontab_types = { path = "crates/graphile-worker-crontab-types", version = "0.5.18" }
 graphile_worker_ctx = { path = "crates/graphile-worker-ctx", version = "0.6.2", default-features = false }
 graphile_worker_database = { path = "crates/graphile-worker-database", version = "0.1.6", default-features = false }
+graphile_worker_postgres_tls = { path = "crates/graphile-worker-postgres-tls", version = "0.1.0", default-features = false }
 graphile_worker_extensions = { path = "crates/graphile-worker-extensions", version = "0.1.9" }
 graphile_worker_job = { path = "crates/graphile-worker-job", version = "0.2.2", default-features = false }
 graphile_worker_job_spec = { path = "crates/graphile-worker-job-spec", version = "0.1.6" }

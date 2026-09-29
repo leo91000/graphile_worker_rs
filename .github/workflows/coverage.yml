@@ -31,10 +31,15 @@ jobs:
             output: cobertura-tokio-postgres.xml
             codecov_flags: tokio-postgres
           - name: combined drivers
-            cargo_args: --workspace --exclude graphile_worker_admin_ui_client --features driver-tokio-postgres
+            cargo_args: --workspace --exclude graphile_worker_admin_ui_client --features driver-tokio-postgres,tls-native-tls
             nextest_args: --test-threads=16
             output: cobertura-combined.xml
             codecov_flags: ""
+          - name: tokio-postgres rustls
+            cargo_args: --workspace --exclude graphile_worker_admin_ui_client --no-default-features --features driver-tokio-postgres,tls-rustls
+            nextest_args: --test-threads=16
+            output: cobertura-tokio-postgres-rustls.xml
+            codecov_flags: tokio-postgres-rustls
     env:
       CARGO_INCREMENTAL: 0
       DATABASE_URL: postgres://testuser:testpassword@localhost:5432/testdb

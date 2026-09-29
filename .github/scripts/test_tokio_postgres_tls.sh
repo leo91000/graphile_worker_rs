@@ -69,6 +69,8 @@ export PGSSLROOTCERT="$fixture_dir/ca.crt"
 export DATABASE_URL="postgres://postgres:postgres@localhost:$port/postgres?sslmode=require"
 
 for feature in tls-rustls tls-native-tls tls-rustls,tls-native-tls; do
+  cargo test -p graphile_worker_postgres_tls --no-default-features \
+    --features "$feature" --test connector
   cargo test -p graphile_worker_database --no-default-features \
     --features "runtime-tokio,driver-tokio-postgres,$feature" \
     --test driver_contract tokio_postgres_ -- --nocapture

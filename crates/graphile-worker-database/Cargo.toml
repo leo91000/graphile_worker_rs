@@ -15,10 +15,7 @@ readme = "README.md"
 chrono.workspace = true
 deadpool-postgres = { workspace = true, optional = true }
 futures.workspace = true
-native-tls = { workspace = true, optional = true }
-postgres-native-tls = { workspace = true, optional = true }
-rustls = { workspace = true, optional = true }
-rustls-pemfile = { workspace = true, optional = true }
+graphile_worker_postgres_tls = { workspace = true, optional = true }
 serde_json.workspace = true
 sqlx = { workspace = true, optional = true }
 thiserror.workspace = true
@@ -28,32 +25,25 @@ tokio-postgres = { workspace = true, optional = true, features = [
   "with-chrono-0_4",
   "with-serde_json-1",
 ] }
-tokio-postgres-rustls = { workspace = true, optional = true }
 tokio-stream = { workspace = true, optional = true, features = ["sync"] }
-webpki-roots = { workspace = true, optional = true }
 
 [features]
 default = ["driver-sqlx"]
 driver-sqlx = ["sqlx"]
 driver-tokio-postgres = [
   "deadpool-postgres",
-  "native-tls",
-  "postgres-native-tls",
-  "rustls",
-  "rustls-pemfile",
+  "dep:graphile_worker_postgres_tls",
   "tokio",
   "tokio-postgres/runtime",
-  "tokio-postgres-rustls",
   "tokio-stream",
-  "webpki-roots",
 ]
 runtime-tokio = [
   "sqlx?/runtime-tokio",
   "tokio-postgres?/runtime",
 ]
 runtime-async-std = ["sqlx?/runtime-async-std"]
-tls-native-tls = ["sqlx?/tls-native-tls"]
-tls-rustls = ["sqlx?/tls-rustls"]
+tls-native-tls = ["sqlx?/tls-native-tls", "graphile_worker_postgres_tls?/tls-native-tls"]
+tls-rustls = ["sqlx?/tls-rustls", "graphile_worker_postgres_tls?/tls-rustls"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }

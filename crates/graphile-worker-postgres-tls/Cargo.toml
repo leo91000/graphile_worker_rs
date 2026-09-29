@@ -1,0 +1,22 @@
+[package]
+name = "graphile_worker_postgres_tls"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Feature-selected PostgreSQL TLS connectors for graphile_worker"
+repository = "https://github.com/leo91000/graphile_worker_rs"
+
+[dependencies]
+tokio-postgres.workspace = true
+thiserror.workspace = true
+native-tls = { workspace = true, optional = true }
+postgres-native-tls = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+rustls-pemfile = { workspace = true, optional = true }
+tokio-postgres-rustls = { workspace = true, optional = true }
+webpki-roots = { workspace = true, optional = true }
+
+[features]
+default = []
+tls-native-tls = ["dep:native-tls", "dep:postgres-native-tls", "dep:rustls-pemfile"]
+tls-rustls = ["dep:rustls", "dep:rustls-pemfile", "dep:tokio-postgres-rustls", "dep:webpki-roots"]
