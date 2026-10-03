@@ -90,6 +90,11 @@ where
         while &ts < start_time {
             yield_now().await;
             let time_ago = (start_time.to_owned() - ts.to_owned()).num_seconds();
+            let calendar_time = if use_local_time {
+                ts.naive_local()
+            } else {
+                ts.naive_utc()
+            };
 
             let to_backfill: Vec<CrontabJob> = backfill_items_and_date
                 .iter()
@@ -97,7 +102,7 @@ where
                     let backfill = b.item.options().fill().as_ref()?;
                     if backfill.to_secs() as i64 >= time_ago
                         && &ts >= b.not_before
-                        && b.item.should_run_at(&ts.naive_local())
+                        && b.item.should_run_at(&calendar_time)
                     {
                         return Some(CrontabJob::for_cron(b.item, &ts, true));
                     }
