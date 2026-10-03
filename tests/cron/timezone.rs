@@ -1,3 +1,5 @@
+use std::process::Command;
+
 use chrono::{DateTime, TimeZone, Utc};
 use graphile_worker_crontab_runner::Clock;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -28,9 +30,27 @@ async fn next_sleep(receiver: &mut UnboundedReceiver<DateTime<Local>>) -> DateTi
         .expect("Cron stopped unexpectedly")
 }
 
-async fn check_timezone(use_local_time: bool, backfill: bool) {
+async fn check_timezone(test_name: &str, use_local_time: bool, backfill: bool) {
+    // Local uses the process timezone. Isolate the regression from other tests.
+    if std::env::var("TZ").as_deref() != Ok("America/Toronto") {
+        let output = Command::new(std::env::current_exe().unwrap())
+            .arg(format!("timezone::{test_name}"))
+            .args(["--exact", "--nocapture", "--test-threads=1"])
+            .env("TZ", "America/Toronto")
+            .output()
+            .expect("Could not start the timezone regression test");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            output.status.success() && stdout.contains("1 passed;"),
+            "Timezone regression failed in America/Toronto.\nstdout:\n{stdout}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+
     let utc_midnight = Utc.with_ymd_and_hms(2026, 10, 1, 0, 0, 0).unwrap();
     let local_midnight = Local.with_ymd_and_hms(2026, 10, 1, 0, 0, 0).unwrap();
+    assert_ne!(utc_midnight, local_midnight.with_timezone(&Utc));
     let expected_midnight = if use_local_time {
         local_midnight.with_timezone(&Utc)
     } else {
@@ -128,20 +148,35 @@ async fn check_timezone(use_local_time: bool, backfill: bool) {
 
 #[tokio::test]
 async fn utc_cron_matching_uses_utc_calendar_fields() {
-    check_timezone(false, false).await;
+    check_timezone("utc_cron_matching_uses_utc_calendar_fields", false, false).await;
 }
 
 #[tokio::test]
 async fn local_cron_matching_uses_local_calendar_fields() {
-    check_timezone(true, false).await;
+    check_timezone(
+        "local_cron_matching_uses_local_calendar_fields",
+        true,
+        false,
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn utc_backfill_matching_uses_utc_calendar_fields() {
-    check_timezone(false, true).await;
+    check_timezone(
+        "utc_backfill_matching_uses_utc_calendar_fields",
+        false,
+        true,
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn local_backfill_matching_uses_local_calendar_fields() {
-    check_timezone(true, true).await;
+    check_timezone(
+        "local_backfill_matching_uses_local_calendar_fields",
+        true,
+        true,
+    )
+    .await;
 }
