@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_postgres_tls-v0.1.0...graphile_worker_postgres_tls-v0.1.1) - 2026-10-06
+
+### Other
+
+- release ([#483](https://github.com/leo91000/graphile_worker_rs/pull/483))
+
 ## [0.1.0](https://github.com/leo91000/graphile_worker_rs/releases/tag/graphile_worker_postgres_tls-v0.1.0) - 2026-09-29
 
 ### Fixed

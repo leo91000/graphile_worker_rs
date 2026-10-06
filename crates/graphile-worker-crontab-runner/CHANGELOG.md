@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.12](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.7.11...graphile_worker_crontab_runner-v0.7.12) - 2026-10-06
+
+### Fixed
+
+- honor the configured timezone when matching cron schedules ([#537](https://github.com/leo91000/graphile_worker_rs/pull/537))
+
 ## [0.7.11](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.7.10...graphile_worker_crontab_runner-v0.7.11) - 2026-09-29
 
 ### Fixed
