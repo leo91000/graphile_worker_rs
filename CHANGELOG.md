@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.13.7](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.6...graphile_worker-v0.13.7) - 2026-10-06
+
+### Fixed
+
+- honor the configured timezone when matching cron schedules ([#537](https://github.com/leo91000/graphile_worker_rs/pull/537))
+
+### Other
+
+- *(deps)* update rust crate leptos to 0.8.22 ([#540](https://github.com/leo91000/graphile_worker_rs/pull/540))
+- *(deps)* update dependency @iconify-json/lucide to v1.2.140 ([#539](https://github.com/leo91000/graphile_worker_rs/pull/539))
+- *(deps)* update rust crate tokio to 1.53.2 ([#538](https://github.com/leo91000/graphile_worker_rs/pull/538))
+- *(deps)* update all non-major dependencies ([#536](https://github.com/leo91000/graphile_worker_rs/pull/536))
+- *(deps)* update all non-major dependencies ([#533](https://github.com/leo91000/graphile_worker_rs/pull/533))
+
 ## [0.13.6](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.5...graphile_worker-v0.13.6) - 2026-09-29
 
 ### Fixed
