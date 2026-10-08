@@ -270,9 +270,10 @@ one JSON array payload.
 
 The worker also batches some internal persistence work when completing or
 failing jobs. Completion and failure requests are collected for a configured
-delay, then flushed together. On shutdown, the batcher drains queued requests and
-flushes them before exiting. If the batcher has already closed, the worker falls
-back to direct completion or failure persistence for that job.
+delay, then flushed together. On shutdown, the batcher closes its channel before
+draining accepted requests and flushing them. Requests arriving during that final
+flush use direct completion or failure persistence instead of entering a buffer
+that is about to be discarded.
 
 If direct fallback completion fails, the worker returns the database error from
 `Worker::run()`, including during shutdown. It emits the completion
