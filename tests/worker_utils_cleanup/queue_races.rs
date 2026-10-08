@@ -12,6 +12,18 @@ use tokio::time::{sleep, timeout};
 
 use crate::helpers::{with_test_db, TestDatabase};
 
+#[path = "race_database.rs"]
+mod race_database;
+
+fn race_utils(test_db: &TestDatabase) -> graphile_worker::worker_utils::WorkerUtils {
+    graphile_worker::worker_utils::WorkerUtils::new(
+        graphile_worker_database::Database::new(race_database::RaceDatabase(
+            test_db.database.clone(),
+        )),
+        "graphile_worker",
+    )
+}
+
 #[derive(Clone, Debug, Default)]
 struct Executions(Arc<AtomicU32>);
 
@@ -57,7 +69,7 @@ async fn wait_for_lock(test_db: &TestDatabase, query_fragment: &str) {
 
 async fn race_cleanup_and_add(cleanup_first: bool) {
     with_test_db(move |test_db| async move {
-        let utils = test_db.worker_utils();
+        let utils = race_utils(&test_db);
         utils.migrate().await.expect("failed to migrate");
         let spec = JobSpec::builder().queue_name("engine").build();
         let first = utils
@@ -185,7 +197,7 @@ async fn add_waits_for_inflight_queue_cleanup() {
 #[tokio::test]
 async fn queue_cleanup_does_not_hold_task_cache_while_waiting_for_an_add_transaction() {
     with_test_db(|test_db| async move {
-        let utils = test_db.worker_utils();
+        let utils = race_utils(&test_db);
         utils.migrate().await.expect("failed to migrate");
         let spec = JobSpec::builder().queue_name("engine").build();
         let transaction = test_db.database.begin().await.expect("add transaction");
