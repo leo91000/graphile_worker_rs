@@ -25,7 +25,10 @@ pub(super) async fn run(worker: &Worker) -> Result<(), WorkerRuntimeError> {
         let runner = runner.clone();
         let source_rx = source_rx.clone();
         worker_handles.push(runtime::spawn(async move {
-            while let Ok(source) = source_rx.recv().await {
+            let mut shutdown_signal = runner.shutdown_signal.clone();
+            while let Some(source) =
+                sources::next_job_signal(&source_rx, &mut shutdown_signal).await
+            {
                 let res = process_one_job(&runner, source).await?;
 
                 if let Some(job) = res {

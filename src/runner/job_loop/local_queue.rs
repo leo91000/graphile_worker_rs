@@ -36,7 +36,10 @@ pub(super) async fn run(
         let runner = runner.clone();
         let source_rx = source_rx.clone();
         worker_handles.push(runtime::spawn(async move {
-            while let Ok(source) = source_rx.recv().await {
+            let mut shutdown_signal = runner.shutdown_signal.clone();
+            while let Some(source) =
+                sources::next_job_signal(&source_rx, &mut shutdown_signal).await
+            {
                 sources::process_local_queue_source(&runner, &local_queues, index, source).await?;
             }
 
