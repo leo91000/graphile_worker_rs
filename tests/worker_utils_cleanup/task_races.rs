@@ -7,6 +7,7 @@ use graphile_worker::{
     worker_utils::types::CleanupTask, IntoTaskHandlerResult, JobSpec, TaskHandler, Worker,
     WorkerContext, WorkerUtils,
 };
+use graphile_worker_task_details::SharedTaskDetails;
 use indoc::formatdoc;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -15,11 +16,7 @@ use tokio::time::{sleep, timeout};
 
 use crate::helpers::{with_test_db, TestDatabase};
 
-// queue_races.rs keeps its load of the fixture private, so this module loads
-// the file again.
-#[allow(clippy::duplicate_mod)]
-#[path = "race_database.rs"]
-mod race_database;
+use super::race_database;
 
 const TASK_GC_JOB: &str = "task_gc_job";
 const OTHER_TASK: &str = "other_task";
@@ -52,7 +49,7 @@ impl TaskHandler for TaskGcJob {
 
 fn race_utils(test_db: &TestDatabase) -> WorkerUtils {
     WorkerUtils::new(
-        graphile_worker_database::Database::new(race_database::RaceDatabase(
+        graphile_worker_database::Database::new(race_database::RaceDatabase::new(
             test_db.database.clone(),
         )),
         "graphile_worker",
@@ -471,6 +468,212 @@ async fn task_cleanup_does_not_hold_task_cache_while_waiting_for_an_add_transact
         let jobs = test_db.get_jobs().await;
         assert_eq!(jobs.len(), 2);
         assert!(jobs.iter().all(|job| job.task_identifier == TASK_GC_JOB));
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn task_cleanup_preserves_cache_registrations_made_while_waiting() {
+    with_test_db(|test_db| async move {
+        let details = SharedTaskDetails::default();
+        let utils = race_utils(&test_db).with_task_details(details.clone());
+        utils.migrate().await.unwrap();
+        let mut writer = open_task_writer(&test_db).await;
+        let registered_id: i32 = sqlx::query_scalar(
+            "SELECT id FROM graphile_worker._private_tasks WHERE identifier = $1",
+        )
+        .bind(OTHER_TASK)
+        .fetch_one(&mut *writer)
+        .await
+        .unwrap();
+
+        let cleanup = spawn_task_cleanup(&utils);
+        assert!(wait_for_ungranted_lock(&test_db, "ShareRowExclusiveLock", &cleanup).await);
+        // Registration changes the shared cache after cleanup took its keep-list
+        // snapshot. The job in the writer transaction protects the database row.
+        details.insert(registered_id, OTHER_TASK.into()).await;
+        writer.commit().await.unwrap();
+        timeout(Duration::from_secs(5), cleanup)
+            .await
+            .unwrap()
+            .unwrap()
+            .0
+            .unwrap();
+
+        assert_eq!(
+            details.get(&registered_id).await.as_deref(),
+            Some(OTHER_TASK),
+            "publishing a stale refresh must not erase a concurrent registration"
+        );
+        assert_eq!(task_id(&test_db, OTHER_TASK).await, Some(registered_id));
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn task_cleanup_preserves_registrations_made_during_refresh() {
+    with_test_db(|test_db| async move {
+        let gate = Arc::new(race_database::RefreshGate::default());
+        let details = SharedTaskDetails::default();
+        let utils = WorkerUtils::new(
+            graphile_worker_database::Database::new(
+                race_database::RaceDatabase::new(test_db.database.clone())
+                    .with_refresh_gate(gate.clone()),
+            ),
+            "graphile_worker",
+        )
+        .with_task_details(details.clone());
+        utils.migrate().await.unwrap();
+        let initial = utils
+            .add_raw_job(TASK_GC_JOB, json!({}), JobSpec::default())
+            .await
+            .unwrap();
+        let arriving = utils
+            .add_raw_job(ARRIVING_TASK, json!({}), JobSpec::default())
+            .await
+            .unwrap();
+        details.insert(*initial.task_id(), TASK_GC_JOB.into()).await;
+
+        let cleanup = spawn_task_cleanup(&utils);
+        timeout(Duration::from_secs(5), gate.started.notified())
+            .await
+            .unwrap();
+        details
+            .insert(*arriving.task_id(), ARRIVING_TASK.into())
+            .await;
+        gate.finish.notify_one();
+        timeout(Duration::from_secs(5), cleanup)
+            .await
+            .unwrap()
+            .unwrap()
+            .0
+            .unwrap();
+
+        assert_eq!(
+            details.get(initial.task_id()).await.as_deref(),
+            Some(TASK_GC_JOB)
+        );
+        assert_eq!(
+            details.get(arriving.task_id()).await.as_deref(),
+            Some(ARRIVING_TASK)
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn task_cleanup_finishes_while_typed_add_waits_for_a_job_row() {
+    with_test_db(|test_db| async move {
+        let details = SharedTaskDetails::default();
+        let utils = race_utils(&test_db).with_task_details(details.clone());
+        utils.migrate().await.unwrap();
+        let spec = JobSpec {
+            job_key: Some("task_cache_row_wait".into()),
+            ..Default::default()
+        };
+        let job = utils
+            .add_job(TaskGcJob { pause: false }, spec.clone())
+            .await
+            .unwrap();
+        details.insert(*job.task_id(), TASK_GC_JOB.into()).await;
+        let mut writer = test_db.test_pool.begin().await.unwrap();
+        sqlx::query("SELECT id FROM graphile_worker._private_jobs WHERE id = $1 FOR UPDATE")
+            .bind(job.id())
+            .execute(&mut *writer)
+            .await
+            .unwrap();
+
+        let add_utils = utils.clone();
+        let add = tokio::task::spawn_local(async move {
+            add_utils
+                .add_jobs(&[(TaskGcJob { pause: false }, &spec)])
+                .await
+        });
+        timeout(Duration::from_secs(5), async {
+            loop {
+                let waiting: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM pg_stat_activity
+                     WHERE datname = current_database() AND wait_event_type = 'Lock'
+                     AND position('add_jobs' in query) > 0)",
+                )
+                .fetch_one(&test_db.test_pool)
+                .await
+                .unwrap();
+                if waiting {
+                    break;
+                }
+                sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+
+        let mut cleanup = spawn_task_cleanup(&utils);
+        let finished_before_unlock = match timeout(Duration::from_secs(2), &mut cleanup).await {
+            Ok(outcome) => {
+                outcome.unwrap().0.unwrap();
+                true
+            }
+            Err(_) => false,
+        };
+        // Release the blocked query before asserting, including on the failing
+        // implementation, so the regression never leaves a deadlocked task.
+        writer.rollback().await.unwrap();
+        timeout(Duration::from_secs(5), add)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        if !finished_before_unlock {
+            timeout(Duration::from_secs(5), cleanup)
+                .await
+                .unwrap()
+                .unwrap()
+                .0
+                .unwrap();
+        }
+        assert!(
+            finished_before_unlock,
+            "a typed add waiting on a database row must not hold the task cache and block cleanup"
+        );
+        assert_eq!(
+            details.get(job.task_id()).await.as_deref(),
+            Some(TASK_GC_JOB)
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn cancelling_task_cleanup_releases_its_pending_lock() {
+    with_test_db(|test_db| async move {
+        // Use the production timeout rather than the race adapter's extended one.
+        let utils = test_db.worker_utils();
+        utils.migrate().await.unwrap();
+        seed_unused_task(&utils).await;
+        let writer = open_task_writer(&test_db).await;
+        let cleanup = spawn_task_cleanup(&utils);
+        assert!(wait_for_ungranted_lock(&test_db, "ShareRowExclusiveLock", &cleanup).await);
+        cleanup.abort();
+        assert!(cleanup.await.unwrap_err().is_cancelled());
+
+        let arriving = timeout(
+            Duration::from_secs(3),
+            utils.add_raw_job(ARRIVING_TASK, json!({}), JobSpec::default()),
+        )
+        .await
+        .expect("a cancelled cleanup must not leave later adds blocked")
+        .unwrap();
+        assert!(task_reference(&test_db, *arriving.id()).await.1);
+        assert!(
+            task_id(&test_db, TASK_GC_JOB).await.is_some(),
+            "a cancelled lock wait must not delete task rows"
+        );
+        writer.commit().await.unwrap();
+        utils
+            .cleanup(&[CleanupTask::GcTaskIdentifiers])
+            .await
+            .unwrap();
     })
     .await;
 }

@@ -93,6 +93,9 @@ pub struct WorkerOptions {
     /// List of job flags that this worker will refuse to process
     forbidden_flags: Vec<String>,
 
+    /// Positive routing labels: any match is required when this list is nonempty
+    accepted_flags: Vec<String>,
+
     /// List of crontab entries for scheduled jobs
     crontabs: Option<Vec<Crontab>>,
 

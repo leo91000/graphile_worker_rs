@@ -63,11 +63,26 @@ pub(super) async fn cleanup(
         // refreshed details.
         let task_names = utils.task_details.task_names().await;
         execute_cleanup_task(utils, task, &task_names).await?;
-        let refreshed = get_tasks_details(&utils.database, &utils.schema, task_names).await?;
-        *utils.task_details.write().await = refreshed;
+        refresh_task_details(utils).await?;
     }
 
     Ok(())
+}
+
+async fn refresh_task_details(utils: &WorkerUtils) -> Result<(), GraphileWorkerError> {
+    loop {
+        let snapshot = utils.task_details.read().await.clone();
+        let refreshed =
+            get_tasks_details(&utils.database, &utils.schema, snapshot.task_names()).await?;
+        let mut guard = utils.task_details.write().await;
+        if *guard != snapshot {
+            // A registration changed the cache during database I/O. Retry from
+            // its latest contents rather than replacing it with stale details.
+            continue;
+        }
+        *guard = refreshed;
+        return Ok(());
+    }
 }
 
 async fn execute_cleanup_task(

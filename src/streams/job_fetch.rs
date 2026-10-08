@@ -5,7 +5,8 @@ use graphile_worker_shutdown_signal::ShutdownSignal;
 use tracing::error;
 
 use crate::Job;
-use graphile_worker_queries::{get_job::get_job, task_identifiers::SharedTaskDetails};
+use graphile_worker_queries::flag_filter::JobFlagFilter;
+use graphile_worker_queries::{get_job::get_job_with_filter, task_identifiers::SharedTaskDetails};
 
 /// Creates a stream that yields jobs ready for processing.
 ///
@@ -19,7 +20,7 @@ use graphile_worker_queries::{get_job::get_job, task_identifiers::SharedTaskDeta
 ///
 /// # Arguments
 ///
-/// * `pg_pool` - PostgreSQL connection pool
+/// * `database` - Database connection handle
 /// * `shutdown_signal` - Signal that completes when the worker should shut down
 /// * `task_details` - Shared mapping of task IDs to their string identifiers
 /// * `schema` - Database schema where Graphile Worker tables are located.
@@ -39,22 +40,46 @@ pub fn job_stream(
     forbidden_flags: Vec<String>,
     use_local_time: bool,
 ) -> impl Stream<Item = Job> {
+    job_stream_with_filter(
+        database,
+        shutdown_signal,
+        task_details,
+        schema,
+        worker_id,
+        JobFlagFilter::owned(forbidden_flags, Vec::new()),
+        use_local_time,
+    )
+}
+
+/// Streams registered jobs satisfying a worker's positive and negative filters.
+///
+/// A nonempty accepted set requires any matching flag; forbidden flags veto.
+/// The filter is applied by PostgreSQL before jobs are claimed.
+pub fn job_stream_with_filter<'a>(
+    database: Database,
+    shutdown_signal: ShutdownSignal,
+    task_details: SharedTaskDetails,
+    schema: Schema,
+    worker_id: String,
+    filter: JobFlagFilter<'a>,
+    use_local_time: bool,
+) -> impl Stream<Item = Job> + 'a {
     futures::stream::unfold((), move |()| {
         let database = database.clone();
         let task_details = task_details.clone();
         let schema = schema.clone();
         let worker_id = worker_id.clone();
-        let forbidden_flags = forbidden_flags.clone();
+        let filter = filter.clone();
 
         let job_fut = async move {
             let now = use_local_time.then(Utc::now);
             let task_details_guard = task_details.read().await;
-            let job = get_job(
+            let job = get_job_with_filter(
                 &database,
                 &task_details_guard,
                 &schema,
                 &worker_id,
-                &forbidden_flags,
+                filter,
                 now,
             )
             .await

@@ -10,6 +10,7 @@ use graphile_worker_shutdown_signal::ShutdownSignal;
 use thiserror::Error;
 use tracing::warn;
 
+use graphile_worker_queries::flag_filter::JobFlagFilter;
 use graphile_worker_queries::task_identifiers::SharedTaskDetails;
 
 mod cache;
@@ -76,13 +77,21 @@ impl LocalQueue {
     /// The configuration must be valid for the polling interval. Call `release`
     /// to await cleanup and return cached claims before discarding the queue.
     pub fn new(params: LocalQueueParams) -> Self {
+        Self::new_with_filter(params, JobFlagFilter::default())
+    }
+
+    /// Starts worker-owned prefetch with an immutable claim-time filter.
+    pub(crate) fn new_with_filter(
+        params: LocalQueueParams,
+        filter: JobFlagFilter<'static>,
+    ) -> Self {
         params
             .config
             .validate(params.poll_interval)
             .expect("invalid local queue config");
 
         let shutdown_signal = params.shutdown_signal.clone();
-        let queue: LocalQueue = params.into();
+        let queue: LocalQueue = LocalQueueState::new_with_filter(params, filter).into();
         queue.0.run_complete.store(false, Ordering::Release);
 
         let queue_clone = queue.clone();

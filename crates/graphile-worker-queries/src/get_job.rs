@@ -3,11 +3,10 @@ use graphile_worker_database::{DbExecutorArg, DbParams, DbValue, Schema};
 use indoc::formatdoc;
 
 use crate::errors::Result;
+use crate::flag_filter::JobFlagFilter;
 use graphile_worker_job::Job;
 
-use super::job_query_helpers::{
-    get_flag_clause, get_now_clause, get_queue_clause, get_update_queue_clause,
-};
+use super::job_query_helpers::{get_now_clause, get_queue_clause, get_update_queue_clause};
 use super::task_identifiers::TaskDetails;
 
 /// Claims the next eligible job, incrementing its attempts and locking its queue.
@@ -15,38 +14,50 @@ use super::task_identifiers::TaskDetails;
 /// Only registered tasks and jobs without forbidden flags are considered.
 /// An explicit `now` uses local time; otherwise PostgreSQL supplies the clock.
 pub async fn get_job(
-    mut executor: impl DbExecutorArg,
+    executor: impl DbExecutorArg,
     task_details: &TaskDetails,
     schema: impl Into<Schema>,
     worker_id: &str,
     flags_to_skip: &[String],
     now: Option<DateTime<Utc>>,
 ) -> Result<Option<Job>> {
+    get_job_with_filter(
+        executor,
+        task_details,
+        schema,
+        worker_id,
+        JobFlagFilter::new(flags_to_skip, &[]),
+        now,
+    )
+    .await
+}
+
+/// Claims the next registered job satisfying the flag filter.
+///
+/// Filtering happens before candidate locking and attempts are incremented.
+/// A nonempty accepted set excludes jobs with absent or empty flags.
+pub async fn get_job_with_filter(
+    mut executor: impl DbExecutorArg,
+    task_details: &TaskDetails,
+    schema: impl Into<Schema>,
+    worker_id: &str,
+    filter: JobFlagFilter<'_>,
+    now: Option<DateTime<Utc>>,
+) -> Result<Option<Job>> {
     let schema = schema.into();
-    let has_flags = !flags_to_skip.is_empty();
     let has_now = now.is_some();
+    let now_param = has_now.then(|| 3 + filter.parameter_count());
 
-    let mut next_param: u8 = 3;
-    let flag_param = if has_flags {
-        let p = next_param;
-        next_param += 1;
-        Some(p)
-    } else {
-        None
-    };
-    let now_param = if has_now { Some(next_param) } else { None };
+    let sql =
+        super::fetch_query_cache::fetch_query(&schema, filter.shape(), has_now, false, || {
+            let flag_clause = filter.clause(3);
+            let jobs = schema.private_table("jobs");
+            let queue_clause = get_queue_clause(&schema);
+            let update_queue_clause = get_update_queue_clause(&schema, 1, now_param);
+            let now_clause = get_now_clause(now_param);
 
-    let sql = super::fetch_query_cache::fetch_query(&schema, has_flags, has_now, false, || {
-        let flag_clause = flag_param
-            .map(|p| get_flag_clause(flags_to_skip, p))
-            .unwrap_or_default();
-        let jobs = schema.private_table("jobs");
-        let queue_clause = get_queue_clause(&schema);
-        let update_queue_clause = get_update_queue_clause(&schema, 1, now_param);
-        let now_clause = get_now_clause(now_param);
-
-        formatdoc!(
-            r#"
+            formatdoc!(
+                r#"
             with j as (
                 select jobs.job_queue_id, jobs.priority, jobs.run_at, jobs.id
                     from {jobs} as jobs
@@ -69,16 +80,14 @@ pub async fn get_job(
                         where jobs.id = j.id
                         returning *
         "#
-        )
-    });
+            )
+        });
 
     let mut params = vec![
         DbValue::Text(worker_id.to_string()),
         DbValue::I32Array(task_details.task_ids().to_vec()),
     ];
-    if has_flags {
-        params.push(DbValue::TextArray(flags_to_skip.to_vec()));
-    }
+    filter.bind(&mut params);
     if let Some(ts) = now {
         params.push(DbValue::TimestampTz(ts));
     }

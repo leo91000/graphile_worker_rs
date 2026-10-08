@@ -9,6 +9,7 @@ use super::super::{Worker, WorkerRunner};
 use crate::local_queue::{LocalQueue, LocalQueueParams, LocalQueueSignalReceiver};
 use crate::streams::job_signal::JobSignalSource;
 use crate::Job;
+use crate::JobFlagFilter;
 
 pub(in crate::runner) fn create_local_queues(
     worker: &Worker,
@@ -18,19 +19,25 @@ pub(in crate::runner) fn create_local_queues(
     let queue_count = config.queue_count.min(worker.concurrency);
     let queues = (0..queue_count)
         .map(|_| {
-            LocalQueue::new(LocalQueueParams {
-                config: config.clone(),
-                database: worker.database.clone(),
-                schema: worker.schema.clone(),
-                worker_id: worker.worker_id.clone(),
-                task_details: worker.task_details.clone(),
-                poll_interval: worker.poll_interval,
-                continuous: true,
-                shutdown_signal: Some(worker.shutdown_signal.clone()),
-                hooks: worker.hooks.clone(),
-                job_signal_sender: tx.clone(),
-                use_local_time: worker.use_local_time,
-            })
+            LocalQueue::new_with_filter(
+                LocalQueueParams {
+                    config: config.clone(),
+                    database: worker.database.clone(),
+                    schema: worker.schema.clone(),
+                    worker_id: worker.worker_id.clone(),
+                    task_details: worker.task_details.clone(),
+                    poll_interval: worker.poll_interval,
+                    continuous: true,
+                    shutdown_signal: Some(worker.shutdown_signal.clone()),
+                    hooks: worker.hooks.clone(),
+                    job_signal_sender: tx.clone(),
+                    use_local_time: worker.use_local_time,
+                },
+                JobFlagFilter::owned(
+                    worker.forbidden_flags.clone(),
+                    worker.accepted_flags.clone(),
+                ),
+            )
         })
         .collect();
 
@@ -51,7 +58,7 @@ pub(in crate::runner) async fn process_local_queue_source(
 
     let mut source = source;
     loop {
-        let job = get_job_from_local_queues(worker, local_queues, start_index).await;
+        let job = get_job_from_local_queues(local_queues, start_index).await;
 
         let Some(job) = job else {
             break;
@@ -76,23 +83,10 @@ pub(in crate::runner) async fn process_local_queue_source(
     Ok(())
 }
 
-async fn get_job_from_local_queues(
-    worker: &WorkerRunner,
-    local_queues: &[LocalQueue],
-    start_index: usize,
-) -> Option<Job> {
-    if !worker.forbidden_flags.is_empty() {
-        return local_queues[start_index % local_queues.len()]
-            .get_job(&worker.forbidden_flags)
-            .await;
-    }
-
+async fn get_job_from_local_queues(local_queues: &[LocalQueue], start_index: usize) -> Option<Job> {
     for offset in 0..local_queues.len() {
         let queue_index = (start_index + offset) % local_queues.len();
-        if let Some(job) = local_queues[queue_index]
-            .get_job(&worker.forbidden_flags)
-            .await
-        {
+        if let Some(job) = local_queues[queue_index].get_job(&[]).await {
             return Some(job);
         }
     }

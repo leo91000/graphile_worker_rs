@@ -5,7 +5,7 @@ use graphile_worker_database::Schema;
 // SQL text only: never cache task IDs, flags, timestamps, results or connections.
 // Bound each runtime thread's cache for applications using tenant schemas.
 const CAPACITY: usize = 128;
-type Key = (Schema, bool, bool, bool);
+type Key = (Schema, (bool, bool), bool, bool);
 thread_local! {
     static QUERIES: RefCell<HashMap<Key, Arc<str>>> = RefCell::default();
 }
@@ -16,7 +16,7 @@ thread_local! {
 /// by applications that visit many tenant schemas.
 pub(crate) fn fetch_query(
     schema: &Schema,
-    flags: bool,
+    flags: (bool, bool),
     local_time: bool,
     batch: bool,
     construct: impl FnOnce() -> String,
@@ -44,10 +44,10 @@ mod tests {
     #[test]
     fn caches_each_shape_and_schema_without_retaining_unbounded_tenants() {
         for schema in [Schema::default(), Schema::new("quoted\"schema")] {
-            for flags in [false, true] {
+            for flags in [(false, false), (true, false), (false, true), (true, true)] {
                 for local_time in [false, true] {
                     for batch in [false, true] {
-                        let expected = format!("{schema}/{flags}/{local_time}/{batch}");
+                        let expected = format!("{schema}/{flags:?}/{local_time}/{batch}");
                         let first =
                             fetch_query(&schema, flags, local_time, batch, || expected.clone());
                         let second =
@@ -61,7 +61,7 @@ mod tests {
         for tenant in 0..CAPACITY * 2 {
             fetch_query(
                 &Schema::new(format!("tenant_{tenant}")),
-                false,
+                (false, false),
                 false,
                 false,
                 || tenant.to_string(),

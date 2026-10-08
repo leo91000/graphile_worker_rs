@@ -91,8 +91,69 @@ where
     T: Send + 'static,
     P: BatchProcessor<T>,
 {
+    // Seal acceptance before draining. Sends during the final database flush
+    // must use direct fallback rather than enter a buffer that will be dropped.
+    rx.close();
     while let Ok(item) = rx.try_recv() {
         batch.push(item);
     }
     processor.flush(batch).await;
+}
+
+#[cfg(all(test, feature = "runtime-tokio"))]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use super::*;
+
+    struct GatedProcessor {
+        started: Arc<runtime::Notify>,
+        finish: Arc<runtime::Notify>,
+        flushed: Arc<Mutex<Vec<u32>>>,
+    }
+
+    impl BatchProcessor<u32> for GatedProcessor {
+        fn flush<'a>(&'a self, batch: &'a [u32]) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+            Box::pin(async move {
+                self.flushed.lock().unwrap().extend_from_slice(batch);
+                self.started.notify_one();
+                self.finish.notified().await;
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn shutdown_rejects_late_requests_before_flushing_buffered_work() {
+        let (tx, rx) = runtime::channel(8);
+        tx.send(1u32).await.unwrap();
+        let started = Arc::new(runtime::Notify::new());
+        let finish = Arc::new(runtime::Notify::new());
+        let flushed = Arc::new(Mutex::new(Vec::new()));
+        let processor = GatedProcessor {
+            started: started.clone(),
+            finish: finish.clone(),
+            flushed: flushed.clone(),
+        };
+        let run = runtime::spawn(run_batcher_task(
+            rx,
+            Duration::from_secs(60),
+            processor,
+            futures::future::ready(()).boxed().shared(),
+        ));
+        tokio::time::timeout(Duration::from_secs(5), started.notified())
+            .await
+            .unwrap();
+        // The shutdown drain has finished, but its database flush is still pending.
+        let late_request = tx.send(2).await;
+        finish.notify_one();
+        tokio::time::timeout(Duration::from_secs(5), run)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(*flushed.lock().unwrap(), [1]);
+        assert!(
+            late_request.is_err(),
+            "a late send must use direct fallback, not disappear after the final drain"
+        );
+    }
 }

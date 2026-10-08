@@ -6,6 +6,8 @@ mod delete_permafailed;
 mod job_queues;
 #[path = "worker_utils_cleanup/queue_races.rs"]
 mod queue_races;
+#[path = "worker_utils_cleanup/race_database.rs"]
+mod race_database;
 #[path = "worker_utils_cleanup/task_identifiers.rs"]
 mod task_identifiers;
 #[path = "worker_utils_cleanup/task_races.rs"]

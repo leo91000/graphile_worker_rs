@@ -32,7 +32,9 @@ pub(crate) async fn add_jobs<T: TaskHandler + Clone>(
 
     let (jobs_to_add, job_key_preserve_run_at) = prepare_batch_jobs(utils, job_inputs).await?;
 
-    let task_details = utils.task_details.read().await;
+    // A row-lock wait in insertion must not hold the cache read guard: cleanup
+    // publishes refreshed details through a writer, which would block later adds.
+    let task_details = utils.task_details.read().await.clone();
 
     let added_jobs = insert_jobs(
         &mut executor,

@@ -10,6 +10,7 @@ use tracing::{trace, warn};
 use super::shared::{run_batcher_task, BatchProcessor};
 use super::BATCHER_CHANNEL_CAPACITY;
 use crate::background_tasks::TaskSlot;
+use crate::errors::Result;
 use crate::Job;
 
 mod persistence;
@@ -62,14 +63,18 @@ impl CompletionBatcher {
         }
     }
 
-    pub async fn complete(&self, req: CompletionRequest) {
+    /// Accepts a request for batching, or persists it directly after closure.
+    ///
+    /// An open channel acknowledges enqueueing. Direct fallback errors are
+    /// returned to the caller; the success hook requires persisted completion.
+    pub async fn complete(&self, req: CompletionRequest) -> Result<()> {
         if let Err(e) = self.tx.send(req).await {
             warn!("Batcher closed, completing job directly");
             let req = e.0;
-            if complete_job_direct(&req, &self.database, &self.schema, &self.worker_id).await {
-                emit_completion_hook(&req, &self.worker_id, &self.hooks).await;
-            }
+            complete_job_direct(&req, &self.database, &self.schema, &self.worker_id).await?;
+            emit_completion_hook(&req, &self.worker_id, &self.hooks).await;
         }
+        Ok(())
     }
 
     pub async fn await_shutdown(&self) {

@@ -25,6 +25,7 @@
 
 - [Overview](configuration/index.md)
 - [Worker Options](configuration/worker-options.md)
+- [Job Flag Routing](configuration/job-flags.md)
 - [Runtime, TLS, and Drivers](configuration/runtime-drivers.md)
 - [Shutdown](configuration/shutdown.md)
 - [Application State and Extensions](configuration/app-state.md)
