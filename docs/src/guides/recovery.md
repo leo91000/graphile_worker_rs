@@ -71,6 +71,9 @@ recovery, except `.enabled(false)`, which explicitly disables it again.
 An enabled worker registers itself in the private workers table and refreshes
 `last_heartbeat_at` at the configured `heartbeat_interval`.
 
+If a heartbeat fails, the worker logs the error and tries again at the next
+interval. The heartbeat loop continues until shutdown.
+
 You can inspect registered workers with `WorkerUtils::list_active_workers`.
 The stale state is calculated from the threshold you pass to that method:
 

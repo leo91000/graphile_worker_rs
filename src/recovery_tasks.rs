@@ -61,11 +61,7 @@ pub(crate) fn spawn_recovery_tasks(worker: &Worker) -> RecoveryTasks {
 
     let worker = Arc::new(worker.clone_for_recovery());
     let heartbeat_worker = worker.clone();
-    let heartbeat_handle = runtime::spawn(async move {
-        if let Err(error) = run_heartbeat_loop(heartbeat_worker).await {
-            error!(error = %error, "Worker heartbeat loop failed");
-        }
-    });
+    let heartbeat_handle = runtime::spawn(run_heartbeat_loop(heartbeat_worker));
 
     let sweep_worker = worker;
     let sweep_handle = runtime::spawn(async move {
@@ -81,7 +77,7 @@ pub(crate) fn spawn_recovery_tasks(worker: &Worker) -> RecoveryTasks {
     RecoveryTasks { tasks }
 }
 
-async fn run_heartbeat_loop(worker: Arc<Worker>) -> Result<(), crate::errors::GraphileWorkerError> {
+async fn run_heartbeat_loop(worker: Arc<Worker>) {
     let mut interval = runtime::interval(worker.recovery_config.heartbeat_interval);
     let mut shutdown_signal = worker.shutdown_signal.clone();
 
@@ -89,18 +85,22 @@ async fn run_heartbeat_loop(worker: Arc<Worker>) -> Result<(), crate::errors::Gr
         futures::select_biased! {
             _ = (&mut shutdown_signal).fuse() => break,
             _ = interval.tick().fuse() => {
-                worker_heartbeat(
+                if let Err(error) = worker_heartbeat(
                     &worker.database,
                     &worker.schema,
                     &worker.worker_id,
                     worker_recovery_metadata(),
                 )
-                .await?;
+                .await {
+                    warn!(
+                        worker_id = %worker.worker_id,
+                        error = %error,
+                        "Worker heartbeat failed; will retry at the next interval"
+                    );
+                }
             }
         }
     }
-
-    Ok(())
 }
 
 async fn run_sweeper_loop(worker: Arc<Worker>) -> Result<(), crate::errors::GraphileWorkerError> {
