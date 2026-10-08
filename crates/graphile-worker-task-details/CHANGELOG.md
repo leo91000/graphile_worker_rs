@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_details-v0.1.8...graphile_worker_task_details-v0.2.0) - 2026-10-08
+
+### Fixed
+
+- [**breaking**] make task cleanup safe against concurrent inserts and cache updates ([#554](https://github.com/leo91000/graphile_worker_rs/pull/554))
+
 ## [0.1.8](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_details-v0.1.7...graphile_worker_task_details-v0.1.8) - 2026-10-06
 
 ### Other
