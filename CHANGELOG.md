@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.9](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.8...graphile_worker-v0.13.9) - 2026-10-08
+
+### Fixed
+
+- drain job slots and preserve recovery through shutdown ([#549](https://github.com/leo91000/graphile_worker_rs/pull/549))
+- prevent queue cleanup from stranding newly added jobs ([#548](https://github.com/leo91000/graphile_worker_rs/pull/548))
+
 ## [0.13.8](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.7...graphile_worker-v0.13.8) - 2026-10-08
 
 ### Fixed
