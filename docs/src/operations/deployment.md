@@ -263,8 +263,10 @@ let worker = WorkerOptions::default()
 ```
 
 `size` applies per local queue, so total local capacity is
-`size * queue_count`. Workers configured with `forbidden_flags` bypass the local
-queue and fetch jobs directly from the database. Benchmark realistic jobs before
+`size * queue_count`. Workers configured with accepted or forbidden flags bypass
+the local queue and claim jobs directly from the database. See
+[Job Flag Routing](../configuration/job-flags.md) for filtering semantics.
+Benchmark realistic jobs before
 turning this on for all production workers; the best settings depend on
 PostgreSQL latency, pool size, worker concurrency, job duration, and the number
 of replicas.

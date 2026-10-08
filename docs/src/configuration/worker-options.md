@@ -143,10 +143,11 @@ Important job methods:
 - `define_job::<T>()` registers a `TaskHandler`.
 - `define_batch_job::<T>()` registers a `BatchTaskHandler`.
 - `define_jobs(iterable)` registers reusable `JobDefinition` values.
+- `add_accepted_flag(flag)` requires any matching label when the accepted set is nonempty.
 - `add_forbidden_flag(flag)` makes this worker skip jobs with that flag.
 
-When `add_forbidden_flag` is used, local queue configuration is disabled during
-initialization.
+When accepted or forbidden flags are configured, local queue configuration is
+disabled during initialization. Both filters may coexist; forbidden flags veto.
 
 ## Cron schedules
 
