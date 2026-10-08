@@ -12,6 +12,7 @@ use graphile_worker_lifecycle_hooks::{HookRegistry, LocalQueueMode};
 use graphile_worker_runtime as runtime;
 
 use crate::background_tasks::TaskSlot;
+use graphile_worker_queries::flag_filter::JobFlagFilter;
 use graphile_worker_queries::task_identifiers::SharedTaskDetails;
 
 use super::claims::{ClaimCoordinator, PendingReturns};
@@ -64,11 +65,19 @@ pub(super) struct LocalQueueState {
     pub(super) continuous: bool,
     pub(super) hooks: Arc<HookRegistry>,
     pub(super) use_local_time: bool,
+    pub(super) flag_filter: JobFlagFilter<'static>,
 }
 
 impl LocalQueueState {
     /// Initializes queue coordination without starting background tasks.
     pub(super) fn new(params: LocalQueueParams) -> Self {
+        Self::new_with_filter(params, JobFlagFilter::default())
+    }
+
+    pub(super) fn new_with_filter(
+        params: LocalQueueParams,
+        flag_filter: JobFlagFilter<'static>,
+    ) -> Self {
         Self {
             mode: runtime::RwLock::new(LocalQueueMode::Starting),
             job_queue: runtime::Mutex::new(VecDeque::new()),
@@ -96,6 +105,7 @@ impl LocalQueueState {
             continuous: params.continuous,
             hooks: params.hooks,
             use_local_time: params.use_local_time,
+            flag_filter,
         }
     }
 }

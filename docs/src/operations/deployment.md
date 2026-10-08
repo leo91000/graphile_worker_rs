@@ -263,8 +263,8 @@ let worker = WorkerOptions::default()
 ```
 
 `size` applies per local queue, so total local capacity is
-`size * queue_count`. Workers configured with accepted or forbidden flags bypass
-the local queue and claim jobs directly from the database. See
+`size * queue_count`. Workers configured with accepted or forbidden flags retain
+batching; the filters are applied before each batch is claimed. See
 [Job Flag Routing](../configuration/job-flags.md) for filtering semantics.
 Benchmark realistic jobs before
 turning this on for all production workers; the best settings depend on

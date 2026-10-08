@@ -22,6 +22,11 @@ impl<'a> JobFlagFilter<'a> {
         }
     }
 
+    /// Borrows this filter's labels without cloning an owned configuration.
+    pub fn as_borrowed(&self) -> JobFlagFilter<'_> {
+        JobFlagFilter::new(&self.forbidden, &self.accepted)
+    }
+
     pub(crate) fn shape(&self) -> (bool, bool) {
         (!self.forbidden.is_empty(), !self.accepted.is_empty())
     }

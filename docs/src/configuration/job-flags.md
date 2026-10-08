@@ -41,10 +41,12 @@ Filtering happens before jobs are claimed. A rejected job stays queued with its
 attempt count and ownership unchanged. Jobs without an eligible worker remain
 queued until a suitable worker is available.
 
-Workers with either accepted or forbidden flags use direct database claims,
-even when `.local_queue(...)` is configured. Workers without filters retain
-LocalQueue batching. Both continuous execution and `run_once` apply the same
-rules, including follow-up jobs in named queues.
+When `.local_queue(...)` is configured, continuous workers retain batching with
+either accepted or forbidden flags. Each local queue applies the worker's filters
+in PostgreSQL before claiming a batch; rejected jobs never enter the cache.
+Workers without local queue configuration use direct claims. Both continuous
+execution and `run_once` apply the same rules, including follow-up jobs in named
+queues. TTL expiry and shutdown return unused prefetched jobs as usual.
 
 The existing `get_job`, `batch_get_jobs`, and `job_stream` APIs retain their
 forbidden-only signatures. Direct callers needing positive filtering can use

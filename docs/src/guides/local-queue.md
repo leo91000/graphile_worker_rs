@@ -167,13 +167,11 @@ process if handlers are slower than the local batch drain rate.
 
 ## Job Flag Filters
 
-Workers configured with accepted or forbidden flags do not use the local queue
-cache. During initialization, either nonempty list disables the local queue
-configuration for that worker.
-
-Eligible jobs are claimed directly from PostgreSQL: any accepted label matches,
-and forbidden labels veto. Filtering cached jobs would happen after they were
-already claimed. Unfiltered workers retain batching. See
+Workers configured with accepted or forbidden flags retain local queue batching.
+Each queue stores the worker's filter and applies it in PostgreSQL before the
+batch limit and claim updates. Any accepted label matches, and forbidden labels
+veto. Rejected jobs never enter the cache or consume attempts, and named queues
+remain available unless an eligible job claims them. See
 [Job Flag Routing](../configuration/job-flags.md) for empty sets and untagged jobs.
 
 A batch claims at most one job from each named queue. Other jobs in that queue

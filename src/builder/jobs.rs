@@ -8,7 +8,7 @@ impl WorkerOptions {
     /// With at least one accepted flag, a job must carry any accepted flag.
     /// Jobs without a matching label are excluded; forbidden flags always veto.
     /// With no accepted flags, positive filtering is disabled. This selects
-    /// labels, not worker capabilities. Filtered workers use direct claims.
+    /// labels, not worker capabilities. LocalQueue applies the same filter to batches.
     pub fn add_accepted_flag(mut self, flag: &str) -> Self {
         self.accepted_flags.push(flag.into());
         self

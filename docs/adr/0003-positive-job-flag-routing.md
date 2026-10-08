@@ -16,11 +16,13 @@ existing workers. A nonempty set excludes untagged jobs, including both absent
 and empty flags. Exclusions always win when a job matches both sets; flags keep
 their existing exact-string matching semantics.
 
-Workers with either filter use direct database claims, extending the existing
-forbidden-flags policy. Unfiltered workers retain LocalQueue batching. We chose
-this over extending filtered prefetch in the same change because jobs must be
-filtered before they are claimed, and testing a popped cached job would be too
-late to preserve attempts and ownership for rejected jobs.
+Workers retain LocalQueue batching when configured, including with either flag
+filter. Each worker-owned local queue stores an immutable filter and applies it
+in the batch query before ordering, limits, attempts, or ownership changes.
+This replaces the earlier direct-claim fallback so routing does not discard the
+configured throughput optimization. Testing a popped cached job would be too
+late to preserve attempts and ownership for rejected jobs. Existing TTL and
+shutdown cleanup return eligible prefetched jobs using the same claim lifecycle.
 
 Existing public function signatures remain supported. New filtering entry
 points share the claim predicate and parameter allocation between single and
@@ -39,5 +41,6 @@ For a worker accepting `linux` and forbidding `gpu`:
 
 Validation covers default and filtered workers, both database drivers, single
 and batch claims, continuous runs, `run_once` including named-queue follow-up
-claims, unfiltered LocalQueue caching, changing filter values and cached SQL
+claims, filtered and unfiltered LocalQueue caching with one or multiple queues,
+shutdown returning filtered cached claims, changing filter values and cached SQL
 shapes, and rejected jobs retaining their attempts and unlocked ownership.

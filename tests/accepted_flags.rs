@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -8,8 +8,8 @@ use graphile_worker::sql::{
     return_jobs::batch::return_jobs, task_identifiers::get_tasks_details,
 };
 use graphile_worker::{
-    IntoTaskHandlerResult, JobFlagFilter, JobSpec, LocalQueueConfig, LocalQueueInit, Schema,
-    TaskHandler, Worker, WorkerContext, WorkerUtils,
+    IntoTaskHandlerResult, JobFlagFilter, JobSpec, LocalQueueConfig, LocalQueueGetJobsComplete,
+    LocalQueueInit, LocalQueueReturnJobs, Schema, TaskHandler, Worker, WorkerContext, WorkerUtils,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -44,20 +44,21 @@ async fn worker_routes_jobs(
     forbidden: Vec<&'static str>,
     expected: Vec<u32>,
     continuous: bool,
+    queue_count: usize,
 ) {
     with_test_db(move |db| async move {
         let executions = Executions::default();
         let local_queues = Arc::new(AtomicU32::new(0));
-        let filtered = !accepted.is_empty() || !forbidden.is_empty();
+        let fetches = Arc::new(AtomicUsize::new(0));
+        let largest_batch = Arc::new(AtomicUsize::new(0));
         let policy = format!("accepted={accepted:?}, forbidden={forbidden:?}");
         let mut options = Worker::options()
             .database(db.database.clone())
-            .concurrency(1)
+            .concurrency(queue_count.max(1))
             .poll_interval(Duration::from_millis(20))
             .listen_os_shutdown_signals(false)
             .define_job::<FlaggedJob>()
             .add_extension(executions.clone())
-            .local_queue(LocalQueueConfig::builder().size(20).build())
             .on(LocalQueueInit, {
                 let counter = local_queues.clone();
                 move |_| {
@@ -66,7 +67,22 @@ async fn worker_routes_jobs(
                         counter.fetch_add(1, Ordering::SeqCst);
                     }
                 }
+            })
+            .on(LocalQueueGetJobsComplete, {
+                let fetches = fetches.clone();
+                let largest_batch = largest_batch.clone();
+                move |ctx| {
+                    let fetches = fetches.clone();
+                    let largest_batch = largest_batch.clone();
+                    async move {
+                        fetches.fetch_add(1, Ordering::SeqCst);
+                        largest_batch.fetch_max(ctx.jobs_count, Ordering::SeqCst);
+                    }
+                }
             });
+        if queue_count > 0 {
+            options = options.local_queue(LocalQueueConfig::builder().size(20).queue_count(queue_count).build());
+        }
         for flag in accepted {
             options = options.add_accepted_flag(flag);
         }
@@ -112,7 +128,10 @@ async fn worker_routes_jobs(
             let run = tokio::task::spawn_local(async move { runner.run().await });
             let progress = timeout(Duration::from_secs(5), async {
                 loop {
-                    if executions.0.lock().unwrap().len() >= expected.len() || run.is_finished() {
+                    let complete = executions.0.lock().unwrap().len() >= expected.len()
+                        && (queue_count == 0 || (fetches.load(Ordering::SeqCst) > 0
+                            && local_queues.load(Ordering::SeqCst) as usize == queue_count));
+                    if complete || run.is_finished() {
                         break;
                     }
                     sleep(Duration::from_millis(10)).await;
@@ -149,16 +168,16 @@ async fn worker_routes_jobs(
                 "named queues must stay available"
             );
         }
-        if continuous && !filtered {
-            assert!(
-                local_queues.load(Ordering::SeqCst) > 0,
-                "default workers must retain LocalQueue"
-            );
+        if continuous && queue_count > 0 {
+            assert_eq!(local_queues.load(Ordering::SeqCst) as usize, queue_count);
+            if expected.len() > 1 {
+                assert!(largest_batch.load(Ordering::SeqCst) > 1, "eligible jobs must be prefetched in batches ({policy})");
+            }
         } else {
             assert_eq!(
                 local_queues.load(Ordering::SeqCst),
                 0,
-                "filtered workers must use direct claims"
+                "direct claims must not initialize LocalQueue"
             );
         }
     })
@@ -167,19 +186,170 @@ async fn worker_routes_jobs(
 
 #[tokio::test]
 async fn run_once_routes_any_accepted_label_with_forbidden_veto_and_named_queue_followups() {
-    worker_routes_jobs(vec!["linux", "macos"], vec!["gpu"], vec![1, 3, 6, 8], false).await;
-    worker_routes_jobs(vec!["linux"], vec![], vec![1, 2, 3, 8], false).await;
-    worker_routes_jobs(vec!["linux"], vec!["linux"], vec![], false).await;
-    worker_routes_jobs(vec![], vec!["gpu"], vec![0, 1, 3, 4, 5, 6, 7, 8], false).await;
-    worker_routes_jobs(vec![], vec![], (0..9).collect(), false).await;
+    worker_routes_jobs(
+        vec!["linux", "macos"],
+        vec!["gpu"],
+        vec![1, 3, 6, 8],
+        false,
+        1,
+    )
+    .await;
+    worker_routes_jobs(vec!["linux"], vec![], vec![1, 2, 3, 8], false, 1).await;
+    worker_routes_jobs(vec!["linux"], vec!["linux"], vec![], false, 1).await;
+    worker_routes_jobs(vec![], vec!["gpu"], vec![0, 1, 3, 4, 5, 6, 7, 8], false, 1).await;
+    worker_routes_jobs(vec![], vec![], (0..9).collect(), false, 1).await;
 }
 
 #[tokio::test]
-async fn continuous_filtered_workers_bypass_local_queue_and_default_workers_keep_it() {
-    worker_routes_jobs(vec!["linux", "macos"], vec!["gpu"], vec![1, 3, 6, 8], true).await;
-    worker_routes_jobs(vec!["linux"], vec![], vec![1, 2, 3, 8], true).await;
-    worker_routes_jobs(vec![], vec!["gpu"], vec![0, 1, 3, 4, 5, 6, 7, 8], true).await;
-    worker_routes_jobs(vec![], vec![], (0..9).collect(), true).await;
+async fn continuous_workers_route_jobs_with_direct_claims_and_one_or_multiple_local_queues() {
+    for queue_count in [0, 1, 2] {
+        worker_routes_jobs(
+            vec!["linux", "macos"],
+            vec!["gpu"],
+            vec![1, 3, 6, 8],
+            true,
+            queue_count,
+        )
+        .await;
+        worker_routes_jobs(vec!["linux"], vec![], vec![1, 2, 3, 8], true, queue_count).await;
+        worker_routes_jobs(vec!["linux"], vec!["linux"], vec![], true, queue_count).await;
+        worker_routes_jobs(
+            vec![],
+            vec!["gpu"],
+            vec![0, 1, 3, 4, 5, 6, 7, 8],
+            true,
+            queue_count,
+        )
+        .await;
+        worker_routes_jobs(vec![], vec![], (0..9).collect(), true, queue_count).await;
+    }
+}
+
+#[tokio::test]
+async fn filtered_prefetch_skips_rejected_prefix_and_returns_cached_claims_on_shutdown() {
+    with_test_db(|db| async move {
+        let executions = Executions::default();
+        let returned = Arc::new(AtomicUsize::new(0));
+        let resume_fetch = Arc::new(tokio::sync::Notify::new());
+        let (batch_tx, batch_rx) = tokio::sync::oneshot::channel();
+        let batch_tx = Arc::new(Mutex::new(Some(batch_tx)));
+        let worker = Arc::new(
+            db.create_worker_options()
+                .concurrency(1)
+                .poll_interval(Duration::from_millis(20))
+                .listen_os_shutdown_signals(false)
+                .define_job::<FlaggedJob>()
+                .add_extension(executions.clone())
+                .add_accepted_flag("linux")
+                .add_forbidden_flag("gpu")
+                .local_queue(LocalQueueConfig::builder().size(3).build())
+                .on(LocalQueueGetJobsComplete, {
+                    let batch_tx = batch_tx.clone();
+                    let resume_fetch = resume_fetch.clone();
+                    move |ctx| {
+                        let first = batch_tx.lock().unwrap().take();
+                        let resume_fetch = resume_fetch.clone();
+                        async move {
+                            if let Some(tx) = first {
+                                tx.send(ctx.jobs_count).unwrap();
+                                // Hold the claimed batch before it can reach a handler.
+                                resume_fetch.notified().await;
+                            }
+                        }
+                    }
+                })
+                .on(LocalQueueReturnJobs, {
+                    let returned = returned.clone();
+                    move |ctx| {
+                        let returned = returned.clone();
+                        async move {
+                            returned.fetch_add(ctx.jobs_count, Ordering::SeqCst);
+                        }
+                    }
+                })
+                .init()
+                .await
+                .unwrap(),
+        );
+        let utils = worker.create_utils();
+        for value in 0..105 {
+            let flags = if value >= 100 {
+                Some(vec!["linux".into()])
+            } else {
+                match value % 5 {
+                    0 => Some(vec!["linux".into(), "gpu".into()]),
+                    1 => Some(vec!["windows".into()]),
+                    2 => None,
+                    3 => Some(vec![]),
+                    _ => Some(vec!["LINUX".into()]),
+                }
+            };
+            utils
+                .add_job(
+                    FlaggedJob { value },
+                    JobSpec {
+                        flags,
+                        priority: Some(i16::try_from(value).unwrap()),
+                        queue_name: matches!(value, 102 | 103).then(|| "shared".into()),
+                        max_attempts: Some(1),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap();
+        }
+        helpers::sql::safe_query(
+            "UPDATE graphile_worker._private_jobs SET flags = '{}'::jsonb WHERE payload->>'value' = '3'",
+        )
+        .execute(&db.test_pool)
+        .await
+        .unwrap();
+
+        let runner = worker.clone();
+        let run = tokio::task::spawn_local(async move { runner.run().await });
+        let claimed_count = timeout(Duration::from_secs(5), batch_rx)
+            .await
+            .expect("filtered batch fetched")
+            .unwrap();
+        assert_eq!(claimed_count, 3, "filtering must precede the batch limit");
+        let pending = db.get_jobs().await;
+        let mut claimed = Vec::new();
+        for job in pending {
+            let value = job.payload["value"].as_u64().unwrap();
+            if job.locked_by.is_some() {
+                claimed.push(value);
+                assert_eq!(job.locked_by.as_ref(), Some(worker.worker_id()));
+                assert!(job.locked_at.is_some());
+                assert_eq!(job.attempts, 1);
+            } else {
+                assert_eq!(job.attempts, 0, "unselected job {value} must stay untouched");
+                assert!(job.locked_at.is_none());
+            }
+        }
+        claimed.sort_unstable();
+        assert_eq!(claimed, [100, 101, 102]);
+        assert!(executions.0.lock().unwrap().is_empty());
+
+        worker.request_shutdown();
+        resume_fetch.notify_one();
+        timeout(Duration::from_secs(5), run)
+            .await
+            .expect("shutdown returns the held batch")
+            .unwrap()
+            .unwrap();
+        assert!(executions.0.lock().unwrap().is_empty());
+        assert_eq!(returned.load(Ordering::SeqCst), 3);
+        let pending = db.get_jobs().await;
+        assert_eq!(pending.len(), 105);
+        for job in pending {
+            assert_eq!(job.attempts, 0);
+            assert!(job.locked_by.is_none() && job.locked_at.is_none());
+        }
+        for queue in db.get_job_queues().await {
+            assert!(queue.locked_by.is_none() && queue.locked_at.is_none());
+        }
+    })
+    .await;
 }
 
 #[tokio::test]
