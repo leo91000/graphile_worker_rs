@@ -1,11 +1,13 @@
 use std::time::Duration;
 
-use graphile_worker_database::DbExecutorArg;
+use graphile_worker_database::{DbExecutorArg, DbParams};
 use graphile_worker_migrations::{migrate as run_migrations, MigrateError};
+use indoc::formatdoc;
 
 use super::client::WorkerUtils;
 use super::types::CleanupTask;
 use graphile_worker_queries::errors::GraphileWorkerError;
+use graphile_worker_queries::schema_names::PrivateTable;
 use graphile_worker_queries::task_identifiers::get_tasks_details;
 use graphile_worker_queries::worker_heartbeat::active::list_active_workers as list_heartbeat_workers;
 use graphile_worker_recovery::{
@@ -49,28 +51,60 @@ pub(super) async fn cleanup(
     utils: &WorkerUtils,
     tasks: &[CleanupTask],
 ) -> Result<(), GraphileWorkerError> {
-    let should_refresh_task_identifiers = tasks
-        .iter()
-        .any(|task| matches!(task, CleanupTask::GcTaskIdentifiers));
-
-    if should_refresh_task_identifiers {
-        let mut guard = utils.task_details.write().await;
-        let task_names = guard.task_names();
-
-        for task in tasks {
-            task.execute(&utils.database, &utils.schema, &task_names)
-                .await?;
+    for task in tasks {
+        if !matches!(task, CleanupTask::GcTaskIdentifiers) {
+            // Queue GC may wait for a caller-owned add transaction. Never hold
+            // the task cache here: that transaction may need it for another add.
+            execute_cleanup_task(utils, task, &[]).await?;
+            continue;
         }
 
+        let mut guard = utils.task_details.write().await;
+        let task_names = guard.task_names();
+        task.execute(&utils.database, &utils.schema, &task_names)
+            .await?;
         let refreshed = get_tasks_details(&utils.database, &utils.schema, task_names).await?;
         *guard = refreshed;
-        return Ok(());
     }
 
-    for task in tasks {
-        task.execute(&utils.database, &utils.schema, &[]).await?;
+    Ok(())
+}
+
+async fn execute_cleanup_task(
+    utils: &WorkerUtils,
+    task: &CleanupTask,
+    task_names: &[String],
+) -> Result<(), GraphileWorkerError> {
+    if !matches!(task, CleanupTask::GcJobQueues) {
+        return task
+            .execute(&utils.database, &utils.schema, task_names)
+            .await;
     }
 
+    let transaction = utils.database.begin().await?;
+    let mut executor = &transaction;
+    // The DELETE must see additions committed while we waited for the lock,
+    // even when the database's default transaction isolation is stricter.
+    executor
+        .execute(
+            "SET TRANSACTION ISOLATION LEVEL READ COMMITTED",
+            DbParams::new(),
+        )
+        .await?;
+    // A queued table lock also blocks later fetch/completion requests. Bound
+    // that wait, including when this future is dropped before LOCK completes.
+    executor
+        .execute("SET LOCAL lock_timeout = '1s'", DbParams::new())
+        .await?;
+    let queues = PrivateTable::JobQueues.qualified(&utils.schema);
+    // add_jobs takes ROW EXCLUSIVE on the queue table even when its INSERT
+    // finds an existing queue. Hold the conflicting lock through deletion,
+    // and take the DELETE's snapshot only after every earlier add commits.
+    let lock = formatdoc!("LOCK TABLE {queues} IN SHARE ROW EXCLUSIVE MODE");
+    executor.execute(&lock, DbParams::new()).await?;
+    task.execute(&transaction, &utils.schema, task_names)
+        .await?;
+    transaction.commit().await?;
     Ok(())
 }
 
