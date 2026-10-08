@@ -51,6 +51,8 @@ pub struct Worker {
     pub(crate) task_details: SharedTaskDetails,
     /// List of job flags that this worker will not process
     pub(crate) forbidden_flags: Vec<String>,
+    /// Positive routing labels; an empty set adds no positive restriction
+    pub(crate) accepted_flags: Vec<String>,
     /// List of cron job definitions to be scheduled
     pub(crate) crontabs: Vec<Crontab>,
     /// Whether to use local application time (true) or database time (false) for timestamps
@@ -87,6 +89,7 @@ pub(crate) struct WorkerRunner {
     pub(crate) schema: Schema,
     pub(crate) task_details: SharedTaskDetails,
     pub(crate) forbidden_flags: Vec<String>,
+    pub(crate) accepted_flags: Vec<String>,
     pub(crate) use_local_time: bool,
     pub(crate) shutdown_signal: ShutdownSignal,
     pub(crate) extensions: ReadOnlyExtensions,

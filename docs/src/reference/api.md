@@ -25,6 +25,7 @@ Common configuration methods include:
 - `schema`, `concurrency`, `poll_interval`, `max_pg_conn`, and `use_local_time`.
 - `define_job`, `define_batch_job`, and `define_jobs` for task registration.
 - `add_forbidden_flag` for workers that skip jobs with specific flags.
+- `add_accepted_flag` for workers that require any matching routing label.
 - `local_queue`, `complete_job_batch_delay`, and `fail_job_batch_delay` for throughput tuning.
 - `worker_recovery`, `heartbeat_interval`, `sweep_interval`, `sweep_threshold`, and `recovery_delay` for dead worker recovery.
 - `listen_os_shutdown_signals`, `shutdown_signal`, `shutdown_grace_period`, and `shutdown_interrupted_job_retry_delay` for shutdown control.

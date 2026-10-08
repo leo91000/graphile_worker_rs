@@ -3,6 +3,17 @@ use graphile_worker_task_handler::{BatchTaskHandler, JobDefinition, TaskHandler}
 use super::WorkerOptions;
 
 impl WorkerOptions {
+    /// Adds a positive job-routing label.
+    ///
+    /// With at least one accepted flag, a job must carry any accepted flag.
+    /// Jobs without a matching label are excluded; forbidden flags always veto.
+    /// With no accepted flags, positive filtering is disabled. This selects
+    /// labels, not worker capabilities. LocalQueue applies the same filter to batches.
+    pub fn add_accepted_flag(mut self, flag: &str) -> Self {
+        self.accepted_flags.push(flag.into());
+        self
+    }
+
     /// Registers a task handler type with the worker.
     ///
     /// Primary way to define what types of jobs this worker can process.

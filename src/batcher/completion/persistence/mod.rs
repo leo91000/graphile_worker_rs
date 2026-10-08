@@ -1,3 +1,4 @@
+use crate::errors::Result;
 use graphile_worker_database::{Database, Schema};
 
 use super::CompletionRequest;
@@ -55,7 +56,7 @@ pub(super) async fn complete_job_direct(
     database: &Database,
     schema: &Schema,
     worker_id: &str,
-) -> bool {
+) -> Result<()> {
     if req.has_queue {
         return complete_one_job_with_queue(req, database, schema, worker_id).await;
     }

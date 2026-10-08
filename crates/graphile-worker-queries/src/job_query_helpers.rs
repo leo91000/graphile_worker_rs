@@ -1,12 +1,5 @@
 use graphile_worker_database::Schema;
 
-pub fn get_flag_clause(flags_to_skip: &[String], param_ord: u8) -> String {
-    if !flags_to_skip.is_empty() {
-        return format!("and ((flags ?| ${param_ord}::text[]) is not true)");
-    }
-    String::new()
-}
-
 pub fn get_queue_clause(schema: &Schema) -> String {
     let job_queues = schema.private_table("job_queues");
     format!(

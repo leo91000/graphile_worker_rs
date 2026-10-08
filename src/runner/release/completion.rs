@@ -16,15 +16,16 @@ pub(super) async fn release_completed_job(
     duration: Duration,
 ) -> Result<(), ReleaseJobError> {
     if let Some(batcher) = &worker.completion_batcher {
-        batcher
+        let job_id = *job.id();
+        return batcher
             .complete(CompletionRequest {
-                job_id: *job.id(),
+                job_id,
                 has_queue: job.job_queue_id().is_some(),
                 job,
                 duration,
             })
-            .await;
-        return Ok(());
+            .await
+            .map_err(|source| ReleaseJobError { job_id, source });
     }
 
     complete_job(&worker.database, &job, &worker.worker_id, &worker.schema)

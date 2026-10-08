@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -11,6 +12,7 @@ use graphile_worker_database::{
 use graphile_worker_extensions::{Extensions, ReadOnlyExtensions};
 use graphile_worker_job::Job;
 use graphile_worker_lifecycle_hooks::HookRegistry;
+use graphile_worker_lifecycle_hooks::JobComplete;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 
 use crate::streams::job_signal::JobSignalSource;
@@ -60,6 +62,70 @@ impl DatabaseDriver for FailingDriver {
 
 fn pending_shutdown_signal() -> ShutdownSignal {
     futures::future::pending::<()>().boxed().shared()
+}
+
+fn runner_for(
+    database: Database,
+    hooks: Arc<HookRegistry>,
+    shutdown_signal: ShutdownSignal,
+) -> WorkerRunner {
+    WorkerRunner {
+        worker_id: "worker".to_string(),
+        jobs: HashMap::new(),
+        database,
+        schema: graphile_worker_database::Schema::new("graphile_worker"),
+        task_details: Default::default(),
+        forbidden_flags: Vec::new(),
+        accepted_flags: Vec::new(),
+        use_local_time: false,
+        shutdown_signal,
+        extensions: ReadOnlyExtensions::from(Extensions::new()),
+        hooks,
+        completion_batcher: None,
+        failure_batcher: None,
+        shutdown_config: crate::WorkerShutdownConfig::default(),
+    }
+}
+
+#[tokio::test]
+async fn release_job_propagates_closed_completion_batcher_failure() {
+    for has_queue in [false, true] {
+        let database = Database::new(FailingDriver);
+        let completed = Arc::new(AtomicUsize::new(0));
+        let mut hooks = HookRegistry::new();
+        hooks.on(JobComplete, {
+            let completed = completed.clone();
+            move |_| {
+                let completed = completed.clone();
+                async move {
+                    completed.fetch_add(1, Ordering::SeqCst);
+                }
+            }
+        });
+        let hooks = Arc::new(hooks);
+        let shutdown_signal = futures::future::ready(()).boxed().shared();
+        let batcher = Arc::new(crate::batcher::CompletionBatcher::new(
+            Duration::from_secs(60),
+            database.clone(),
+            "graphile_worker",
+            "worker".into(),
+            hooks.clone(),
+            shutdown_signal.clone(),
+        ));
+        batcher.await_shutdown().await;
+        let mut worker = runner_for(database, hooks, shutdown_signal);
+        worker.completion_batcher = Some(batcher);
+        let mut job = Job::builder().id(42).locked_by("worker".to_string());
+        if has_queue {
+            job = job.job_queue_id(1);
+        }
+        let error = release_job(Ok(()), Arc::new(job.build()), &worker, Duration::ZERO)
+            .await
+            .expect_err("failed direct fallback must reach the worker caller");
+        assert_eq!(error.job_id, 42);
+        assert!(error.source.to_string().contains("forced failure"));
+        assert_eq!(completed.load(Ordering::SeqCst), 0);
+    }
 }
 
 #[tokio::test]
@@ -144,21 +210,8 @@ async fn release_job_returns_error_when_replacement_payload_cannot_be_persisted(
         hooks.clone(),
         shutdown_signal.clone(),
     ));
-    let worker = WorkerRunner {
-        worker_id: "worker".to_string(),
-        jobs: HashMap::new(),
-        database,
-        schema: graphile_worker_database::Schema::new("graphile_worker"),
-        task_details: Default::default(),
-        forbidden_flags: Vec::new(),
-        use_local_time: false,
-        shutdown_signal,
-        extensions: ReadOnlyExtensions::from(Extensions::new()),
-        hooks,
-        completion_batcher: None,
-        failure_batcher: Some(failure_batcher),
-        shutdown_config: crate::WorkerShutdownConfig::default(),
-    };
+    let mut worker = runner_for(database, hooks, shutdown_signal);
+    worker.failure_batcher = Some(failure_batcher);
     let job = Arc::new(
         Job::builder()
             .id(42)
