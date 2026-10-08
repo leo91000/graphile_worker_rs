@@ -151,6 +151,7 @@ async fn release_job_returns_error_when_replacement_payload_cannot_be_persisted(
         schema: graphile_worker_database::Schema::new("graphile_worker"),
         task_details: Default::default(),
         forbidden_flags: Vec::new(),
+        accepted_flags: Vec::new(),
         use_local_time: false,
         shutdown_signal,
         extensions: ReadOnlyExtensions::from(Extensions::new()),

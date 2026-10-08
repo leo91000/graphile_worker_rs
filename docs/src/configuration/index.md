@@ -48,7 +48,8 @@ Use this map to find the option family that matches the decision you are making.
 | Register handlers | `define_job(...)`, `define_batch_job(...)`, `define_jobs(...)` | Use `define_jobs(...)` when a module exposes reusable job definitions. |
 | Limit concurrent execution | `concurrency(...)` | Defaults to the number of logical CPUs and must be greater than zero. |
 | Tune database polling | `poll_interval(...)` | Defaults to one second. Notifications still provide low-latency wakeups when available. |
-| Skip flagged jobs | `add_forbidden_flag(...)` | Workers with forbidden flags bypass local queueing and fetch directly from the database. |
+| Skip flagged jobs | `add_forbidden_flag(...)` | Vetoes matching jobs before direct or local queue batch claims. |
+| Select flagged jobs | `add_accepted_flag(...)` | Requires any accepted label; forbidden flags still veto. Configured local queue batching remains enabled. |
 | Add recurring jobs | `with_cron(...)` or `with_crons(...)` | Accepts typed cron values, raw crontabs, or crontab text depending on input. See [Cron Jobs](../guides/cron.md). |
 | Share application state | `add_extension(...)` | Extensions are available from task contexts. See [Application State and Extensions](app-state.md). |
 | Observe or intercept lifecycle events | `on(...)` or `add_plugin(...)` | See [Lifecycle Hooks](../guides/hooks.md). |
@@ -128,6 +129,10 @@ let worker = WorkerOptions::default()
 Use `add_forbidden_flag(...)` for specialized workers that must refuse jobs with
 certain flags. This is a filtering rule for the worker process; it does not
 register a handler by itself.
+
+Use `add_accepted_flag(...)` to select jobs carrying any chosen label. Empty
+acceptance adds no restriction; nonempty acceptance excludes untagged jobs.
+See [Job Flag Routing](job-flags.md) for combined filters and examples.
 
 ## Throughput And Latency
 

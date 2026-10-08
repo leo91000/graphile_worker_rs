@@ -143,10 +143,11 @@ Important job methods:
 - `define_job::<T>()` registers a `TaskHandler`.
 - `define_batch_job::<T>()` registers a `BatchTaskHandler`.
 - `define_jobs(iterable)` registers reusable `JobDefinition` values.
+- `add_accepted_flag(flag)` requires any matching label when the accepted set is nonempty.
 - `add_forbidden_flag(flag)` makes this worker skip jobs with that flag.
 
-When `add_forbidden_flag` is used, local queue configuration is disabled during
-initialization.
+Both filters may coexist; forbidden flags veto. When local queueing is configured,
+the filters apply before each batch is claimed and batching remains enabled.
 
 ## Cron schedules
 
@@ -216,8 +217,10 @@ let worker = WorkerOptions::default()
 ```
 
 Local queue settings are validated against the configured `poll_interval` during
-`init()`. If forbidden flags are configured, the worker ignores the local queue
-configuration.
+`init()`. Accepted and forbidden flags are applied before batch claims, so filtered
+workers retain the configured local queue.
+
+See [Job Flag Routing](job-flags.md) for the filtering contract and examples.
 
 ## Hooks, plugins, and extensions
 

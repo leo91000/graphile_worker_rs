@@ -4,7 +4,7 @@ use graphile_worker_lifecycle_hooks::{LocalQueueGetJobsCompleteContext, LocalQue
 use graphile_worker_runtime as runtime;
 use tracing::{debug, error};
 
-use graphile_worker_queries::batch_get_jobs::batch_get_jobs;
+use graphile_worker_queries::batch_get_jobs::batch_get_jobs_with_filter;
 
 use super::LocalQueue;
 
@@ -69,12 +69,12 @@ impl LocalQueue {
 
         let task_details = self.0.task_details.read().await;
         let now = self.0.use_local_time.then(Utc::now);
-        let result = batch_get_jobs(
+        let result = batch_get_jobs_with_filter(
             &self.0.database,
             &task_details,
             &self.0.schema,
             &self.0.worker_id,
-            &[],
+            self.0.flag_filter.as_borrowed(),
             self.0.config.size.try_into().unwrap_or(i32::MAX),
             now,
         )

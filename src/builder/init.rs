@@ -89,11 +89,7 @@ impl WorkerOptions {
 
         let concurrency = self.concurrency.unwrap_or_else(num_cpus::get);
 
-        let local_queue_config = if self.forbidden_flags.is_empty() {
-            self.local_queue_config
-        } else {
-            None
-        };
+        let local_queue_config = self.local_queue_config;
         if let Some(config) = local_queue_config.as_ref() {
             config.validate(poll_interval)?;
         }
@@ -132,6 +128,7 @@ impl WorkerOptions {
             schema,
             task_details,
             forbidden_flags: self.forbidden_flags,
+            accepted_flags: self.accepted_flags,
             crontabs: self.crontabs.unwrap_or_default(),
             use_local_time: self.use_local_time,
             shutdown_signal,
