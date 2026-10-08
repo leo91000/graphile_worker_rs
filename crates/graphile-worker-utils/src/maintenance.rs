@@ -70,7 +70,8 @@ pub(super) async fn cleanup(
 }
 
 async fn refresh_task_details(utils: &WorkerUtils) -> Result<(), GraphileWorkerError> {
-    loop {
+    const MAX_ATTEMPTS: usize = 3;
+    for _ in 0..MAX_ATTEMPTS {
         let snapshot = utils.task_details.read().await.clone();
         let refreshed =
             get_tasks_details(&utils.database, &utils.schema, snapshot.task_names()).await?;
@@ -83,6 +84,9 @@ async fn refresh_task_details(utils: &WorkerUtils) -> Result<(), GraphileWorkerE
         *guard = refreshed;
         return Ok(());
     }
+    Err(GraphileWorkerError::TaskDetailsRefreshConflict {
+        attempts: MAX_ATTEMPTS,
+    })
 }
 
 async fn execute_cleanup_task(

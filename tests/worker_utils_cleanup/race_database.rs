@@ -13,6 +13,16 @@ pub(super) struct RefreshGate {
     pub started: tokio::sync::Notify,
     pub finish: tokio::sync::Notify,
     used: AtomicBool,
+    repeat: bool,
+}
+
+impl RefreshGate {
+    pub fn repeating() -> Self {
+        Self {
+            repeat: true,
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -53,7 +63,7 @@ impl DbExecutor for RaceDatabase {
             let rows = self.database.fetch_all(sql, params).await?;
             if let Some(gate) = &self.refresh_gate {
                 if sql.starts_with("select id, identifier from")
-                    && !gate.used.swap(true, Ordering::SeqCst)
+                    && (gate.repeat || !gate.used.swap(true, Ordering::SeqCst))
                 {
                     gate.started.notify_one();
                     gate.finish.notified().await;

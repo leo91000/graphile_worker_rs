@@ -677,3 +677,72 @@ async fn cancelling_task_cleanup_releases_its_pending_lock() {
     })
     .await;
 }
+
+#[tokio::test]
+async fn task_cleanup_bounds_refresh_contention_without_overwriting_registrations() {
+    with_test_db(|test_db| async move {
+        let gate = Arc::new(race_database::RefreshGate::repeating());
+        let details = SharedTaskDetails::default();
+        let utils = WorkerUtils::new(
+            graphile_worker_database::Database::new(
+                race_database::RaceDatabase::new(test_db.database.clone())
+                    .with_refresh_gate(gate.clone()),
+            ),
+            "graphile_worker",
+        )
+        .with_task_details(details.clone());
+        utils.migrate().await.unwrap();
+        let initial = utils
+            .add_raw_job(TASK_GC_JOB, json!({}), JobSpec::default())
+            .await
+            .unwrap();
+        details.insert(*initial.task_id(), TASK_GC_JOB.into()).await;
+
+        let mut cleanup = spawn_task_cleanup(&utils);
+        for attempt in 0..3 {
+            timeout(Duration::from_secs(5), gate.started.notified())
+                .await
+                .unwrap();
+            let name = format!("refresh_registration_{attempt}");
+            let added = utils
+                .add_raw_job(&name, json!({}), JobSpec::default())
+                .await
+                .unwrap();
+            // Register real, committed task rows while each refresh result is
+            // paused. This is legitimate contention, not a fictitious cache ID.
+            details.insert(*added.task_id(), name).await;
+            gate.finish.notify_one();
+        }
+        let expected = details.read().await.clone();
+        let outcome = timeout(Duration::from_secs(2), &mut cleanup).await;
+        if outcome.is_err() {
+            cleanup.abort();
+            let _ = cleanup.await;
+            panic!("cleanup must stop after three contended refresh attempts");
+        }
+        let error = outcome
+            .unwrap()
+            .unwrap()
+            .0
+            .expect_err("contention must be reported");
+        assert!(matches!(
+            error,
+            GraphileWorkerError::TaskDetailsRefreshConflict { attempts: 3 }
+        ));
+        assert_eq!(
+            *details.read().await,
+            expected,
+            "an exhausted refresh must preserve the latest registered mappings"
+        );
+
+        // A subsequent cleanup can refresh normally after registration settles.
+        race_utils(&test_db)
+            .with_task_details(details.clone())
+            .cleanup(&[CleanupTask::GcTaskIdentifiers])
+            .await
+            .unwrap();
+        assert_eq!(*details.read().await, expected);
+        assert_eq!(test_db.get_jobs().await.len(), 4);
+    })
+    .await;
+}

@@ -22,8 +22,9 @@ pub enum CleanupTask {
     ///
     /// **Note**: When using `WorkerUtils::cleanup()` from a worker, task identifiers
     /// that the worker knows about will be preserved to support horizontal scaling.
-    /// Standalone cleanup with an empty keep list can invalidate task IDs cached
-    /// by running workers; stop those workers before collecting their task rows.
+    /// Identifiers outside this instance's keep list may be cached by other
+    /// running workers. Stop workers whose identifiers are not preserved before
+    /// collecting their task rows.
     GcTaskIdentifiers,
 
     /// Removes unlocked job queue records that are no longer referenced by any jobs.
