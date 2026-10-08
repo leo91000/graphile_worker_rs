@@ -8,3 +8,5 @@ mod job_queues;
 mod queue_races;
 #[path = "worker_utils_cleanup/task_identifiers.rs"]
 mod task_identifiers;
+#[path = "worker_utils_cleanup/task_races.rs"]
+mod task_races;

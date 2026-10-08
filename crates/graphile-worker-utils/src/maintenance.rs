@@ -53,18 +53,18 @@ pub(super) async fn cleanup(
 ) -> Result<(), GraphileWorkerError> {
     for task in tasks {
         if !matches!(task, CleanupTask::GcTaskIdentifiers) {
-            // Queue GC may wait for a caller-owned add transaction. Never hold
-            // the task cache here: that transaction may need it for another add.
             execute_cleanup_task(utils, task, &[]).await?;
             continue;
         }
 
-        let mut guard = utils.task_details.write().await;
-        let task_names = guard.task_names();
-        task.execute(&utils.database, &utils.schema, &task_names)
-            .await?;
+        // Queue and task GC may wait for a caller-owned add transaction. Never
+        // hold the task cache across that wait: the transaction may need it for
+        // another add. It is taken only to read the keep list and to store the
+        // refreshed details.
+        let task_names = utils.task_details.task_names().await;
+        execute_cleanup_task(utils, task, &task_names).await?;
         let refreshed = get_tasks_details(&utils.database, &utils.schema, task_names).await?;
-        *guard = refreshed;
+        *utils.task_details.write().await = refreshed;
     }
 
     Ok(())
@@ -75,11 +75,15 @@ async fn execute_cleanup_task(
     task: &CleanupTask,
     task_names: &[String],
 ) -> Result<(), GraphileWorkerError> {
-    if !matches!(task, CleanupTask::GcJobQueues) {
-        return task
-            .execute(&utils.database, &utils.schema, task_names)
-            .await;
-    }
+    let table = match task {
+        CleanupTask::GcJobQueues => PrivateTable::JobQueues,
+        CleanupTask::GcTaskIdentifiers => PrivateTable::Tasks,
+        _ => {
+            return task
+                .execute(&utils.database, &utils.schema, task_names)
+                .await;
+        }
+    };
 
     let transaction = utils.database.begin().await?;
     let mut executor = &transaction;
@@ -91,16 +95,17 @@ async fn execute_cleanup_task(
             DbParams::new(),
         )
         .await?;
-    // A queued table lock also blocks later fetch/completion requests. Bound
-    // that wait, including when this future is dropped before LOCK completes.
+    // A queued table lock also blocks later statements that write the table.
+    // Bound that wait, including when this future is dropped before LOCK
+    // completes.
     executor
         .execute("SET LOCAL lock_timeout = '1s'", DbParams::new())
         .await?;
-    let queues = PrivateTable::JobQueues.qualified(&utils.schema);
-    // add_jobs takes ROW EXCLUSIVE on the queue table even when its INSERT
-    // finds an existing queue. Hold the conflicting lock through deletion,
+    let table = table.qualified(&utils.schema);
+    // add_jobs takes ROW EXCLUSIVE on the queue and task tables even when its
+    // INSERT finds an existing row. Hold the conflicting lock through deletion,
     // and take the DELETE's snapshot only after every earlier add commits.
-    let lock = formatdoc!("LOCK TABLE {queues} IN SHARE ROW EXCLUSIVE MODE");
+    let lock = formatdoc!("LOCK TABLE {table} IN SHARE ROW EXCLUSIVE MODE");
     executor.execute(&lock, DbParams::new()).await?;
     task.execute(&transaction, &utils.schema, task_names)
         .await?;
