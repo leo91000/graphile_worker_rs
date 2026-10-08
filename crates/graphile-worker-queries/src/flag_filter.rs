@@ -40,9 +40,8 @@ impl<'a> JobFlagFilter<'a> {
             parameter += 1;
         }
         if !self.accepted.is_empty() {
-            clause.push_str(&format!(
-                " and ((jobs.flags ?| ${parameter}::text[]) is true)"
-            ));
+            // WHERE already rejects NULL; keep the operator directly indexable.
+            clause.push_str(&format!(" and (jobs.flags ?| ${parameter}::text[])"));
         }
         clause
     }
