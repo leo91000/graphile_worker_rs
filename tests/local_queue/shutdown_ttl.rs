@@ -309,7 +309,7 @@ async fn release_waits_for_in_flight_fetch_and_other_releasers() {
             "the in-flight fetched job must be returned"
         );
         assert_eq!(jobs[0].attempts, 0);
-        assert!(queue.get_job(&[]).await.is_none(), "Released is terminal");
+        assert!(queue.get_job(&[], &[]).await.is_none(), "Released is terminal");
     })
     .await;
 }

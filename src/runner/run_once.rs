@@ -20,6 +20,7 @@ impl Worker {
             self.schema.clone(),
             self.worker_id.clone(),
             self.forbidden_flags.clone(),
+            self.accepted_flags.clone(),
             self.use_local_time,
         );
 
@@ -62,6 +63,7 @@ impl Worker {
                                 &runner.schema,
                                 &runner.worker_id,
                                 &runner.forbidden_flags,
+                                &runner.accepted_flags,
                                 now,
                             )
                             .await

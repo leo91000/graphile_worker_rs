@@ -37,6 +37,7 @@ pub fn job_stream(
     schema: Schema,
     worker_id: String,
     forbidden_flags: Vec<String>,
+    accepted_flags: Vec<String>,
     use_local_time: bool,
 ) -> impl Stream<Item = Job> {
     futures::stream::unfold((), move |()| {
@@ -45,6 +46,7 @@ pub fn job_stream(
         let schema = schema.clone();
         let worker_id = worker_id.clone();
         let forbidden_flags = forbidden_flags.clone();
+        let accepted_flags = accepted_flags.clone();
 
         let job_fut = async move {
             let now = use_local_time.then(Utc::now);
@@ -55,6 +57,7 @@ pub fn job_stream(
                 &schema,
                 &worker_id,
                 &forbidden_flags,
+                &accepted_flags,
                 now,
             )
             .await

@@ -45,6 +45,7 @@ async fn benchmark_cached_fetch_with_mixed_queues() {
                 "graphile_worker",
                 "benchmark",
                 &[],
+                &[],
                 100,
                 None,
             )

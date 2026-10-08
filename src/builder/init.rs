@@ -132,6 +132,7 @@ impl WorkerOptions {
             schema,
             task_details,
             forbidden_flags: self.forbidden_flags,
+            accepted_flags: self.accepted_flags,
             crontabs: self.crontabs.unwrap_or_default(),
             use_local_time: self.use_local_time,
             shutdown_signal,

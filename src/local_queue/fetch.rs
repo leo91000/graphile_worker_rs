@@ -75,6 +75,7 @@ impl LocalQueue {
             &self.0.schema,
             &self.0.worker_id,
             &[],
+            &[],
             self.0.config.size.try_into().unwrap_or(i32::MAX),
             now,
         )

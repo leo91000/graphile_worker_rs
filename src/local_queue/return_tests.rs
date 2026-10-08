@@ -126,7 +126,7 @@ async fn ttl_failure_retains_claims_for_release() {
     assert_eq!(driver.calls.load(Ordering::SeqCst), 20);
     assert_eq!(queue.0.pending_returns.lock().await.jobs.len(), 1);
     assert!(
-        queue.get_job(&[]).await.is_none(),
+        queue.get_job(&[], &[]).await.is_none(),
         "uncertain returns must not reach handlers"
     );
     assert_eq!(*queue.0.mode.read().await, LocalQueueMode::TtlExpired);
@@ -181,7 +181,7 @@ async fn waiting_consumer_does_not_take_claim_after_release() {
     let driver = Arc::new(ReturnDriver::default());
     let queue = queue_with_claim(driver.clone()).await;
     let cache = queue.0.job_queue.lock().await;
-    let mut consumer = Box::pin(queue.get_job(&[]));
+    let mut consumer = Box::pin(queue.get_job(&[], &[]));
     assert!(futures::poll!(consumer.as_mut()).is_pending());
     let mut release = Box::pin(queue.release());
     assert!(futures::poll!(release.as_mut()).is_pending());
@@ -262,11 +262,11 @@ async fn uncertain_return_blocks_same_worker_reclaims_until_acknowledged() {
         // A transport error is indistinguishable from a committed return whose
         // response was lost. Neither sibling fetch path may reclaim that job.
         sibling.fetch().await;
-        assert!(sibling.get_job(&["flag".into()]).await.is_none());
+        assert!(sibling.get_job(&["flag".into()], &[]).await.is_none());
         assert_eq!(driver.fetch_calls.load(Ordering::SeqCst), 0);
-        assert!(queue.get_job(&[]).await.is_none());
+        assert!(queue.get_job(&[], &[]).await.is_none());
         assert_eq!(*queue.0.mode.read().await, LocalQueueMode::TtlExpired);
-        assert!(independent.get_job(&["flag".into()]).await.is_none());
+        assert!(independent.get_job(&["flag".into()], &[]).await.is_none());
         assert_eq!(driver.fetch_calls.load(Ordering::SeqCst), 1);
     }
     // Cancelling the caller does not reopen the gate while claims remain pending.
@@ -313,7 +313,7 @@ async fn acknowledged_ttl_return_allows_polling() {
     let driver = Arc::new(ReturnDriver::default());
     let queue = queue_with_claim(driver.clone()).await;
     queue.set_mode_ttl_expired().await;
-    assert!(queue.get_job(&[]).await.is_none());
+    assert!(queue.get_job(&[], &[]).await.is_none());
     assert_eq!(*queue.0.mode.read().await, LocalQueueMode::Polling);
     assert!(queue.0.claims.try_fetch().is_some());
     assert_eq!(driver.calls.load(Ordering::SeqCst), 1);

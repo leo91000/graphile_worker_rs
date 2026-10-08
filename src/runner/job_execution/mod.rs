@@ -43,6 +43,7 @@ pub(super) async fn process_one_job(
         &worker.schema,
         &worker.worker_id,
         &worker.forbidden_flags,
+        &worker.accepted_flags,
         now,
     )
     .await

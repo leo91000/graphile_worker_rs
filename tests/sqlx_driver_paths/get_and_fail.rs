@@ -57,6 +57,7 @@ async fn sqlx_pool_exercises_get_and_fail_helpers() {
             &graphile_worker::Schema::default(),
             "sqlx-worker-one",
             &skip_flags,
+            &[],
             Some(now + chrono::Duration::seconds(1)),
         )
         .await
@@ -82,6 +83,7 @@ async fn sqlx_pool_exercises_get_and_fail_helpers() {
             &graphile_worker::Schema::default(),
             "sqlx-worker-two",
             &skip_flags,
+            &[],
             10,
             Some(now + chrono::Duration::seconds(1)),
         )

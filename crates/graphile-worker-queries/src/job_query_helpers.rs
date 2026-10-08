@@ -1,8 +1,12 @@
 use graphile_worker_database::Schema;
 
-pub fn get_flag_clause(flags_to_skip: &[String], param_ord: u8) -> String {
+pub fn get_flag_clause(flags_to_skip: &[String], flags_to_accept: &[String], param_ord: u8) -> String {
+    let mut clause = String::new();
     if !flags_to_skip.is_empty() {
-        return format!("and ((flags ?| ${param_ord}::text[]) is not true)");
+        clause.push_str(&format!("and ((flags ?| ${param_ord}::text[]) is not true)"));
+    }
+    if !flags_to_accept.is_empty() {
+        clause.push_str(&format!(" and ((flags &| ${param_ord}::text[]))"));
     }
     String::new()
 }

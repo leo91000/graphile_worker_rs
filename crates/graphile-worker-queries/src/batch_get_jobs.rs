@@ -21,6 +21,7 @@ pub async fn batch_get_jobs(
     schema: impl Into<Schema>,
     worker_id: &str,
     flags_to_skip: &[String],
+    flags_to_accept: &[String],
     batch_size: i32,
     now: Option<DateTime<Utc>>,
 ) -> Result<Vec<Job>> {
@@ -40,7 +41,7 @@ pub async fn batch_get_jobs(
 
     let sql = super::fetch_query_cache::fetch_query(&schema, has_flags, has_now, true, || {
         let flag_clause = flag_param
-            .map(|p| get_flag_clause(flags_to_skip, p))
+            .map(|p| get_flag_clause(flags_to_skip, flags_to_accept, p))
             .unwrap_or_default();
         let jobs = schema.private_table("jobs");
         let queue_clause = get_queue_clause(&schema);

@@ -41,6 +41,7 @@ async fn batch_fetch_serializes_named_queues_without_dropping_unnamed_jobs() {
             "graphile_worker",
             "first",
             &[],
+            &[],
             10,
             None,
         )
@@ -67,6 +68,7 @@ async fn batch_fetch_serializes_named_queues_without_dropping_unnamed_jobs() {
             "graphile_worker",
             "second",
             &[],
+            &[],
             10,
             None
         )
@@ -81,6 +83,7 @@ async fn batch_fetch_serializes_named_queues_without_dropping_unnamed_jobs() {
             &tasks,
             "graphile_worker",
             "second",
+            &[],
             &[],
             10,
             None,
@@ -151,6 +154,7 @@ async fn cached_fetch_queries_keep_schema_flags_time_and_batch_values_separate()
                                 &schema,
                                 "owner",
                                 &flags,
+                                &[],
                                 size,
                                 now,
                             )
@@ -168,7 +172,7 @@ async fn cached_fetch_queries_keep_schema_flags_time_and_batch_values_separate()
                                 .await
                                 .unwrap();
                         }
-                        let job = get_job(&db.database, &tasks, &schema, "single", &flags, now)
+                        let job = get_job(&db.database, &tasks, &schema, "single", &flags, &[], now)
                             .await
                             .unwrap();
                         assert_eq!(job.is_some(), now.is_some());
@@ -196,7 +200,7 @@ async fn batched_failure_accepts_job_ids_above_int32() {
             db.add_job("task", json!({}), JobSpec { queue_name: queue, ..Default::default() }).await;
         }
         let tasks = get_tasks_details(&db.database, "graphile_worker", vec!["task".into()]).await.unwrap();
-        let jobs = batch_get_jobs(&db.database, &tasks, "graphile_worker", "owner", &[], 10, None).await.unwrap();
+        let jobs = batch_get_jobs(&db.database, &tasks, "graphile_worker", "owner", &[], &[], 10, None).await.unwrap();
         assert_eq!(jobs.len(), 2);
         assert!(jobs.iter().all(|job| *job.id() > i32::MAX as i64));
         for job in &jobs {
@@ -237,6 +241,7 @@ async fn concurrent_batch_fetches_share_only_unnamed_work() {
                     "graphile_worker",
                     "one",
                     &[],
+                    &[],
                     100,
                     None
                 ),
@@ -245,6 +250,7 @@ async fn concurrent_batch_fetches_share_only_unnamed_work() {
                     &tasks,
                     "graphile_worker",
                     "two",
+                    &[],
                     &[],
                     100,
                     None

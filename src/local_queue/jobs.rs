@@ -10,20 +10,20 @@ use graphile_worker_queries::get_job::get_job;
 use super::LocalQueue;
 
 impl LocalQueue {
-    pub async fn get_job(&self, flags_to_skip: &[String]) -> Option<Job> {
+    pub async fn get_job(&self, flags_to_skip: &[String], flags_to_accept: &[String]) -> Option<Job> {
         let mode = *self.0.mode.read().await;
         if mode == LocalQueueMode::Released {
             return None;
         }
 
-        if !flags_to_skip.is_empty() {
-            return self.get_job_direct(flags_to_skip).await;
+        if !flags_to_skip.is_empty() || flags_to_accept.is_empty() {
+            return self.get_job_direct(flags_to_skip, flags_to_accept).await;
         }
 
         self.get_job_from_cache().await
     }
 
-    async fn get_job_direct(&self, flags_to_skip: &[String]) -> Option<Job> {
+    async fn get_job_direct(&self, flags_to_skip: &[String], flags_to_accept: &[String]) -> Option<Job> {
         let _claim_guard = self.0.claims.try_fetch()?;
         let mode = self.0.mode.read().await;
         if *mode == LocalQueueMode::Released {
@@ -37,6 +37,7 @@ impl LocalQueue {
             &self.0.schema,
             &self.0.worker_id,
             flags_to_skip,
+            flags_to_accept,
             now,
         )
         .await
