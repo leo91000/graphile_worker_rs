@@ -12,12 +12,11 @@ use tokio::time::{sleep, timeout};
 
 use crate::helpers::{with_test_db, TestDatabase};
 
-#[path = "race_database.rs"]
-mod race_database;
+use super::race_database;
 
 fn race_utils(test_db: &TestDatabase) -> graphile_worker::worker_utils::WorkerUtils {
     graphile_worker::worker_utils::WorkerUtils::new(
-        graphile_worker_database::Database::new(race_database::RaceDatabase(
+        graphile_worker_database::Database::new(race_database::RaceDatabase::new(
             test_db.database.clone(),
         )),
         "graphile_worker",

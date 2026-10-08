@@ -86,6 +86,10 @@ impl WorkerUtils {
     /// When `GcTaskIdentifiers` is included in the tasks and this `WorkerUtils` instance
     /// was created with task details (via `with_task_details`), the task identifiers
     /// known to this worker will be preserved and refreshed after cleanup.
+    /// If concurrent registrations invalidate all three refresh attempts, this
+    /// returns [`GraphileWorkerError::TaskDetailsRefreshConflict`] and preserves
+    /// the latest cache. Database cleanup may already have committed; retry when
+    /// registrations settle.
     pub async fn cleanup(&self, tasks: &[CleanupTask]) -> Result<(), GraphileWorkerError> {
         maintenance::cleanup(self, tasks).await
     }

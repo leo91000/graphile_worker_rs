@@ -12,15 +12,27 @@ use graphile_worker_queries::schema_names::PrivateTable;
 pub enum CleanupTask {
     /// Removes task identifier records that are no longer referenced by any jobs.
     /// This helps keep the `_private_tasks` table clean and smaller.
+    /// Cleanup serializes with job insertion at READ COMMITTED isolation, and
+    /// returns an error if it cannot acquire the task table lock within one second.
+    /// While held, the lock pauses task registration and job insertion. The
+    /// timeout bounds lock acquisition, not the duration of the cleanup query.
+    /// Caller-owned transactions adding jobs should use READ COMMITTED when
+    /// task cleanup may run concurrently; older snapshots at REPEATABLE READ
+    /// or SERIALIZABLE can still refer to a task removed by cleanup.
     ///
     /// **Note**: When using `WorkerUtils::cleanup()` from a worker, task identifiers
     /// that the worker knows about will be preserved to support horizontal scaling.
+    /// Identifiers outside this instance's keep list may be cached by other
+    /// running workers. Stop workers whose identifiers are not preserved before
+    /// collecting their task rows.
     GcTaskIdentifiers,
 
     /// Removes unlocked job queue records that are no longer referenced by any jobs.
     /// This helps keep the `_private_job_queues` table clean and smaller.
     /// Cleanup serializes with job insertion at READ COMMITTED isolation, and
     /// returns an error if it cannot acquire the queue table lock within one second.
+    /// Waiting for or holding this lock can pause job insertion, claims and
+    /// completion of queued jobs. The timeout bounds acquisition, not deletion.
     /// Caller-owned transactions adding jobs should use READ COMMITTED when
     /// queue cleanup may run concurrently; older snapshots at REPEATABLE READ
     /// or SERIALIZABLE can still refer to a queue removed by cleanup.

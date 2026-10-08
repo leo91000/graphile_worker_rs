@@ -18,6 +18,11 @@ pub enum GraphileWorkerError {
     /// Job scheduling failed due to a before_job_schedule hook.
     #[error("Job scheduling failed: {0}")]
     JobScheduleFailed(String),
+
+    /// Concurrent registrations prevented publishing a consistent task-cache refresh.
+    /// The database cleanup may already be committed; the latest cache is preserved.
+    #[error("Task details changed during all {attempts} cleanup refresh attempts; retry cleanup after registrations settle")]
+    TaskDetailsRefreshConflict { attempts: usize },
 }
 
 /// A Result type alias for GraphileWorkerError.
