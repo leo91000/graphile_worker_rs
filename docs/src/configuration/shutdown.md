@@ -143,6 +143,11 @@ let worker = WorkerOptions::default()
 During shutdown, Graphile Worker still owns graceful draining after the signal
 is received.
 
+If a job slot fails, for example because fetching or releasing a job hits a
+database error, the worker shuts itself down the same way: jobs running in the
+other slots get the grace period, and `Worker::run` returns the slot's error only
+after every slot has stopped.
+
 ## Interrupted Job Retry Delay
 
 `interrupted_job_retry_delay` controls when a job aborted by shutdown becomes

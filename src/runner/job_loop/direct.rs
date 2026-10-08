@@ -38,8 +38,14 @@ pub(super) async fn run(worker: &Worker) -> Result<(), WorkerRuntimeError> {
     }
     drop(source_rx);
 
-    sources::dispatch_job_signals(job_signal, source_tx, worker_handles, worker.concurrency)
-        .await?;
+    sources::dispatch_job_signals(
+        job_signal,
+        source_tx,
+        worker_handles,
+        worker.concurrency,
+        &worker.shutdown_notifier,
+    )
+    .await?;
 
     Ok(())
 }

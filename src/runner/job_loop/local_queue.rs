@@ -45,9 +45,14 @@ pub(super) async fn run(
     }
     drop(source_rx);
 
-    let dispatch_result =
-        sources::dispatch_job_signals(job_signal, source_tx, worker_handles, worker.concurrency)
-            .await;
+    let dispatch_result = sources::dispatch_job_signals(
+        job_signal,
+        source_tx,
+        worker_handles,
+        worker.concurrency,
+        &worker.shutdown_notifier,
+    )
+    .await;
 
     for local_queue in local_queues.iter() {
         if let Err(e) = local_queue.release().await {
