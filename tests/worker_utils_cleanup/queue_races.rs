@@ -15,7 +15,7 @@ use crate::helpers::{with_test_db, TestDatabase};
 #[derive(Clone, Debug, Default)]
 struct Executions(Arc<AtomicU32>);
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct QueueGcJob {
     pause: bool,
 }
@@ -180,4 +180,79 @@ async fn queue_cleanup_waits_for_an_inflight_add() {
 #[tokio::test]
 async fn add_waits_for_inflight_queue_cleanup() {
     race_cleanup_and_add(true).await;
+}
+
+#[tokio::test]
+async fn queue_cleanup_does_not_hold_task_cache_while_waiting_for_an_add_transaction() {
+    with_test_db(|test_db| async move {
+        let utils = test_db.worker_utils();
+        utils.migrate().await.expect("failed to migrate");
+        let spec = JobSpec::builder().queue_name("engine").build();
+        let transaction = test_db.database.begin().await.expect("add transaction");
+        let mut scoped = utils.clone().with_executor(&transaction);
+        scoped
+            .add_job(QueueGcJob { pause: false }, spec.clone())
+            .await
+            .expect("first add");
+
+        let cleanup_utils = utils.clone();
+        let cleanup = tokio::task::spawn_local(async move {
+            cleanup_utils
+                .cleanup(&[CleanupTask::GcJobQueues, CleanupTask::GcTaskIdentifiers])
+                .await
+        });
+        wait_for_lock(&test_db, "LOCK TABLE").await;
+
+        // The caller must be able to finish its transaction while queue GC
+        // waits for its table lock. Typed batch insertion reads the task cache.
+        let second_add = timeout(
+            Duration::from_secs(2),
+            scoped.add_jobs(&[(QueueGcJob { pause: false }, &spec)]),
+        )
+        .await;
+        drop(scoped);
+        transaction.commit().await.expect("commit adds");
+        timeout(Duration::from_secs(5), cleanup)
+            .await
+            .expect("cleanup must finish")
+            .expect("cleanup task")
+            .expect("cleanup");
+        second_add
+            .expect("queue GC must not block the transaction on the task cache")
+            .expect("second add");
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn queue_cleanup_bounds_its_wait_for_a_long_running_add_transaction() {
+    with_test_db(|test_db| async move {
+        let utils = test_db.worker_utils();
+        utils.migrate().await.expect("failed to migrate");
+        let spec = JobSpec::builder().queue_name("engine").build();
+        let transaction = test_db.database.begin().await.expect("add transaction");
+        utils
+            .clone()
+            .with_executor(&transaction)
+            .add_job(QueueGcJob { pause: false }, spec)
+            .await
+            .expect("add job");
+
+        let result = timeout(
+            Duration::from_secs(5),
+            utils.cleanup(&[CleanupTask::GcJobQueues]),
+        )
+        .await
+        .expect("queue GC must not wait indefinitely");
+        assert!(result.is_err(), "a held table lock must time out cleanup");
+        transaction.commit().await.expect("commit add");
+        utils
+            .cleanup(&[CleanupTask::GcJobQueues])
+            .await
+            .expect("cleanup must work after timeout");
+        let jobs = test_db.get_jobs().await;
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].queue_name.as_deref(), Some("engine"));
+    })
+    .await;
 }

@@ -19,7 +19,11 @@ pub enum CleanupTask {
 
     /// Removes unlocked job queue records that are no longer referenced by any jobs.
     /// This helps keep the `_private_job_queues` table clean and smaller.
-    /// Cleanup serializes with job insertion so an in-flight add cannot lose its queue.
+    /// Cleanup serializes with job insertion at READ COMMITTED isolation, and
+    /// returns an error if it cannot acquire the queue table lock within one second.
+    /// Caller-owned transactions adding jobs should use READ COMMITTED when
+    /// queue cleanup may run concurrently; older snapshots at REPEATABLE READ
+    /// or SERIALIZABLE can still refer to a queue removed by cleanup.
     GcJobQueues,
 
     /// Removes jobs that have reached their maximum retry attempts and are no longer locked.
