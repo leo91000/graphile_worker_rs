@@ -1,3 +1,4 @@
+use crate::errors::Result;
 use graphile_worker_database::{Database, DbExecutor, DbValue, Schema};
 use indoc::formatdoc;
 use tracing::error;
@@ -54,7 +55,7 @@ pub(super) async fn complete_one_job_with_queue(
     database: &Database,
     schema: &Schema,
     worker_id: &str,
-) -> bool {
+) -> Result<()> {
     let jobs = schema.private_table("jobs");
     let job_queues = schema.private_table("job_queues");
     let sql = formatdoc!(
@@ -87,8 +88,8 @@ pub(super) async fn complete_one_job_with_queue(
             job_id = req.job_id,
             "Failed to complete job directly (with queue)"
         );
-        return false;
+        return Err(error.into());
     }
 
-    true
+    Ok(())
 }
