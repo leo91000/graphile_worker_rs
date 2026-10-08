@@ -92,8 +92,9 @@ async fn run_heartbeat_loop(worker: Arc<Worker>) {
                     worker_recovery_metadata(),
                 )
                 .await {
+                    let worker_id = worker.worker_id.as_str();
                     warn!(
-                        worker_id = %worker.worker_id,
+                        worker_id,
                         error = %error,
                         "Worker heartbeat failed; will retry at the next interval"
                     );

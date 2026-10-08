@@ -126,8 +126,21 @@ async fn failed_heartbeat_retries_without_recovering_a_running_queued_job() {
         })
         .await;
 
+        let job = utils
+            .add_job(
+                HeldHeartbeatJob,
+                JobSpec::builder().queue_name("heartbeat_retry_queue").build(),
+            )
+            .await
+            .expect("failed to add job");
+        wait_until("the job to start", || async {
+            !runs.started.lock().unwrap().is_empty()
+        })
+        .await;
+
         // Sequence increments survive a rolled-back statement. A trigger injects
-        // exactly one failure without replacing the production heartbeat SQL.
+        // exactly one failure while the job is already running, without replacing
+        // the production heartbeat SQL.
         sqlx::raw_sql(
             r#"
             CREATE SEQUENCE graphile_worker.heartbeat_calls;
@@ -154,18 +167,6 @@ async fn failed_heartbeat_retries_without_recovering_a_running_queued_job() {
                 .fetch_one(&test_db.test_pool)
                 .await
                 .expect("failed to check injected failure")
-        })
-        .await;
-
-        let job = utils
-            .add_job(
-                HeldHeartbeatJob,
-                JobSpec::builder().queue_name("heartbeat_retry_queue").build(),
-            )
-            .await
-            .expect("failed to add job");
-        wait_until("the job to start", || async {
-            !runs.started.lock().unwrap().is_empty()
         })
         .await;
 
