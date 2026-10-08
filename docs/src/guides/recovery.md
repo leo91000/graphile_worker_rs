@@ -71,6 +71,15 @@ recovery, except `.enabled(false)`, which explicitly disables it again.
 An enabled worker registers itself in the private workers table and refreshes
 `last_heartbeat_at` at the configured `heartbeat_interval`.
 
+If a heartbeat fails, the worker logs the error and tries again at the next
+interval. The heartbeat loop continues until shutdown.
+
+Retrying does not extend `sweep_threshold`. If heartbeats keep failing or
+hanging for longer than the threshold (extended for resilient jobs), any
+sweeper, including the worker's own, treats the worker as inactive and recovers
+its jobs while they may still be running. The next successful heartbeat
+registers the worker again.
+
 You can inspect registered workers with `WorkerUtils::list_active_workers`.
 The stale state is calculated from the threshold you pass to that method:
 
