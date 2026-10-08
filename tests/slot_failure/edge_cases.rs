@@ -229,7 +229,10 @@ async fn local_queue_slot_release_failure_drains_jobs_and_returns_cached_claims(
         ]).await.expect("poison and cached jobs");
         let result = timeout(Duration::from_secs(5), run).await.expect("drain local queue")
             .expect("run task");
-        assert!(result.unwrap_err().to_string().contains("injected completion failure"));
+        let error = result.expect_err("completion failure must reach Worker::run");
+        // Drivers format PostgreSQL's trigger error differently; the public
+        // runtime error must still identify the failed release operation.
+        assert!(error.to_string().contains("releasing a job"), "{error:?}");
         assert!(state.ended.load(Ordering::SeqCst));
         assert_eq!(executions.0.load(Ordering::SeqCst), 0);
         let jobs = test_db.get_jobs().await;
