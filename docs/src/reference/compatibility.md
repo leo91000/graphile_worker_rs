@@ -119,6 +119,21 @@ the Rust worker configuration. If you run mixed Rust and Node workers, enable
 and test recovery behavior deliberately so that every worker process in the
 shared schema is compatible with your operational expectations.
 
+## Cron Calendar and Timestamp Selection
+
+Node Graphile Worker matches cron schedules against UTC calendar fields,
+including when `useNodeTime` selects application timestamps. In Rust, the
+default `use_local_time(false)` also matches schedules and backfill in UTC.
+Opting into `use_local_time(true)` selects both application timestamps and
+the worker process's local calendar fields for cron matching and backfill.
+The recorded timestamps still represent the scheduled instant.
+
+These configuration names therefore do not imply identical cron behavior.
+Keep Rust's default when schedules must match Node's UTC calendar semantics;
+use local mode deliberately when schedules should follow the host timezone.
+Regression tests cover both modes across a date boundary for normal scheduling
+and backfill. See the [cron guide](../guides/cron.md).
+
 ## Migration Behavior
 
 Graphile Worker RS runs ordered migrations and records them in

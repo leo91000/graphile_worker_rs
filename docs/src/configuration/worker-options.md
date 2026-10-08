@@ -97,7 +97,9 @@ Important core methods:
   keeps draining the listener instead of blocking on worker fanout.
 - `use_local_time(value)` controls whether timestamps use application time
   (`true`) or PostgreSQL server time (`false`). The default is PostgreSQL server
-  time.
+  time. It also selects local calendar fields for cron matching and backfill
+  when `true`; `false` matches cron schedules in UTC. See the
+  [cron guide](../guides/cron.md).
 
 PostgreSQL server time is the safer default when multiple worker processes run
 against the same database.
