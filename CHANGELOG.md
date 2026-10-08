@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.14.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.9...graphile_worker-v0.14.0) - 2026-10-08
+
+### Added
+
+- add accepted flag routing ([#546](https://github.com/leo91000/graphile_worker_rs/pull/546))
+
+### Fixed
+
+- [**breaking**] make task cleanup safe against concurrent inserts and cache updates ([#554](https://github.com/leo91000/graphile_worker_rs/pull/554))
+- propagate completion errors and reject late batcher requests ([#557](https://github.com/leo91000/graphile_worker_rs/pull/557))
+
+### Other
+
+- avoid repeated job scans during queue and task cleanup ([#555](https://github.com/leo91000/graphile_worker_rs/pull/555))
+
 ## [0.13.9](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.8...graphile_worker-v0.13.9) - 2026-10-08
 
 ### Fixed
