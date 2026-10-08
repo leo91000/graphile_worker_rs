@@ -14,7 +14,7 @@ pub(super) async fn run(
     local_queues: Vec<LocalQueue>,
     job_signal_rx: LocalQueueSignalReceiver,
 ) -> Result<(), WorkerRuntimeError> {
-    let job_signal = job_signal_stream(
+    let job_signal = match job_signal_stream(
         JobSignalStreamConfig::new(
             worker.database.clone(),
             worker.poll_interval,
@@ -23,7 +23,15 @@ pub(super) async fn run(
         )
         .with_local_queue(job_signal_rx),
     )
-    .await?;
+    .await
+    {
+        Ok(stream) => stream,
+        Err(error) => {
+            worker.request_shutdown();
+            release_local_queues(&local_queues).await;
+            return Err(error.into());
+        }
+    };
 
     debug!("Listening for jobs with LocalQueue...");
     let (source_tx, source_rx) = runtime::channel(worker.concurrency * 4);
@@ -57,12 +65,16 @@ pub(super) async fn run(
     )
     .await;
 
-    for local_queue in local_queues.iter() {
+    release_local_queues(&local_queues).await;
+
+    dispatch_result?;
+    Ok(())
+}
+
+async fn release_local_queues(local_queues: &[LocalQueue]) {
+    for local_queue in local_queues {
         if let Err(e) = local_queue.release().await {
             warn!(error = %e, "Error releasing LocalQueue");
         }
     }
-
-    dispatch_result?;
-    Ok(())
 }

@@ -79,27 +79,25 @@ pub(crate) fn spawn_recovery_tasks(worker: &Worker) -> RecoveryTasks {
 
 async fn run_heartbeat_loop(worker: Arc<Worker>) {
     let mut interval = runtime::interval(worker.recovery_config.heartbeat_interval);
-    let mut shutdown_signal = worker.shutdown_signal.clone();
 
+    // RecoveryTasks owns this task and stops it after slots and batchers drain.
+    // Shutdown starts a grace period, during which jobs still belong to us.
     loop {
-        futures::select_biased! {
-            _ = (&mut shutdown_signal).fuse() => break,
-            _ = interval.tick().fuse() => {
-                if let Err(error) = worker_heartbeat(
-                    &worker.database,
-                    &worker.schema,
-                    &worker.worker_id,
-                    worker_recovery_metadata(),
-                )
-                .await {
-                    let worker_id = worker.worker_id.as_str();
-                    warn!(
-                        worker_id,
-                        error = %error,
-                        "Worker heartbeat failed; will retry at the next interval"
-                    );
-                }
-            }
+        interval.tick().await;
+        if let Err(error) = worker_heartbeat(
+            &worker.database,
+            &worker.schema,
+            &worker.worker_id,
+            worker_recovery_metadata(),
+        )
+        .await
+        {
+            let worker_id = worker.worker_id.as_str();
+            warn!(
+                worker_id,
+                error = %error,
+                "Worker heartbeat failed; will retry at the next interval"
+            );
         }
     }
 }

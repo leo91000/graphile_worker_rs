@@ -9,6 +9,9 @@ use crate::helpers::{with_test_db, TestDatabase};
 
 mod helpers;
 
+#[path = "slot_failure/edge_cases.rs"]
+mod edge_cases;
+
 #[derive(Clone, Debug, Default)]
 struct HeldJobState {
     started: Arc<AtomicBool>,

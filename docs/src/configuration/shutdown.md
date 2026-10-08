@@ -148,6 +148,11 @@ database error, the worker shuts itself down the same way: jobs running in the
 other slots get the grace period, and `Worker::run` returns the slot's error only
 after every slot has stopped.
 
+Notification-listener startup failures also request shutdown so completion and
+failure batchers stop and LocalQueue returns any prefetched claims. When worker
+recovery is enabled, heartbeats continue until running jobs and batchers have
+drained, so other workers do not recover jobs still running in the grace period.
+
 ## Interrupted Job Retry Delay
 
 `interrupted_job_retry_delay` controls when a job aborted by shutdown becomes

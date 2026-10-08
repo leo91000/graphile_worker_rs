@@ -14,6 +14,10 @@ impl Worker {
         let recovery_tasks = spawn_recovery_tasks(self);
         let result = self.run_job_sources().await;
 
+        if result.is_err() {
+            self.request_shutdown();
+        }
+
         self.await_batchers().await;
         recovery_tasks.stop().await;
         self.emit_shutdown(result_to_shutdown_reason(&result)).await;
