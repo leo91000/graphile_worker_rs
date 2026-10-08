@@ -14,7 +14,7 @@ pub(super) async fn run(
     local_queues: Vec<LocalQueue>,
     job_signal_rx: LocalQueueSignalReceiver,
 ) -> Result<(), WorkerRuntimeError> {
-    let job_signal = job_signal_stream(
+    let job_signal = match job_signal_stream(
         JobSignalStreamConfig::new(
             worker.database.clone(),
             worker.poll_interval,
@@ -23,7 +23,15 @@ pub(super) async fn run(
         )
         .with_local_queue(job_signal_rx),
     )
-    .await?;
+    .await
+    {
+        Ok(stream) => stream,
+        Err(error) => {
+            worker.request_shutdown();
+            release_local_queues(&local_queues).await;
+            return Err(error.into());
+        }
+    };
 
     debug!("Listening for jobs with LocalQueue...");
     let (source_tx, source_rx) = runtime::channel(worker.concurrency * 4);
@@ -36,7 +44,10 @@ pub(super) async fn run(
         let runner = runner.clone();
         let source_rx = source_rx.clone();
         worker_handles.push(runtime::spawn(async move {
-            while let Ok(source) = source_rx.recv().await {
+            let mut shutdown_signal = runner.shutdown_signal.clone();
+            while let Some(source) =
+                sources::next_job_signal(&source_rx, &mut shutdown_signal).await
+            {
                 sources::process_local_queue_source(&runner, &local_queues, index, source).await?;
             }
 
@@ -45,16 +56,25 @@ pub(super) async fn run(
     }
     drop(source_rx);
 
-    let dispatch_result =
-        sources::dispatch_job_signals(job_signal, source_tx, worker_handles, worker.concurrency)
-            .await;
+    let dispatch_result = sources::dispatch_job_signals(
+        job_signal,
+        source_tx,
+        worker_handles,
+        worker.concurrency,
+        &worker.shutdown_notifier,
+    )
+    .await;
 
-    for local_queue in local_queues.iter() {
+    release_local_queues(&local_queues).await;
+
+    dispatch_result?;
+    Ok(())
+}
+
+async fn release_local_queues(local_queues: &[LocalQueue]) {
+    for local_queue in local_queues {
         if let Err(e) = local_queue.release().await {
             warn!(error = %e, "Error releasing LocalQueue");
         }
     }
-
-    dispatch_result?;
-    Ok(())
 }
