@@ -275,7 +275,7 @@ flushes them before exiting. If the batcher has already closed, the worker falls
 back to direct completion or failure persistence for that job.
 
 If direct fallback completion fails, the worker returns the database error from
-`Worker::run()` or `run_once`, including during shutdown. It emits the completion
+`Worker::run()`, including during shutdown. It emits the completion
 hook only after successful persistence. Requests accepted by an open batcher
 remain asynchronous; acceptance acknowledges queueing rather than persistence.
 

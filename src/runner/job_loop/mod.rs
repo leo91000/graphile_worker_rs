@@ -20,6 +20,7 @@ impl Worker {
             schema: self.schema.clone(),
             task_details: self.task_details.clone(),
             forbidden_flags: self.forbidden_flags.clone(),
+            accepted_flags: self.accepted_flags.clone(),
             use_local_time: self.use_local_time,
             shutdown_signal: self.shutdown_signal.clone(),
             extensions: self.extensions.clone(),

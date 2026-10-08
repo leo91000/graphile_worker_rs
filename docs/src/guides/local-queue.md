@@ -165,15 +165,14 @@ reuse an active local queue's worker ID for fetching.
 Choose `ttl` based on how much work you are comfortable locking inside one
 process if handlers are slower than the local batch drain rate.
 
-## Forbidden Flags
+## Job Flag Filters
 
-Workers configured with forbidden flags do not use the local queue cache.
-During worker initialization, a non-empty forbidden flag list disables the local
-queue configuration for that worker.
-
-This preserves flag filtering semantics: jobs with forbidden flags are skipped
-by the worker, and eligible jobs are fetched directly from PostgreSQL with the
-forbidden flag filter applied.
+Workers configured with accepted or forbidden flags retain local queue batching.
+Each queue stores the worker's filter and applies it in PostgreSQL before the
+batch limit and claim updates. Any accepted label matches, and forbidden labels
+veto. Rejected jobs never enter the cache or consume attempts, and named queues
+remain available unless an eligible job claims them. See
+[Job Flag Routing](../configuration/job-flags.md) for empty sets and untagged jobs.
 
 A batch claims at most one job from each named queue. Other jobs in that queue
 remain unclaimed until the selected job releases its queue lock, including when

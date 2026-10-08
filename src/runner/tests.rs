@@ -76,6 +76,7 @@ fn runner_for(
         schema: graphile_worker_database::Schema::new("graphile_worker"),
         task_details: Default::default(),
         forbidden_flags: Vec::new(),
+        accepted_flags: Vec::new(),
         use_local_time: false,
         shutdown_signal,
         extensions: ReadOnlyExtensions::from(Extensions::new()),

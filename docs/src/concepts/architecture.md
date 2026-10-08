@@ -85,7 +85,8 @@ The SQL wrapper passes these options to PostgreSQL:
 - `max_attempts`: optional retry limit.
 - `job_key` and `job_key_mode`: optional job de-duplication/update behavior.
 - `priority`: lower values are fetched first.
-- `flags`: labels that workers may skip through `forbidden_flags`.
+- `flags`: labels that workers may select through accepted flags or exclude
+  through forbidden flags; labels can also affect recovery behavior.
 
 When tracing context is active, the insert path can add trace information into
 the payload before writing it. If `use_local_time` is enabled and no `run_at`
@@ -101,6 +102,7 @@ The fetch query requires:
 - `is_available = true`
 - `run_at <= now()`, or the supplied local timestamp
 - no forbidden flags selected by this worker
+- at least one matching accepted flag, when the worker's accepted set is nonempty
 - an available queue when the job belongs to a named queue
 
 Jobs are ordered by `priority asc, run_at asc`, then locked with:
