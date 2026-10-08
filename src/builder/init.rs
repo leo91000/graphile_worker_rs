@@ -89,11 +89,12 @@ impl WorkerOptions {
 
         let concurrency = self.concurrency.unwrap_or_else(num_cpus::get);
 
-        let local_queue_config = if self.forbidden_flags.is_empty() {
-            self.local_queue_config
-        } else {
-            None
-        };
+        let local_queue_config =
+            if self.forbidden_flags.is_empty() && self.accepted_flags.is_empty() {
+                self.local_queue_config
+            } else {
+                None
+            };
         if let Some(config) = local_queue_config.as_ref() {
             config.validate(poll_interval)?;
         }

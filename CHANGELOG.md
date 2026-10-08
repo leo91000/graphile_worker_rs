@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.13.9](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.8...graphile_worker-v0.13.9) - 2026-10-08
+
+### Fixed
+
+- drain job slots and preserve recovery through shutdown ([#549](https://github.com/leo91000/graphile_worker_rs/pull/549))
+- prevent queue cleanup from stranding newly added jobs ([#548](https://github.com/leo91000/graphile_worker_rs/pull/548))
+
+## [0.13.8](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.7...graphile_worker-v0.13.8) - 2026-10-08
+
+### Fixed
+
+- retry failed worker heartbeats ([#545](https://github.com/leo91000/graphile_worker_rs/pull/545))
+
+### Other
+
+- record upstream audit and cron clock compatibility ([#547](https://github.com/leo91000/graphile_worker_rs/pull/547))
+- *(deps)* update all non-major dependencies ([#543](https://github.com/leo91000/graphile_worker_rs/pull/543))
+
 ## [0.13.7](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.6...graphile_worker-v0.13.7) - 2026-10-06
 
 ### Fixed

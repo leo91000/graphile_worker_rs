@@ -51,7 +51,7 @@ pub struct Worker {
     pub(crate) task_details: SharedTaskDetails,
     /// List of job flags that this worker will not process
     pub(crate) forbidden_flags: Vec<String>,
-    /// List of job flags that this worker will accept
+    /// Positive routing labels; an empty set adds no positive restriction
     pub(crate) accepted_flags: Vec<String>,
     /// List of cron job definitions to be scheduled
     pub(crate) crontabs: Vec<Crontab>,

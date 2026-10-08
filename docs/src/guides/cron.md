@@ -126,8 +126,16 @@ The text format is:
 * * * * * task_identifier ?options {payload}
 ```
 
-The five schedule fields are UTC minute, UTC hour, UTC day of month, UTC month,
-and UTC day of week. Days of week use `0..=6`.
+The five schedule fields are minute, hour, day of month, month, and day of week.
+Days of week use `0..=6`. By default, these fields are matched in UTC for both
+normal scheduling and backfill.
+
+Setting `WorkerOptions::use_local_time(true)` instead matches these fields in
+the worker process's local timezone, including during backfill. Keep the default
+`false` when schedules must use UTC regardless of the host timezone. This Rust
+option differs from Node Graphile Worker's `useNodeTime`, which changes the
+timestamp source while cron matching remains in UTC; see
+[Compatibility](../reference/compatibility.md#cron-calendar-and-timestamp-selection).
 
 Supported schedule values are:
 

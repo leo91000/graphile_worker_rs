@@ -24,7 +24,7 @@ impl WorkerOptions {
     /// jobs with your own PostgreSQL latency, pool size, worker concurrency, and
     /// local queue settings before tuning this in production.
     ///
-    /// Workers with `forbidden_flags` will bypass the LocalQueue and fetch
+    /// Workers with accepted or forbidden flags will bypass the LocalQueue and fetch
     /// jobs directly from the database.
     ///
     /// # Example

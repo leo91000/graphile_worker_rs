@@ -12,7 +12,8 @@ use super::errors::ProcessJobError;
 use super::release::release_job;
 use super::WorkerRunner;
 use crate::streams::job_signal::JobSignalSource;
-use graphile_worker_queries::get_job::get_job;
+use graphile_worker_queries::flag_filter::JobFlagFilter;
+use graphile_worker_queries::get_job::get_job_with_filter;
 
 /// Fetches and processes a single job from the queue.
 ///
@@ -37,13 +38,12 @@ pub(super) async fn process_one_job(
 ) -> Result<Option<Job>, ProcessJobError> {
     let now = worker.use_local_time.then(Utc::now);
     let task_details_guard = worker.task_details.read().await;
-    let job = get_job(
+    let job = get_job_with_filter(
         &worker.database,
         &task_details_guard,
         &worker.schema,
         &worker.worker_id,
-        &worker.forbidden_flags,
-        &worker.accepted_flags,
+        JobFlagFilter::new(&worker.forbidden_flags, &worker.accepted_flags),
         now,
     )
     .await

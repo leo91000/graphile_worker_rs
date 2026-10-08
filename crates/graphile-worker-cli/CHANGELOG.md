@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.10](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_cli-v0.1.9...graphile_worker_cli-v0.1.10) - 2026-10-08
+
+### Other
+
+- updated the following local packages: graphile_worker, graphile_worker_admin_ui
+
+## [0.1.9](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_cli-v0.1.8...graphile_worker_cli-v0.1.9) - 2026-10-08
+
+### Other
+
+- updated the following local packages: graphile_worker, graphile_worker_admin_ui
+
 ## [0.1.8](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_cli-v0.1.7...graphile_worker_cli-v0.1.8) - 2026-10-06
 
 ### Other

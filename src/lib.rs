@@ -77,6 +77,7 @@ pub use graphile_worker_database::*;
 pub use graphile_worker_job::*;
 pub use graphile_worker_job_spec::*;
 pub use graphile_worker_lifecycle_hooks::*;
+pub use graphile_worker_queries::flag_filter::JobFlagFilter;
 pub use graphile_worker_shutdown_signal::ShutdownSignal;
 pub use graphile_worker_task_handler::*;
 

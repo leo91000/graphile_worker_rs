@@ -80,19 +80,19 @@ async fn replaced_locked_jobs_stay_retired_and_release_their_queues() {
                 let spec = JobSpec { queue_name: queue.clone(), job_key: Some("key".into()), max_attempts: Some(1), ..Default::default() };
                 db.add_job("task", json!({"old": true}), spec.clone()).await;
                 let tasks = get_tasks_details(&db.database, "graphile_worker", vec!["task".into()]).await.unwrap();
-                let old = get_job(&db.database, &tasks, "graphile_worker", "owner", &[], &[], None).await.unwrap().unwrap();
+                let old = get_job(&db.database, &tasks, "graphile_worker", "owner", &[], None).await.unwrap().unwrap();
                 db.add_job("task", json!({"new": true}), spec).await;
                 let rows = db.get_jobs().await;
                 let retired = rows.iter().find(|row| row.id == *old.id()).unwrap();
                 assert_eq!(retired.locked_by.as_deref(), Some("owner"), "replacement must preserve ownership until release");
                 if queue.is_some() {
-                    assert!(get_job(&db.database, &tasks, "graphile_worker", "other", &[], &[], None).await.unwrap().is_none());
+                    assert!(get_job(&db.database, &tasks, "graphile_worker", "other", &[], None).await.unwrap().is_none());
                 }
                 release(&db, &old, mode).await;
-                let next = get_job(&db.database, &tasks, "graphile_worker", "other", &[], &[], None).await.unwrap().unwrap();
+                let next = get_job(&db.database, &tasks, "graphile_worker", "other", &[], None).await.unwrap().unwrap();
                 assert_eq!(next.payload(), &json!({"new": true}), "obsolete payload revived by {mode}");
                 complete_job(&db.database, &next, "other", "graphile_worker").await.unwrap();
-                assert!(get_job(&db.database, &tasks, "graphile_worker", "other", &[], &[], None).await.unwrap().is_none(), "retired job became available after {mode}");
+                assert!(get_job(&db.database, &tasks, "graphile_worker", "other", &[], None).await.unwrap().is_none(), "retired job became available after {mode}");
                 assert!(db.get_job_queues().await.iter().all(|q| q.locked_by.is_none()));
                 let markers: i64 = sqlx::query_scalar("select count(*) from graphile_worker._private_job_retirements")
                     .fetch_one(&db.test_pool).await.unwrap();
@@ -101,9 +101,9 @@ async fn replaced_locked_jobs_stay_retired_and_release_their_queues() {
                     // Explicit administrative rescheduling may revive the old job.
                     sqlx::query("select graphile_worker.reschedule_jobs(array[$1]::bigint[], attempts => 0, run_at => now())")
                         .bind(*old.id()).execute(&db.test_pool).await.unwrap();
-                    let revived = get_job(&db.database, &tasks, "graphile_worker", "owner", &[], &[], None).await.unwrap().unwrap();
+                    let revived = get_job(&db.database, &tasks, "graphile_worker", "owner", &[], None).await.unwrap().unwrap();
                     release(&db, &revived, "sweep").await;
-                    let retried = get_job(&db.database, &tasks, "graphile_worker", "other", &[], &[], None).await.unwrap().unwrap();
+                    let retried = get_job(&db.database, &tasks, "graphile_worker", "other", &[], None).await.unwrap().unwrap();
                     assert_eq!(retried.id(), old.id(), "explicitly revived final attempt must recover");
                 }
             }).await;
@@ -131,12 +131,12 @@ async fn ordinary_final_attempts_are_recovered() {
                 let tasks = get_tasks_details(&db.database, "graphile_worker", vec!["task".into()])
                     .await
                     .unwrap();
-                let old = get_job(&db.database, &tasks, "graphile_worker", "owner", &[], &[], None)
+                let old = get_job(&db.database, &tasks, "graphile_worker", "owner", &[], None)
                     .await
                     .unwrap()
                     .unwrap();
                 release(&db, &old, mode).await;
-                let retried = get_job(&db.database, &tasks, "graphile_worker", "other", &[], &[], None)
+                let retried = get_job(&db.database, &tasks, "graphile_worker", "other", &[], None)
                     .await
                     .unwrap()
                     .unwrap();
@@ -158,7 +158,7 @@ async fn explicitly_removed_or_permanently_failed_jobs_are_not_recovered() {
                     db.worker_utils().migrate().await.unwrap();
                     db.add_job("task", json!({}), JobSpec { queue_name: queue, job_key: Some("key".into()), ..Default::default() }).await;
                     let tasks = get_tasks_details(&db.database, "graphile_worker", vec!["task".into()]).await.unwrap();
-                    let old = get_job(&db.database, &tasks, "graphile_worker", "owner", &[], &[], None).await.unwrap().unwrap();
+                    let old = get_job(&db.database, &tasks, "graphile_worker", "owner", &[], None).await.unwrap().unwrap();
                     if removal == "remove" {
                         sqlx::query("select graphile_worker.remove_job('key')").execute(&db.test_pool).await.unwrap();
                     } else {
@@ -167,10 +167,10 @@ async fn explicitly_removed_or_permanently_failed_jobs_are_not_recovered() {
                         sqlx::query("select graphile_worker.permanently_fail_jobs(array[$1]::bigint[], 'operator decision')").bind(*old.id()).execute(&db.test_pool).await.unwrap();
                     }
                     release(&db, &old, mode).await;
-                    assert!(get_job(&db.database, &tasks, "graphile_worker", "other", &[], &[], None).await.unwrap().is_none(), "{removal} was undone by {mode}");
+                    assert!(get_job(&db.database, &tasks, "graphile_worker", "other", &[], None).await.unwrap().is_none(), "{removal} was undone by {mode}");
                     assert!(db.get_job_queues().await.iter().all(|q| q.locked_by.is_none()));
                     sqlx::query("select graphile_worker.reschedule_jobs(array[$1]::bigint[], attempts => 0, run_at => now())").bind(*old.id()).execute(&db.test_pool).await.unwrap();
-                    assert!(get_job(&db.database, &tasks, "graphile_worker", "other", &[], &[], None).await.unwrap().is_some(), "explicit rescheduling remains available");
+                    assert!(get_job(&db.database, &tasks, "graphile_worker", "other", &[], None).await.unwrap().is_some(), "explicit rescheduling remains available");
                 }).await;
             }
         }
@@ -186,7 +186,7 @@ async fn recovery_waits_for_concurrent_retirement_before_restoring_attempts() {
             db.worker_utils().migrate().await.unwrap();
             db.add_job("task", json!({"old":true}), JobSpec { job_key: Some("key".into()), queue_name: Some("serial".into()), ..Default::default() }).await;
             let tasks = get_tasks_details(&db.database, "graphile_worker", vec!["task".into()]).await.unwrap();
-            let old = get_job(&db.database, &tasks, "graphile_worker", "owner", &[], &[], None).await.unwrap().unwrap();
+            let old = get_job(&db.database, &tasks, "graphile_worker", "owner", &[], None).await.unwrap().unwrap();
             let mut tx = db.test_pool.begin().await.unwrap();
             sqlx::query("select graphile_worker.add_job('task', '{\"new\":true}', job_key => 'key', queue_name => 'serial')").execute(&mut *tx).await.unwrap();
             let return_db = db.clone();
@@ -205,7 +205,7 @@ async fn recovery_waits_for_concurrent_retirement_before_restoring_attempts() {
             let retired = rows.iter().find(|row| row.id == *old.id()).unwrap();
             assert_eq!(retired.attempts, retired.max_attempts, "{mode} must see the committed retirement");
             assert!(retired.locked_by.is_none());
-            let next = get_job(&db.database, &tasks, "graphile_worker", "other", &[], &[], None).await.unwrap().unwrap();
+            let next = get_job(&db.database, &tasks, "graphile_worker", "other", &[], None).await.unwrap().unwrap();
             assert_eq!(next.payload(), &json!({"new":true}));
         }).await;
     }
@@ -241,8 +241,8 @@ async fn explicit_reschedule_clears_concurrently_committed_retirement() {
             .bind(id).fetch_one(&db.test_pool).await.unwrap();
         assert_eq!(markers, 0, "explicit rescheduling must clear the committed marker");
         let tasks = get_tasks_details(&db.database, "graphile_worker", vec!["task".into()]).await.unwrap();
-        let job = get_job(&db.database, &tasks, "graphile_worker", "owner", &[], &[], None).await.unwrap().unwrap();
+        let job = get_job(&db.database, &tasks, "graphile_worker", "owner", &[], None).await.unwrap().unwrap();
         release(&db, &job, "return").await;
-        assert!(get_job(&db.database, &tasks, "graphile_worker", "other", &[], &[], None).await.unwrap().is_some());
+        assert!(get_job(&db.database, &tasks, "graphile_worker", "other", &[], None).await.unwrap().is_some());
     }).await;
 }

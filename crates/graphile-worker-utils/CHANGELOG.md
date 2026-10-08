@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_utils-v0.1.5...graphile_worker_utils-v0.1.6) - 2026-10-08
+
+### Fixed
+
+- prevent queue cleanup from stranding newly added jobs ([#548](https://github.com/leo91000/graphile_worker_rs/pull/548))
+
 ## [0.1.5](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_utils-v0.1.4...graphile_worker_utils-v0.1.5) - 2026-10-06
 
 ### Other

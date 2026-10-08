@@ -83,14 +83,14 @@ async fn get_job_from_local_queues(
 ) -> Option<Job> {
     if !worker.forbidden_flags.is_empty() {
         return local_queues[start_index % local_queues.len()]
-            .get_job(&worker.forbidden_flags, &worker.accepted_flags)
+            .get_job(&worker.forbidden_flags)
             .await;
     }
 
     for offset in 0..local_queues.len() {
         let queue_index = (start_index + offset) % local_queues.len();
         if let Some(job) = local_queues[queue_index]
-            .get_job(&worker.forbidden_flags, &worker.accepted_flags)
+            .get_job(&worker.forbidden_flags)
             .await
         {
             return Some(job);
