@@ -63,11 +63,16 @@ impl CleanupTask {
             CleanupTask::GcTaskIdentifiers => {
                 let jobs = PrivateTable::Jobs.qualified(schema);
                 let tasks = PrivateTable::Tasks.qualified(schema);
+                // NOT IN can run as a subplan that rescans a materialized copy of
+                // the jobs table for every task row once the planner estimates its
+                // result too large to hash. NOT EXISTS lets the planner choose an
+                // anti-join instead.
                 let sql = formatdoc!(
                     r#"
                         delete from {tasks} tasks
-                        where tasks.id not in (
-                            select jobs.task_id from {jobs} jobs
+                        where not exists (
+                            select 1 from {jobs} jobs
+                            where jobs.task_id = tasks.id
                         )
                         and tasks.identifier <> all ($1::text[]);
                     "#
@@ -82,13 +87,19 @@ impl CleanupTask {
             CleanupTask::GcJobQueues => {
                 let jobs = PrivateTable::Jobs.qualified(schema);
                 let job_queues = PrivateTable::JobQueues.qualified(schema);
+                // This delete runs while `execute_cleanup_task` holds the queue table
+                // lock, which job fetches and completions of queued jobs wait on, so
+                // its duration is their stall. NOT IN can run as a subplan that
+                // rescans a materialized copy of the jobs table for every queue row
+                // once the planner estimates its result too large to hash. NOT EXISTS
+                // lets the planner choose an anti-join instead.
                 let sql = formatdoc!(
                     r#"
                         delete from {job_queues} job_queues
                         where job_queues.locked_at is null
-                        and job_queues.id not in (
-                            select jobs.job_queue_id from {jobs} jobs
-                            where jobs.job_queue_id is not null
+                        and not exists (
+                            select 1 from {jobs} jobs
+                            where jobs.job_queue_id = job_queues.id
                         );
                     "#
                 );
