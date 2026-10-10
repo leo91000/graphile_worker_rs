@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.14.0...graphile_worker-v0.14.1) - 2026-10-10
+
+### Other
+
+- *(deps)* update all non-major dependencies ([#560](https://github.com/leo91000/graphile_worker_rs/pull/560))
+- *(deps)* update all non-major dependencies ([#558](https://github.com/leo91000/graphile_worker_rs/pull/558))
+
 ## [0.14.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.13.9...graphile_worker-v0.14.0) - 2026-10-08
 
 ### Added
