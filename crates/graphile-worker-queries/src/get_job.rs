@@ -36,6 +36,8 @@ pub async fn get_job(
 ///
 /// Filtering happens before candidate locking and attempts are incremented.
 /// A nonempty accepted set excludes jobs with absent or empty flags.
+/// An enabled allowlist requires every object key to be listed and rejects
+/// non-object JSON flags. SQL NULL satisfies the allowlist predicate.
 pub async fn get_job_with_filter(
     mut executor: impl DbExecutorArg,
     task_details: &TaskDetails,

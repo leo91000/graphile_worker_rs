@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use chrono::Utc;
 use futures::{FutureExt, Stream};
 use graphile_worker_database::{Database, Schema};
@@ -51,10 +53,12 @@ pub fn job_stream(
     )
 }
 
-/// Streams registered jobs satisfying a worker's positive and negative filters.
+/// Streams registered jobs satisfying a worker's flag filters.
 ///
 /// A nonempty accepted set requires any matching flag; forbidden flags veto.
 /// The filter is applied by PostgreSQL before jobs are claimed.
+/// An enabled allowlist requires every job flag key to be listed and rejects
+/// non-object JSON flags; untagged jobs must still satisfy accepted routing.
 pub fn job_stream_with_filter<'a>(
     database: Database,
     shutdown_signal: ShutdownSignal,
@@ -64,6 +68,7 @@ pub fn job_stream_with_filter<'a>(
     filter: JobFlagFilter<'a>,
     use_local_time: bool,
 ) -> impl Stream<Item = Job> + 'a {
+    let filter = Arc::new(filter);
     futures::stream::unfold((), move |()| {
         let database = database.clone();
         let task_details = task_details.clone();
@@ -79,7 +84,7 @@ pub fn job_stream_with_filter<'a>(
                 &task_details_guard,
                 &schema,
                 &worker_id,
-                filter,
+                filter.as_borrowed(),
                 now,
             )
             .await

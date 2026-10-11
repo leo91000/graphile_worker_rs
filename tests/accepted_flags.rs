@@ -46,12 +46,25 @@ async fn worker_routes_jobs(
     continuous: bool,
     queue_count: usize,
 ) {
+    worker_routes_jobs_with_allowlist(accepted, forbidden, None, expected, continuous, queue_count)
+        .await;
+}
+
+async fn worker_routes_jobs_with_allowlist(
+    accepted: Vec<&'static str>,
+    forbidden: Vec<&'static str>,
+    allowlist: Option<Vec<&'static str>>,
+    expected: Vec<u32>,
+    continuous: bool,
+    queue_count: usize,
+) {
     with_test_db(move |db| async move {
         let executions = Executions::default();
         let local_queues = Arc::new(AtomicU32::new(0));
         let fetches = Arc::new(AtomicUsize::new(0));
         let largest_batch = Arc::new(AtomicUsize::new(0));
-        let policy = format!("accepted={accepted:?}, forbidden={forbidden:?}");
+        let policy = format!("accepted={accepted:?}, forbidden={forbidden:?}, allowlist={allowlist:?}");
+        let expected_allowlist = allowlist.as_ref().map(|flags| flags.iter().map(|flag| (*flag).to_owned()).collect::<Vec<_>>());
         let mut options = Worker::options()
             .database(db.database.clone())
             .concurrency(queue_count.max(1))
@@ -80,6 +93,9 @@ async fn worker_routes_jobs(
                     }
                 }
             });
+        if let Some(allowlist) = allowlist {
+            options = options.job_flag_allowlist(allowlist);
+        }
         if queue_count > 0 {
             options = options.local_queue(LocalQueueConfig::builder().size(20).queue_count(queue_count).build());
         }
@@ -90,6 +106,7 @@ async fn worker_routes_jobs(
             options = options.add_forbidden_flag(flag);
         }
         let worker = Arc::new(options.init().await.expect("init worker"));
+        assert_eq!(worker.job_flag_allowlist(), expected_allowlist.as_deref());
         let utils = worker.create_utils();
         // The rejected GPU job sits between two eligible jobs in the same
         // named queue, exercising run_once's follow-up claim path too.
@@ -170,7 +187,11 @@ async fn worker_routes_jobs(
         }
         if continuous && queue_count > 0 {
             assert_eq!(local_queues.load(Ordering::SeqCst) as usize, queue_count);
-            if expected.len() > 1 {
+            // A named queue contributes at most one job to a batch. Two
+            // eligible jobs in that same queue must execute serially instead.
+            let independent_jobs = expected.iter().filter(|value| !matches!(**value, 1..=3)).count();
+            let has_shared_queue = expected.iter().any(|value| matches!(*value, 1..=3));
+            if independent_jobs + usize::from(has_shared_queue) > 1 {
                 assert!(largest_batch.load(Ordering::SeqCst) > 1, "eligible jobs must be prefetched in batches ({policy})");
             }
         } else {
@@ -242,6 +263,7 @@ async fn filtered_prefetch_skips_rejected_prefix_and_returns_cached_claims_on_sh
                 .add_extension(executions.clone())
                 .add_accepted_flag("linux")
                 .add_forbidden_flag("gpu")
+                .job_flag_allowlist(["linux"])
                 .local_queue(LocalQueueConfig::builder().size(3).build())
                 .on(LocalQueueGetJobsComplete, {
                     let batch_tx = batch_tx.clone();
@@ -277,7 +299,7 @@ async fn filtered_prefetch_skips_rejected_prefix_and_returns_cached_claims_on_sh
                 Some(vec!["linux".into()])
             } else {
                 match value % 5 {
-                    0 => Some(vec!["linux".into(), "gpu".into()]),
+                    0 => Some(vec!["linux".into(), "kvm".into()]),
                     1 => Some(vec!["windows".into()]),
                     2 => None,
                     3 => Some(vec![]),
@@ -550,4 +572,66 @@ async fn legacy_job_stream_keeps_its_signature_and_forbidden_filter() {
             .unwrap();
     })
     .await;
+}
+
+#[tokio::test]
+async fn worker_allowlists_apply_to_run_once_and_direct_or_batched_continuous_claims() {
+    for continuous in [false, true] {
+        for queue_count in if continuous { vec![0, 1, 2] } else { vec![0] } {
+            worker_routes_jobs_with_allowlist(
+                vec!["linux", "windows"],
+                vec![],
+                Some(vec!["linux"]),
+                vec![1],
+                continuous,
+                queue_count,
+            )
+            .await;
+            worker_routes_jobs_with_allowlist(
+                vec![],
+                vec![],
+                Some(vec!["linux"]),
+                vec![1, 4, 5],
+                continuous,
+                queue_count,
+            )
+            .await;
+            worker_routes_jobs_with_allowlist(
+                vec!["linux"],
+                vec![],
+                Some(vec!["linux", "infrastructure_resilient"]),
+                vec![1, 3],
+                continuous,
+                queue_count,
+            )
+            .await;
+            worker_routes_jobs_with_allowlist(
+                vec![],
+                vec!["gpu"],
+                Some(vec!["linux", "gpu"]),
+                vec![1, 4, 5],
+                continuous,
+                queue_count,
+            )
+            .await;
+            worker_routes_jobs_with_allowlist(
+                vec![],
+                vec![],
+                Some(vec![]),
+                vec![4, 5],
+                continuous,
+                queue_count,
+            )
+            .await;
+            worker_routes_jobs_with_allowlist(
+                vec!["linux"],
+                vec![],
+                Some(vec![]),
+                vec![],
+                continuous,
+                queue_count,
+            )
+            .await;
+        }
+    }
 }

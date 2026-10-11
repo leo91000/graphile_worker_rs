@@ -3,6 +3,30 @@ use graphile_worker_task_handler::{BatchTaskHandler, JobDefinition, TaskHandler}
 use super::WorkerOptions;
 
 impl WorkerOptions {
+    /// Restricts this worker to jobs whose every flag key is listed.
+    ///
+    /// This rejects newly introduced or unknown labels without enumerating
+    /// exclusions. Include operational labels such as `infrastructure_resilient`.
+    /// Keys match exactly and case-sensitively. An empty list admits only untagged
+    /// jobs for this predicate; accepted routing and forbidden vetoes still apply.
+    /// By default no allowlist restriction is added. LocalQueue filters before
+    /// claiming batches. Other workers remain governed by their own configuration.
+    ///
+    /// ```
+    /// use graphile_worker::WorkerOptions;
+    /// let options = WorkerOptions::default()
+    ///     .job_flag_allowlist(["amd-linux", "kvm", "fast-disk"])
+    ///     .add_accepted_flag("fast-disk");
+    /// ```
+    pub fn job_flag_allowlist<I, S>(mut self, flags: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.job_flag_allowlist = Some(flags.into_iter().map(Into::into).collect());
+        self
+    }
+
     /// Adds a positive job-routing label.
     ///
     /// With at least one accepted flag, a job must carry any accepted flag.

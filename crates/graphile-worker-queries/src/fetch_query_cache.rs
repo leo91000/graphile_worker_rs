@@ -1,11 +1,12 @@
 use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
+use crate::flag_filter::FlagFilterShape;
 use graphile_worker_database::Schema;
 
 // SQL text only: never cache task IDs, flags, timestamps, results or connections.
 // Bound each runtime thread's cache for applications using tenant schemas.
 const CAPACITY: usize = 128;
-type Key = (Schema, (bool, bool), bool, bool);
+type Key = (Schema, FlagFilterShape, bool, bool);
 thread_local! {
     static QUERIES: RefCell<HashMap<Key, Arc<str>>> = RefCell::default();
 }
@@ -16,7 +17,7 @@ thread_local! {
 /// by applications that visit many tenant schemas.
 pub(crate) fn fetch_query(
     schema: &Schema,
-    flags: (bool, bool),
+    flags: FlagFilterShape,
     local_time: bool,
     batch: bool,
     construct: impl FnOnce() -> String,
@@ -44,7 +45,12 @@ mod tests {
     #[test]
     fn caches_each_shape_and_schema_without_retaining_unbounded_tenants() {
         for schema in [Schema::default(), Schema::new("quoted\"schema")] {
-            for flags in [(false, false), (true, false), (false, true), (true, true)] {
+            for bits in 0..8 {
+                let flags = FlagFilterShape {
+                    forbidden: bits & 1 != 0,
+                    accepted: bits & 2 != 0,
+                    allowlist: bits & 4 != 0,
+                };
                 for local_time in [false, true] {
                     for batch in [false, true] {
                         let expected = format!("{schema}/{flags:?}/{local_time}/{batch}");
@@ -61,7 +67,11 @@ mod tests {
         for tenant in 0..CAPACITY * 2 {
             fetch_query(
                 &Schema::new(format!("tenant_{tenant}")),
-                (false, false),
+                FlagFilterShape {
+                    forbidden: false,
+                    accepted: false,
+                    allowlist: false,
+                },
                 false,
                 false,
                 || tenant.to_string(),

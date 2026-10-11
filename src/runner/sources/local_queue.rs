@@ -9,7 +9,6 @@ use super::super::{Worker, WorkerRunner};
 use crate::local_queue::{LocalQueue, LocalQueueParams, LocalQueueSignalReceiver};
 use crate::streams::job_signal::JobSignalSource;
 use crate::Job;
-use crate::JobFlagFilter;
 
 pub(in crate::runner) fn create_local_queues(
     worker: &Worker,
@@ -33,10 +32,7 @@ pub(in crate::runner) fn create_local_queues(
                     job_signal_sender: tx.clone(),
                     use_local_time: worker.use_local_time,
                 },
-                JobFlagFilter::owned(
-                    worker.forbidden_flags.clone(),
-                    worker.accepted_flags.clone(),
-                ),
+                (*worker.job_flag_filter).clone(),
             )
         })
         .collect();
