@@ -11,6 +11,7 @@ impl WorkerOptions {
     /// jobs for this predicate; accepted routing and forbidden vetoes still apply.
     /// By default no allowlist restriction is added. LocalQueue filters before
     /// claiming batches. Other workers remain governed by their own configuration.
+    /// Calling this method again replaces the previously configured allowlist.
     ///
     /// ```
     /// use graphile_worker::WorkerOptions;
