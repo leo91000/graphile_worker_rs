@@ -12,6 +12,7 @@ use graphile_worker_runtime as runtime;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 
 use crate::WorkerShutdownConfig;
+use graphile_worker_queries::flag_filter::JobFlagFilter;
 use graphile_worker_queries::task_identifiers::SharedTaskDetails;
 
 /// Type alias for task handler functions.
@@ -53,6 +54,9 @@ pub struct Worker {
     pub(crate) forbidden_flags: Vec<String>,
     /// Positive routing labels; an empty set adds no positive restriction
     pub(crate) accepted_flags: Vec<String>,
+    /// Immutable claim filter shared with runners and recovery clones
+    #[getset(skip)]
+    pub(crate) job_flag_filter: Arc<JobFlagFilter<'static>>,
     /// List of cron job definitions to be scheduled
     pub(crate) crontabs: Vec<Crontab>,
     /// Whether to use local application time (true) or database time (false) for timestamps
@@ -81,6 +85,13 @@ pub struct Worker {
     pub(crate) shutdown_config: WorkerShutdownConfig,
 }
 
+impl Worker {
+    /// Returns this worker's allowlist, distinguishing unset from empty.
+    pub fn job_flag_allowlist(&self) -> Option<&[String]> {
+        self.job_flag_filter.allowlist()
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct WorkerRunner {
     pub(crate) worker_id: String,
@@ -88,8 +99,7 @@ pub(crate) struct WorkerRunner {
     pub(crate) database: Database,
     pub(crate) schema: Schema,
     pub(crate) task_details: SharedTaskDetails,
-    pub(crate) forbidden_flags: Vec<String>,
-    pub(crate) accepted_flags: Vec<String>,
+    pub(crate) job_flag_filter: Arc<JobFlagFilter<'static>>,
     pub(crate) use_local_time: bool,
     pub(crate) shutdown_signal: ShutdownSignal,
     pub(crate) extensions: ReadOnlyExtensions,

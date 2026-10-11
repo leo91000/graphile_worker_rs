@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use graphile_worker_migrations::migrate;
+use graphile_worker_queries::flag_filter::JobFlagFilter;
 use rand::Rng;
 
 use crate::batcher::{CompletionBatcher, FailureBatcher};
@@ -118,6 +119,23 @@ impl WorkerOptions {
 
         let recovery_config = self.worker_recovery_config.unwrap_or_default();
 
+        let mut job_flag_filter =
+            JobFlagFilter::owned(self.forbidden_flags.clone(), self.accepted_flags.clone());
+        if let Some(allowed) = self.job_flag_allowlist {
+            if !self.accepted_flags.is_empty()
+                && !self
+                    .accepted_flags
+                    .iter()
+                    .any(|flag| allowed.contains(flag))
+            {
+                tracing::warn!(
+                    "Worker has no accepted flags in its job flag allowlist; no job can satisfy both filters"
+                );
+            }
+            job_flag_filter = job_flag_filter.with_allowlist(allowed);
+        }
+        let job_flag_filter = Arc::new(job_flag_filter);
+
         Ok(Worker {
             worker_id,
             concurrency,
@@ -129,6 +147,7 @@ impl WorkerOptions {
             task_details,
             forbidden_flags: self.forbidden_flags,
             accepted_flags: self.accepted_flags,
+            job_flag_filter,
             crontabs: self.crontabs.unwrap_or_default(),
             use_local_time: self.use_local_time,
             shutdown_signal,

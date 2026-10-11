@@ -12,7 +12,6 @@ use super::errors::ProcessJobError;
 use super::release::release_job;
 use super::WorkerRunner;
 use crate::streams::job_signal::JobSignalSource;
-use graphile_worker_queries::flag_filter::JobFlagFilter;
 use graphile_worker_queries::get_job::get_job_with_filter;
 
 /// Fetches and processes a single job from the queue.
@@ -43,7 +42,7 @@ pub(super) async fn process_one_job(
         &task_details_guard,
         &worker.schema,
         &worker.worker_id,
-        JobFlagFilter::new(&worker.forbidden_flags, &worker.accepted_flags),
+        worker.job_flag_filter.as_borrowed(),
         now,
     )
     .await

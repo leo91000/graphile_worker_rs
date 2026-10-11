@@ -8,7 +8,6 @@ use super::job_execution::run_and_release_job;
 use super::{Worker, WorkerRuntimeError};
 use crate::streams::job_signal::JobSignalSource;
 use crate::streams::job_stream_with_filter;
-use graphile_worker_queries::flag_filter::JobFlagFilter;
 use graphile_worker_queries::get_job::get_job_with_filter;
 
 impl Worker {
@@ -20,7 +19,7 @@ impl Worker {
             self.task_details.clone(),
             self.schema.clone(),
             self.worker_id.clone(),
-            JobFlagFilter::new(&self.forbidden_flags, &self.accepted_flags),
+            self.job_flag_filter.as_borrowed(),
             self.use_local_time,
         );
 
@@ -62,7 +61,7 @@ impl Worker {
                                 &task_details_guard,
                                 &runner.schema,
                                 &runner.worker_id,
-                                JobFlagFilter::new(&runner.forbidden_flags, &runner.accepted_flags),
+                                runner.job_flag_filter.as_borrowed(),
                                 now,
                             )
                             .await

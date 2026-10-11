@@ -50,6 +50,7 @@ Use this map to find the option family that matches the decision you are making.
 | Tune database polling | `poll_interval(...)` | Defaults to one second. Notifications still provide low-latency wakeups when available. |
 | Skip flagged jobs | `add_forbidden_flag(...)` | Vetoes matching jobs before direct or local queue batch claims. |
 | Select flagged jobs | `add_accepted_flag(...)` | Requires any accepted label; forbidden flags still veto. Configured local queue batching remains enabled. |
+| Reject unknown job flags | `job_flag_allowlist(...)` | Every job flag key must be listed. Unset adds no restriction; empty admits only untagged jobs for this predicate. |
 | Add recurring jobs | `with_cron(...)` or `with_crons(...)` | Accepts typed cron values, raw crontabs, or crontab text depending on input. See [Cron Jobs](../guides/cron.md). |
 | Share application state | `add_extension(...)` | Extensions are available from task contexts. See [Application State and Extensions](app-state.md). |
 | Observe or intercept lifecycle events | `on(...)` or `add_plugin(...)` | See [Lifecycle Hooks](../guides/hooks.md). |

@@ -78,6 +78,7 @@ impl Worker {
             task_details: self.task_details.clone(),
             forbidden_flags: self.forbidden_flags.clone(),
             accepted_flags: self.accepted_flags.clone(),
+            job_flag_filter: self.job_flag_filter.clone(),
             crontabs: self.crontabs.clone(),
             use_local_time: self.use_local_time,
             shutdown_signal: self.shutdown_signal.clone(),

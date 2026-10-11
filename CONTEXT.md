@@ -40,3 +40,8 @@ _Avoid_: Supported capability
 
 **Untagged job**:
 A job carrying no flags. It cannot match a nonempty accepted set.
+
+**Job flag allowlist**:
+A worker-specific closed set of permitted job flag keys. When configured, every
+key on a job must belong to this set; other eligibility rules still apply.
+_Avoid_: Required flags, supported capabilities

@@ -145,8 +145,10 @@ Important job methods:
 - `define_jobs(iterable)` registers reusable `JobDefinition` values.
 - `add_accepted_flag(flag)` requires any matching label when the accepted set is nonempty.
 - `add_forbidden_flag(flag)` makes this worker skip jobs with that flag.
+- `job_flag_allowlist(iterable)` rejects any job flag key outside the list. Unset
+  adds no restriction; an empty list permits only untagged jobs for this predicate.
 
-Both filters may coexist; forbidden flags veto. When local queueing is configured,
+All three filters may coexist; forbidden flags veto. When local queueing is configured,
 the filters apply before each batch is claimed and batching remains enabled.
 
 ## Cron schedules

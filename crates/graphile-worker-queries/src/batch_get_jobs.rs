@@ -39,6 +39,8 @@ pub async fn batch_get_jobs(
 ///
 /// Filtering precedes the candidate limit, row locks, and queue ownership, so
 /// rejected jobs do not consume attempts or hide eligible lower-priority jobs.
+/// An enabled allowlist requires every object key to be listed and rejects
+/// non-object JSON flags. Accepted routing and forbidden vetoes still apply.
 pub async fn batch_get_jobs_with_filter(
     mut executor: impl DbExecutorArg,
     task_details: &TaskDetails,
