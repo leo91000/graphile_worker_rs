@@ -59,6 +59,8 @@ impl<'a> JobFlagFilter<'a> {
         }
     }
 
+    /// Describes SQL predicate presence without retaining configuration values.
+    /// An empty allowlist still contributes a predicate and a cache-shape bit.
     pub(crate) fn shape(&self) -> FlagFilterShape {
         FlagFilterShape {
             forbidden: !self.forbidden.is_empty(),
@@ -67,11 +69,14 @@ impl<'a> JobFlagFilter<'a> {
         }
     }
 
+    /// Counts bound filters so claim queries place their optional clock last.
     pub(crate) fn parameter_count(&self) -> u8 {
         let shape = self.shape();
         u8::from(shape.forbidden) + u8::from(shape.accepted) + u8::from(shape.allowlist)
     }
 
+    /// Builds candidate predicates from the given first filter parameter ordinal.
+    /// Ordering must agree with `bind`; unconfigured predicates add no SQL.
     pub(crate) fn clause(&self, mut parameter: u8) -> String {
         let mut clause = String::new();
         if !self.forbidden.is_empty() {
@@ -94,6 +99,8 @@ impl<'a> JobFlagFilter<'a> {
         clause
     }
 
+    /// Appends owned driver parameters in forbidden, accepted, allowlist order.
+    /// An explicit empty allowlist is bound rather than treated as disabled.
     pub(crate) fn bind(&self, params: &mut Vec<DbValue>) {
         if !self.forbidden.is_empty() {
             params.push(DbValue::TextArray(self.forbidden.to_vec()));

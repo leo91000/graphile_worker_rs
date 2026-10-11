@@ -50,6 +50,8 @@ async fn worker_routes_jobs(
         .await;
 }
 
+/// Exercises execution, prefetch hooks and untouched rejected ownership using
+/// the same routing matrix with an optional allowlist on real workers.
 async fn worker_routes_jobs_with_allowlist(
     accepted: Vec<&'static str>,
     forbidden: Vec<&'static str>,
@@ -191,7 +193,10 @@ async fn worker_routes_jobs_with_allowlist(
             // eligible jobs in that same queue must execute serially instead.
             let independent_jobs = expected.iter().filter(|value| !matches!(**value, 1..=3)).count();
             let has_shared_queue = expected.iter().any(|value| matches!(*value, 1..=3));
-            if independent_jobs + usize::from(has_shared_queue) > 1 {
+            // Concurrent local queues can legitimately split even independent
+            // candidates into singleton batches. Assert batching deterministically
+            // with one queue; the held-prefix test also proves a full batch.
+            if queue_count == 1 && independent_jobs + usize::from(has_shared_queue) > 1 {
                 assert!(largest_batch.load(Ordering::SeqCst) > 1, "eligible jobs must be prefetched in batches ({policy})");
             }
         } else {
@@ -247,6 +252,8 @@ async fn continuous_workers_route_jobs_with_direct_claims_and_one_or_multiple_lo
 }
 
 #[tokio::test]
+/// Holds the first eligible batch and verifies independent flag vetoes before
+/// the candidate limit, followed by shutdown returning the unexecuted claims.
 async fn filtered_prefetch_skips_rejected_prefix_and_returns_cached_claims_on_shutdown() {
     with_test_db(|db| async move {
         let executions = Executions::default();
@@ -263,7 +270,7 @@ async fn filtered_prefetch_skips_rejected_prefix_and_returns_cached_claims_on_sh
                 .add_extension(executions.clone())
                 .add_accepted_flag("linux")
                 .add_forbidden_flag("gpu")
-                .job_flag_allowlist(["linux"])
+                .job_flag_allowlist(["linux", "gpu"])
                 .local_queue(LocalQueueConfig::builder().size(3).build())
                 .on(LocalQueueGetJobsComplete, {
                     let batch_tx = batch_tx.clone();
@@ -299,6 +306,9 @@ async fn filtered_prefetch_skips_rejected_prefix_and_returns_cached_claims_on_sh
                 Some(vec!["linux".into()])
             } else {
                 match value % 5 {
+                    // GPU is allowlisted but forbidden; KVM is not allowlisted.
+                    // Dropping either predicate must let rejected jobs through.
+                    0 if value % 10 == 0 => Some(vec!["linux".into(), "gpu".into()]),
                     0 => Some(vec!["linux".into(), "kvm".into()]),
                     1 => Some(vec!["windows".into()]),
                     2 => None,
@@ -575,6 +585,8 @@ async fn legacy_job_stream_keeps_its_signature_and_forbidden_filter() {
 }
 
 #[tokio::test]
+/// Checks builder/getter semantics and eligibility in direct, named-queue
+/// follow-up and single/multiple LocalQueue execution paths.
 async fn worker_allowlists_apply_to_run_once_and_direct_or_batched_continuous_claims() {
     for continuous in [false, true] {
         for queue_count in if continuous { vec![0, 1, 2] } else { vec![0] } {

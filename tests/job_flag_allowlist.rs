@@ -103,6 +103,8 @@ async fn allowlist_claims_match_keys_and_keep_rejected_jobs_untouched() {
 }
 
 #[tokio::test]
+/// A pending replacement becomes eligible while a second rejected job detects
+/// loss of the owned allowlist during asynchronous stream polling.
 async fn owned_allowlist_is_preserved_by_stream_and_pending_job_replacement() {
     with_test_db(|db| async move {
         let schema = Schema::default();

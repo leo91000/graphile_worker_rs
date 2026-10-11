@@ -33,6 +33,21 @@ Allowlisting costs more per examined row than checking one excluded label. The l
 
 The guarded JSONB subtraction predicate preserves key-only semantics, including false or nested object values, and rejects non-object input safely. An equivalent guarded NOT EXISTS query using jsonb_object_keys plus text-array membership was also measured on PG14 / SQLx. For the 99.9% rejected-prefix, 16-key/64-entry, batch-of-10 case, subtraction was 77.147 ms median while enumeration was 368.007 ms. Keep subtraction. This is an observed comparison, not a universal guarantee about all distributions.
 
+The alternative replaced only the enabled allowlist clause in
+`JobFlagFilter::clause` with this template, retaining the same parameter bindings
+and the same manual benchmark. `$N` denotes the allowlist parameter ordinal:
+
+```sql
+AND CASE
+      WHEN jobs.flags IS NULL THEN true
+      WHEN jsonb_typeof(jobs.flags) = 'object' THEN NOT EXISTS (
+        SELECT 1 FROM jsonb_object_keys(jobs.flags) AS flag
+        WHERE NOT (flag = ANY($N::text[]))
+      )
+      ELSE false
+    END
+```
+
 ## Reproduce
 
 Set DATABASE_URL to a disposable local PostgreSQL server; the helper creates and drops only its own UUID database.
