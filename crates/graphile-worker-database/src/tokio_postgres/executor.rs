@@ -9,7 +9,7 @@ use crate::{DbError, DbExecutor, DbExecutorArg, DbParams, DbRow};
 impl From<::tokio_postgres::Error> for DbError {
     fn from(error: ::tokio_postgres::Error) -> Self {
         if let Some(db_error) = error.as_db_error() {
-            return DbError::with_code(error.to_string(), db_error.code().code());
+            return DbError::with_code(format!("{error}: {db_error}"), db_error.code().code());
         }
 
         DbError::new(error.to_string())

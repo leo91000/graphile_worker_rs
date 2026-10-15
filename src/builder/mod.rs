@@ -122,7 +122,7 @@ pub struct WorkerOptions {
 
     /// Delay before flushing batched job failures.
     /// When set, job failures are collected and flushed in batches.
-    /// Retryable failures are still processed individually.
+    /// Includes retryable failures; failures with replacement payloads are persisted individually.
     fail_job_batch_delay: Option<Duration>,
 
     /// Dead worker recovery configuration.

@@ -2,8 +2,10 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use futures::StreamExt;
+use graphile_worker_runtime::Mutex;
 use tracing::{error, info};
 
+use super::errors::ProcessJobError;
 use super::job_execution::run_and_release_job;
 use super::{Worker, WorkerRuntimeError};
 use crate::streams::job_signal::JobSignalSource;
@@ -12,6 +14,9 @@ use graphile_worker_queries::get_job::get_job_with_filter;
 
 impl Worker {
     /// Runs the worker once and processes all available jobs, then returns.
+    ///
+    /// Returns the first outcome-persistence error after draining active work.
+    /// Requests accepted by an open batcher remain asynchronous.
     pub async fn run_once(&self) -> Result<(), WorkerRuntimeError> {
         let job_stream = job_stream_with_filter(
             self.database.clone(),
@@ -24,10 +29,12 @@ impl Worker {
         );
 
         let runner = self.runner();
+        let release_error = Mutex::new(None);
 
         job_stream
             .for_each_concurrent(self.concurrency, {
                 let runner = runner.clone();
+                let release_error = &release_error;
                 move |mut job| {
                     let runner = runner.clone();
                     async move {
@@ -47,6 +54,9 @@ impl Worker {
                                 }
                                 Err(e) => {
                                     error!("Error while processing job : {:?}", e);
+                                    if let error @ ProcessJobError::ReleaseJobError(_) = e {
+                                        release_error.lock().await.get_or_insert(error);
+                                    }
                                 }
                             };
 
@@ -77,6 +87,9 @@ impl Worker {
             })
             .await;
 
+        if let Some(error) = release_error.into_inner() {
+            return Err(error.into());
+        }
         Ok(())
     }
 }
