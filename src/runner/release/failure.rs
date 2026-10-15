@@ -31,13 +31,15 @@ pub(super) async fn release_failed_job(
 
     if replacement_payload.is_none() {
         if let Some(batcher) = &worker.failure_batcher {
+            let job_id = *job.id();
             batcher
                 .fail(FailureRequest {
                     job,
                     error: persisted_error,
                     will_retry,
                 })
-                .await;
+                .await
+                .map_err(|source| ReleaseJobError { job_id, source })?;
             return Ok(());
         }
     }

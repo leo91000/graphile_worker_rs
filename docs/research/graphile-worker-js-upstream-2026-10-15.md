@@ -140,6 +140,29 @@ description is inapplicable because the owner explicitly requires an empty
 body; the detailed evidence stays in this report. Approval and checks on that
 initial head do not establish approval or validation of the updated head.
 
+The next review at `6f0148340d4cb41a64b8c462cbad4fbbc2e2fa94` was COMMENTED,
+not approved. Its outside-diff finding correctly identified the failure batcher's
+closed-channel fallback: `fail_job_direct` reduced a query error to `false`,
+`FailureBatcher::fail` returned unit, and the release caller reported success.
+The direct helper and closed-channel caller now preserve the query Result,
+and release maps it to the original job's ReleaseJobError. Asynchronous batch
+flushing still collects per-job success booleans and emits hooks only for
+persisted failures; its existing policy is preserved.
+
+A new regression deterministically closes the failure channel while its handler
+is gated, then injects SQLSTATE 40001 on the failure update. It covers both
+continuous `run()` and `run_once()`, each with and without a named queue,
+requiring the original diagnostic/job ID, no false failure hook, and intact
+job/queue ownership. Before this correction, it failed because the worker
+returned Ok after the database rejected persistence. The prior head's local
+required recipe had completed with 499 passed, zero failed and six ignored;
+this additional correction passed fresh `just lint` and `just test-docker`
+(500 passed, zero failed, six ignored), all five batcher tests under async-std,
+and the 19-test tokio-postgres run-once suite. Fresh-head CI and actual review
+remain delivery gates; the final checkpoint/report records their outcomes.
+The previous docstring warning passed at 90.91%; the PR-body suggestion remains
+inapplicable under the owner's explicit empty-body instruction.
+
 ## Open proposals, inapplicable changes and unresolved coverage
 
 Each proposal patch and its tests were read. All were **open**, not merged, at
@@ -202,7 +225,7 @@ Local validation uses Rust 1.99.0 and disposable PostgreSQL 18.6 fixtures:
 - `just lint` passed again after the adapter correction, including Clippy with
   warnings denied. All three OpenTelemetry feature checks passed on that source.
 - The complete `just test-docker` recipe passed **499 tests, zero failures, six
-  ignored**, including doc tests. A delivery rerun follows the adapter update;
+  ignored**, including doc tests. The delivery rerun after the adapter update also passed;
   exact completed delivery results are retained in the durable checkpoint and
   final report. No failing assertion, timeout, or test selection was relaxed.
 - mdBook 0.4.52 built the guides; 14 Python release-tooling regressions and all
@@ -221,8 +244,8 @@ check: the sweep reported the draining worker as stale. That fixture uses a
 test passed a focused retry in 2.78s. Inspection confirmed that recovery tasks
 still stop after slot/batcher draining; those runtime paths and the fixture are
 unchanged by this audit. The precise stall cause was not established. Delivery
-returns to the original two-thread limit and repeats the entire required recipe
-on a fresh database; neither the liveness assertion nor its timing is relaxed.
+returned to the original two-thread limit and two full required recipe runs
+passed on fresh databases; neither the liveness assertion nor its timing is relaxed.
 
 Builds and full delivery runs use two jobs/test threads; standalone tokio-postgres
 tests use one. Exact-head delivery
