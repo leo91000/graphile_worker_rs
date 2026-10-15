@@ -17,6 +17,7 @@ impl FailureBatchResult {
     }
 }
 
+/// Persists a batch, falling back per job and retaining each persistence outcome.
 pub(super) async fn persist_failure_batch(
     batch: &[FailureRequest],
     database: &Database,
