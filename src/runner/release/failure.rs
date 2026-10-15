@@ -12,6 +12,7 @@ use super::super::errors::{ReleaseJobError, RunJobError};
 use super::super::recovery_release::recover_shutdown_aborted_job;
 use super::super::WorkerRunner;
 
+/// Persists or enqueues a failed outcome, preserving synchronous persistence errors.
 pub(super) async fn release_failed_job(
     error: RunJobError,
     job: Arc<Job>,
@@ -31,13 +32,15 @@ pub(super) async fn release_failed_job(
 
     if replacement_payload.is_none() {
         if let Some(batcher) = &worker.failure_batcher {
+            let job_id = *job.id();
             batcher
                 .fail(FailureRequest {
                     job,
                     error: persisted_error,
                     will_retry,
                 })
-                .await;
+                .await
+                .map_err(|source| ReleaseJobError { job_id, source })?;
             return Ok(());
         }
     }
@@ -47,6 +50,7 @@ pub(super) async fn release_failed_job(
     Ok(())
 }
 
+/// Logs retryable and terminal task failures at their respective severity levels.
 fn log_failed_job(error: &RunJobError, job: &Job, will_retry: bool) {
     if will_retry {
         warn!(
@@ -67,6 +71,7 @@ fn log_failed_job(error: &RunJobError, job: &Job, will_retry: bool) {
     }
 }
 
+/// Persists one failed job and wraps database errors with its original identity.
 async fn persist_failed_job(
     job: &Arc<Job>,
     worker: &WorkerRunner,
@@ -93,6 +98,7 @@ async fn persist_failed_job(
     Ok(())
 }
 
+/// Emits the retryable or terminal hook after a failure has been persisted.
 async fn emit_failure_hook(job: Arc<Job>, worker: &WorkerRunner, error: String, will_retry: bool) {
     if worker.hooks.is_empty() {
         return;

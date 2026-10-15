@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use graphile_worker_database::{Database, Schema};
 use graphile_worker_lifecycle_hooks::HookRegistry;
+use graphile_worker_queries::errors::Result;
 use graphile_worker_runtime as runtime;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use tracing::{trace, warn};
@@ -64,14 +65,15 @@ impl FailureBatcher {
         }
     }
 
-    pub async fn fail(&self, req: FailureRequest) {
+    /// Acknowledges enqueueing, or persists directly and returns errors after closure.
+    pub async fn fail(&self, req: FailureRequest) -> Result<()> {
         if let Err(e) = self.tx.send(req).await {
             warn!("Batcher closed, failing job directly");
             let req = e.0;
-            if fail_job_direct(&req, &self.database, &self.schema, &self.worker_id).await {
-                emit_failure_hook(&req, &self.worker_id, &self.hooks).await;
-            }
+            fail_job_direct(&req, &self.database, &self.schema, &self.worker_id).await?;
+            emit_failure_hook(&req, &self.worker_id, &self.hooks).await;
         }
+        Ok(())
     }
 
     pub async fn await_shutdown(&self) {

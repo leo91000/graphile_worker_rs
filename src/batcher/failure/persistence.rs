@@ -1,6 +1,7 @@
 use graphile_worker_database::{Database, Schema};
 use tracing::error;
 
+use graphile_worker_queries::errors::Result;
 use graphile_worker_queries::fail_job::batch::{fail_jobs, FailedJob};
 use graphile_worker_queries::fail_job::single::fail_job;
 
@@ -16,6 +17,7 @@ impl FailureBatchResult {
     }
 }
 
+/// Persists a batch, falling back per job and retaining each persistence outcome.
 pub(super) async fn persist_failure_batch(
     batch: &[FailureRequest],
     database: &Database,
@@ -35,7 +37,11 @@ pub(super) async fn persist_failure_batch(
 
         let mut persisted = Vec::with_capacity(batch.len());
         for req in batch {
-            persisted.push(fail_job_direct(req, database, schema, worker_id).await);
+            persisted.push(
+                fail_job_direct(req, database, schema, worker_id)
+                    .await
+                    .is_ok(),
+            );
         }
         return FailureBatchResult { persisted };
     }
@@ -45,20 +51,21 @@ pub(super) async fn persist_failure_batch(
     }
 }
 
+/// Persists one failure while preserving the original database error for callers.
 pub(super) async fn fail_job_direct(
     req: &FailureRequest,
     database: &Database,
     schema: &Schema,
     worker_id: &str,
-) -> bool {
+) -> Result<()> {
     if let Err(error) = fail_job(database, &req.job, schema, worker_id, &req.error, None).await {
         error!(
             ?error,
             job_id = ?req.job.id(),
             "Failed to fail job directly"
         );
-        return false;
+        return Err(error);
     }
 
-    true
+    Ok(())
 }

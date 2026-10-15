@@ -55,7 +55,7 @@ Use this map to find the option family that matches the decision you are making.
 | Share application state | `add_extension(...)` | Extensions are available from task contexts. See [Application State and Extensions](app-state.md). |
 | Observe or intercept lifecycle events | `on(...)` or `add_plugin(...)` | See [Lifecycle Hooks](../guides/hooks.md). |
 | Improve throughput with local buffering | `local_queue(...)` | Batch-fetches jobs into a local cache. See [Local Queue](../guides/local-queue.md). |
-| Batch completion or permanent failure writes | `complete_job_batch_delay(...)`, `fail_job_batch_delay(...)` | Small delays such as 1-5ms are recommended by the API docs. |
+| Batch completion or failure writes | `complete_job_batch_delay(...)`, `fail_job_batch_delay(...)` | Small delays such as 1-5ms are recommended by the API docs. |
 | Recover jobs locked by dead workers | `worker_recovery(...)` or recovery convenience setters | Recovery is opt-in. See [Worker Recovery](../guides/recovery.md). |
 | Integrate with host shutdown | `worker_shutdown(...)` or shutdown convenience setters | See [Shutdown](shutdown.md). |
 

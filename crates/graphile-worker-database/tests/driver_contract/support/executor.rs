@@ -127,8 +127,22 @@ pub(crate) async fn exercise_executor(executor: &impl DbExecutor) {
         .unwrap();
 }
 
+/// Checks values, server errors, transactions and cleanup against a real driver.
 pub(crate) async fn exercise_database(database: &Database) {
     exercise_executor(database).await;
+
+    // Both drivers must preserve the server message as well as SQLSTATE, even
+    // when the driver's outer error display contains only "db error".
+    let reject = "do $$ begin raise exception using errcode='40001', message='driver contract failure'; end $$";
+    let error = database.execute(reject, DbParams::new()).await.unwrap_err();
+    assert_eq!(error.code(), Some("40001"));
+    assert!(error.to_string().contains("driver contract failure"));
+
+    let tx = database.begin().await.unwrap();
+    let error = tx.fetch_all(reject, DbParams::new()).await.unwrap_err();
+    assert_eq!(error.code(), Some("40001"));
+    assert!(error.to_string().contains("driver contract failure"));
+    drop(tx);
 
     let tx = database.begin().await.unwrap();
     tx.execute(

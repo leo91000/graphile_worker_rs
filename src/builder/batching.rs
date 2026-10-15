@@ -29,9 +29,10 @@ impl WorkerOptions {
 
     /// Sets the delay before flushing batched job failures.
     ///
-    /// When configured, permanent job failures are collected and flushed
-    /// together after the specified delay. Retryable failures are still
-    /// processed individually to ensure proper backoff timing.
+    /// When configured, retryable and permanent job failures are collected and
+    /// flushed together after the specified delay. Retry backoff is calculated
+    /// when the batch is persisted. Failures carrying replacement payloads are
+    /// persisted individually.
     ///
     /// # Arguments
     ///

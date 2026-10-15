@@ -218,6 +218,16 @@ worker.run_once().await?;
 When a run-once job belongs to a queue, the worker checks for another job after
 releasing it so queued work can continue in order.
 
+If direct completion or failure persistence fails, `run_once()` drains its
+active work and returns the first release error, preserving the job ID and
+database error. A task failure whose retry state was persisted remains a normal
+job outcome. Requests accepted by an open completion or failure batcher remain
+asynchronous; acceptance acknowledges queueing rather than persistence.
+
+When a failure batcher has closed, its synchronous direct fallback also returns
+persistence errors through `run()` and `run_once()`. A failure hook is emitted
+only after that fallback persists successfully.
+
 ## Shutdown
 
 Each worker has an internal shutdown signal. By default, Graphile Worker RS also

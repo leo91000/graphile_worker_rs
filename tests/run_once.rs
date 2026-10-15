@@ -10,6 +10,8 @@ mod basic;
 mod concurrency;
 #[path = "run_once/queues.rs"]
 mod queues;
+#[path = "run_once/release_errors.rs"]
+mod release_errors;
 #[path = "run_once/removal.rs"]
 mod removal;
 #[path = "run_once/retry.rs"]

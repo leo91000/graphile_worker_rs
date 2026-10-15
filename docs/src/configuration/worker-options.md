@@ -249,7 +249,7 @@ such as monitoring local queue events.
 
 ## Completion and failure batching
 
-For high-throughput workers, completion and permanent failure updates can be
+For high-throughput workers, completion and failure updates can be
 batched to reduce SQL round trips:
 
 ```rust,ignore
@@ -265,9 +265,9 @@ let worker = WorkerOptions::default()
 ```
 
 `complete_job_batch_delay(delay)` batches successful completion updates.
-`fail_job_batch_delay(delay)` batches permanent failure updates. Retryable
-failures are still processed individually so retry backoff timing can be
-preserved.
+`fail_job_batch_delay(delay)` batches retryable and permanent failure updates.
+Retry backoff is calculated when the batch is persisted. Failures carrying
+replacement payloads are persisted individually.
 
 ## Composition examples
 

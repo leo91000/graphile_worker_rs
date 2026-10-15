@@ -8,7 +8,7 @@ use graphile_worker_lifecycle_hooks::JobFetchContext;
 use tracing::{error, trace};
 
 use self::hooks::run_job_with_hooks;
-use super::errors::ProcessJobError;
+use super::errors::{ProcessJobError, ReleaseJobError};
 use super::release::release_job;
 use super::WorkerRunner;
 use crate::streams::job_signal::JobSignalSource;
@@ -94,12 +94,12 @@ pub(super) async fn process_one_job(
 ///
 /// A `Result` containing:
 /// - `Ok(())` if the job was processed and released successfully
-/// - `Err(ProcessJobError)` if an error occurred during processing or releasing
+/// - `Err(ReleaseJobError)` if the job outcome could not be persisted
 pub(super) async fn run_and_release_job(
     job: Arc<Job>,
     worker: &WorkerRunner,
     source: &JobSignalSource,
-) -> Result<(), ProcessJobError> {
+) -> Result<(), ReleaseJobError> {
     let (job_result, duration) = run_job_with_hooks(job.clone(), worker, source).await;
 
     release_job(job_result, job.clone(), worker, duration)

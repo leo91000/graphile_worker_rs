@@ -224,6 +224,7 @@ async fn completion_batcher_acknowledges_enqueue_before_persistence() {
 }
 
 #[tokio::test]
+/// Successful direct fallback persists the error and emits its failure hook.
 async fn failure_batcher_falls_back_after_shutdown() {
     let Some(pg_pool) = database_pool() else {
         return;
@@ -265,7 +266,8 @@ async fn failure_batcher_falls_back_after_shutdown() {
             error: "direct failure".to_string(),
             will_retry: true,
         })
-        .await;
+        .await
+        .expect("direct fallback failure must persist successfully");
 
     assert_eq!(hook_count.load(Ordering::SeqCst), 1);
 
@@ -407,6 +409,267 @@ async fn worker_reports_direct_completion_failure_during_shutdown() {
             assert_eq!(queue, (Some(worker.worker_id().clone()), true));
         }
         drop(worker);
+        drop_schema(&pg_pool, &schema).await;
+    }
+    pg_pool.close().await;
+}
+
+#[derive(Clone, Debug, Default)]
+struct FailureGate {
+    started: Arc<tokio::sync::Notify>,
+    finish: Arc<tokio::sync::Notify>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ShutdownFailureJob {}
+
+impl crate::TaskHandler for ShutdownFailureJob {
+    const IDENTIFIER: &'static str = "shutdown_failure_job";
+
+    /// Fails only after the batcher's channel has been deterministically closed.
+    async fn run(self, ctx: crate::WorkerContext) -> impl crate::IntoTaskHandlerResult {
+        let gate = ctx.get_ext::<FailureGate>().unwrap().clone();
+        gate.started.notify_one();
+        gate.finish.notified().await;
+        Err("handler failure after batcher shutdown")
+    }
+}
+
+/// Both run modes preserve fallback failure errors and queued ownership after closure.
+#[tokio::test]
+async fn worker_reports_direct_failure_after_batcher_shutdown() {
+    use crate::errors::GraphileWorkerError;
+    use crate::runner::{ReleaseJobError, WorkerRuntimeError};
+
+    let Some(pg_pool) = database_pool() else {
+        return;
+    };
+    for (has_queue, run_once) in [(false, false), (true, false), (false, true), (true, true)] {
+        let schema = setup_schema(&pg_pool, "failure_error").await;
+        let gate = FailureGate::default();
+        let failed = Arc::new(AtomicUsize::new(0));
+        let worker = Arc::new(
+            crate::Worker::options()
+                .database(pg_pool.clone())
+                .schema(schema.clone())
+                .concurrency(1)
+                .poll_interval(Duration::from_millis(10))
+                .use_notification_delivery(false)
+                .listen_os_shutdown_signals(false)
+                .shutdown_grace_period(Duration::from_secs(5))
+                .fail_job_batch_delay(Duration::from_secs(60))
+                .define_job::<ShutdownFailureJob>()
+                .add_extension(gate.clone())
+                .on(JobFail, {
+                    let failed = failed.clone();
+                    move |_| {
+                        let failed = failed.clone();
+                        async move {
+                            failed.fetch_add(1, Ordering::SeqCst);
+                        }
+                    }
+                })
+                .init()
+                .await
+                .unwrap(),
+        );
+        let job = worker
+            .create_utils()
+            .add_job(
+                ShutdownFailureJob {},
+                crate::JobSpec {
+                    queue_name: has_queue.then(|| "shutdown_failure_queue".into()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        let job_id = *job.id();
+        safe_query(format!("CREATE FUNCTION {schema}.reject_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='injected failure persistence'; END $$"))
+            .execute(&pg_pool).await.unwrap();
+        safe_query(format!("CREATE TRIGGER reject_failure BEFORE UPDATE ON {schema}._private_jobs FOR EACH ROW WHEN (OLD.locked_by IS NOT NULL AND NEW.locked_by IS NULL) EXECUTE FUNCTION {schema}.reject_failure()"))
+            .execute(&pg_pool).await.unwrap();
+
+        let runner = worker.clone();
+        let run = tokio::spawn(async move {
+            if run_once {
+                runner.run_once().await
+            } else {
+                runner.run().await
+            }
+        });
+        tokio::time::timeout(Duration::from_secs(5), gate.started.notified())
+            .await
+            .expect("handler started");
+        worker.request_shutdown();
+        // Wait for the shutdown listener to close the channel while the handler
+        // is still running in its grace period, then finish the handler.
+        tokio::time::timeout(
+            Duration::from_secs(5),
+            worker.failure_batcher.as_ref().unwrap().await_shutdown(),
+        )
+        .await
+        .expect("batcher shut down");
+        gate.finish.notify_one();
+        let error = tokio::time::timeout(Duration::from_secs(5), run)
+            .await
+            .expect("worker shutdown finished")
+            .expect("worker task completed")
+            .expect_err("worker must report the failed fallback failure");
+        let WorkerRuntimeError::ProcessJob(error) = error else {
+            panic!("unexpected runtime error: {error:?}");
+        };
+        let error = std::error::Error::source(&error)
+            .unwrap()
+            .downcast_ref::<ReleaseJobError>()
+            .expect("release error in runtime source chain");
+        assert!(error.to_string().contains(&format!("job '{job_id}'")));
+        let source = std::error::Error::source(error)
+            .unwrap()
+            .downcast_ref::<GraphileWorkerError>()
+            .expect("original query error in source chain");
+        let GraphileWorkerError::SqlError(source) = source else {
+            panic!("expected database error");
+        };
+        assert_eq!(source.code(), Some("40001"));
+        assert!(source.to_string().contains("injected failure persistence"));
+        assert_eq!(failed.load(Ordering::SeqCst), 0);
+        let remaining: (i16, Option<String>, bool) = safe_query_as(format!(
+            "SELECT attempts,locked_by,locked_at IS NOT NULL FROM {schema}._private_jobs WHERE id=$1"
+        )).bind(job_id).fetch_one(&pg_pool).await.unwrap();
+        assert_eq!(remaining, (1, Some(worker.worker_id().clone()), true));
+        if has_queue {
+            let queue: (Option<String>, bool) = safe_query_as(format!(
+                "SELECT locked_by,locked_at IS NOT NULL FROM {schema}._private_job_queues"
+            ))
+            .fetch_one(&pg_pool)
+            .await
+            .unwrap();
+            assert_eq!(queue, (Some(worker.worker_id().clone()), true));
+        }
+        drop(worker);
+        drop_schema(&pg_pool, &schema).await;
+    }
+    pg_pool.close().await;
+}
+
+/// A rejected batch falls back per job, emitting hooks and unlocking only persisted failures.
+#[tokio::test]
+async fn failure_batch_fallback_preserves_partial_persistence() {
+    let Some(pg_pool) = database_pool() else {
+        return;
+    };
+    for has_queue in [false, true] {
+        let schema = setup_schema(&pg_pool, "failure_partial").await;
+        let utils = crate::worker_utils::client::WorkerUtils::new(pg_pool.clone(), schema.clone());
+        let mut jobs = Vec::new();
+        for poison in [true, false] {
+            jobs.push(
+                utils
+                    .add_raw_job(
+                        "failure_partial_job",
+                        serde_json::json!({"poison": poison}),
+                        crate::JobSpec {
+                            queue_name: has_queue.then(|| format!("failure_partial_{poison}")),
+                            ..Default::default()
+                        },
+                    )
+                    .await
+                    .unwrap(),
+            );
+        }
+        safe_query(format!(
+            "UPDATE {schema}._private_jobs SET locked_by='worker', locked_at=now(), attempts=1"
+        ))
+        .execute(&pg_pool)
+        .await
+        .unwrap();
+        if has_queue {
+            safe_query(format!(
+                "UPDATE {schema}._private_job_queues SET locked_by='worker', locked_at=now()"
+            ))
+            .execute(&pg_pool)
+            .await
+            .unwrap();
+        }
+        safe_query(format!("CREATE SEQUENCE {schema}.rejected_updates"))
+            .execute(&pg_pool)
+            .await
+            .unwrap();
+        safe_query(format!("CREATE FUNCTION {schema}.reject_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM nextval('{schema}.rejected_updates'); RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='injected partial failure'; END $$"))
+            .execute(&pg_pool).await.unwrap();
+        safe_query(format!("CREATE TRIGGER reject_failure BEFORE UPDATE ON {schema}._private_jobs FOR EACH ROW WHEN (OLD.payload::jsonb->>'poison'='true' AND NEW.locked_by IS NULL) EXECUTE FUNCTION {schema}.reject_failure()"))
+            .execute(&pg_pool).await.unwrap();
+        let failed = Arc::new(AtomicUsize::new(0));
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+        let batcher = FailureBatcher::new(
+            Duration::from_secs(60),
+            pg_pool.clone(),
+            schema.clone(),
+            "worker".into(),
+            failure_hooks(failed.clone()),
+            async move {
+                let _ = shutdown_rx.await;
+            }
+            .boxed()
+            .shared(),
+        );
+        for job in &jobs {
+            batcher
+                .fail(FailureRequest {
+                    job: Arc::new(job.clone()),
+                    error: "handler failed".into(),
+                    will_retry: true,
+                })
+                .await
+                .expect("open channel accepts failure requests");
+        }
+        assert_eq!(failed.load(Ordering::SeqCst), 0);
+        shutdown_tx.send(()).unwrap();
+        tokio::time::timeout(Duration::from_secs(5), batcher.await_shutdown())
+            .await
+            .expect("asynchronous batch and single-job fallback drain");
+        let rejected: (i64,) =
+            safe_query_as(format!("SELECT last_value FROM {schema}.rejected_updates"))
+                .fetch_one(&pg_pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            rejected.0, 2,
+            "both the batch and the poisoned single-job retry must fail"
+        );
+        assert_eq!(
+            failed.load(Ordering::SeqCst),
+            1,
+            "only persisted failure emits a hook"
+        );
+        for (i, job) in jobs.iter().enumerate() {
+            let persisted = i == 1;
+            let row: (Option<String>, Option<String>, bool) = safe_query_as(format!(
+                "SELECT last_error,locked_by,locked_at IS NOT NULL FROM {schema}._private_jobs WHERE id=$1"
+            )).bind(job.id()).fetch_one(&pg_pool).await.unwrap();
+            assert_eq!(
+                row,
+                if persisted {
+                    (Some("handler failed".into()), None, false)
+                } else {
+                    (None, Some("worker".into()), true)
+                }
+            );
+            if let Some(queue_id) = job.job_queue_id() {
+                let queue: (Option<String>, bool) = safe_query_as(format!(
+                    "SELECT locked_by,locked_at IS NOT NULL FROM {schema}._private_job_queues WHERE id=$1"
+                )).bind(queue_id).fetch_one(&pg_pool).await.unwrap();
+                assert_eq!(
+                    queue,
+                    if persisted {
+                        (None, false)
+                    } else {
+                        (Some("worker".into()), true)
+                    }
+                );
+            }
+        }
         drop_schema(&pg_pool, &schema).await;
     }
     pg_pool.close().await;
