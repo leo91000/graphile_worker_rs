@@ -26,6 +26,7 @@ struct OutcomeJob {
 impl TaskHandler for OutcomeJob {
     const IDENTIFIER: &'static str = "run_once_outcome_error";
 
+    /// Coordinates a poisoned job and a healthy sibling through explicit gates.
     async fn run(self, ctx: WorkerContext) -> impl IntoTaskHandlerResult {
         let gate = ctx.get_ext::<OutcomeGate>().unwrap();
         if self.poison {
@@ -43,6 +44,7 @@ impl TaskHandler for OutcomeJob {
     }
 }
 
+/// Requires a server fault to propagate after the healthy sibling is persisted.
 async fn check_release_error(has_queue: bool, fail: bool) {
     helpers::with_test_db(move |db| async move {
         let gate = OutcomeGate::default();
@@ -143,21 +145,25 @@ async fn check_release_error(has_queue: bool, fail: bool) {
     }).await;
 }
 
+/// A failed unqueued completion returns its error after the sibling persists.
 #[tokio::test]
 async fn direct_completion_error_drains_sibling_and_propagates() {
     check_release_error(false, false).await;
 }
 
+/// A failed queued completion preserves queue ownership while draining its sibling.
 #[tokio::test]
 async fn queued_completion_error_drains_sibling_and_propagates() {
     check_release_error(true, false).await;
 }
 
+/// A rejected unqueued failure update propagates without emitting a failure hook.
 #[tokio::test]
 async fn direct_failure_error_drains_sibling_and_propagates() {
     check_release_error(false, true).await;
 }
 
+/// A rejected queued failure update retains locks and the original database error.
 #[tokio::test]
 async fn queued_failure_error_drains_sibling_and_propagates() {
     check_release_error(true, true).await;

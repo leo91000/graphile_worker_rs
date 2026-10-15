@@ -53,10 +53,9 @@ impl Worker {
                                     info!(job_id, "Job processed");
                                 }
                                 Err(e) => {
+                                    let e = ProcessJobError::from(e);
                                     error!("Error while processing job : {:?}", e);
-                                    if let error @ ProcessJobError::ReleaseJobError(_) = e {
-                                        release_error.lock().await.get_or_insert(error);
-                                    }
+                                    release_error.lock().await.get_or_insert(e);
                                 }
                             };
 

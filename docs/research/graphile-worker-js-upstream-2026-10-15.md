@@ -120,6 +120,26 @@ regardless of remaining attempts and bypasses batching for replacement payloads.
 The builder and configuration docs now describe that existing behavior and its
 backoff timestamp at persistence; runtime batching behavior is preserved.
 
+## Delivery feedback and precise internal errors
+
+The initial head `184fe9c7c22ca352f4644d3847dc9241fa9fe641` received an actual
+APPROVED review with no actionable inline findings. Its patch coverage check
+identified one missed line: the closing branch at `run_once.rs:59`. The pinned
+Codecov line report confirmed that this was the impossible non-release-error
+branch: `run_and_release_job` never fetches jobs, but declared ProcessJobError,
+whose other variant represents fetch failures.
+
+The private execution helper now returns ReleaseJobError, matching the errors
+it can actually produce. Callers retain their existing ProcessJobError
+conversions, including fetch errors in the paths that do fetch. Run-once keeps
+the same public error chain and logging without an unreachable variant guard.
+Coverage thresholds, exclusions and assertions are unchanged. Regression
+fixtures and the shared contract helper also gained Rust documentation in
+response to the review's docstring warning. The suggestion to populate the PR
+description is inapplicable because the owner explicitly requires an empty
+body; the detailed evidence stays in this report. Approval and checks on that
+initial head do not establish approval or validation of the updated head.
+
 ## Open proposals, inapplicable changes and unresolved coverage
 
 Each proposal patch and its tests were read. All were **open**, not merged, at

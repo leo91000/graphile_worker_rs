@@ -127,6 +127,7 @@ pub(crate) async fn exercise_executor(executor: &impl DbExecutor) {
         .unwrap();
 }
 
+/// Checks values, server errors, transactions and cleanup against a real driver.
 pub(crate) async fn exercise_database(database: &Database) {
     exercise_executor(database).await;
 
