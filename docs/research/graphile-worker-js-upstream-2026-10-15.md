@@ -163,6 +163,18 @@ remain delivery gates; the final checkpoint/report records their outcomes.
 The previous docstring warning passed at 90.91%; the PR-body suggestion remains
 inapplicable under the owner's explicit empty-body instruction.
 
+The aggregated patch report at `27be36d7a9a10acdd3699334d28820df9f12742d`
+subsequently found four uncovered changed lines in asynchronous per-job fallback
+(82.6% patch coverage, target 97.2%). A queued/unqueued regression now sends a
+poisoned and healthy job in the same open batch. A trigger rejects the batch and
+the poisoned single-job retry; a sequence proves both attempts occurred. The
+healthy fallback must persist and release its queue, only its hook may fire,
+and the poisoned job/queue must retain ownership without a false last_error.
+This checks the preserved boolean-flush contract after the direct helper began
+returning Result; no production behavior, threshold, exclusion or assertion was
+weakened. Delivery requires a fresh complete check/review cycle for this test
+addition as well.
+
 ## Open proposals, inapplicable changes and unresolved coverage
 
 Each proposal patch and its tests were read. All were **open**, not merged, at

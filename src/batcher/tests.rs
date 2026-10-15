@@ -552,3 +552,125 @@ async fn worker_reports_direct_failure_after_batcher_shutdown() {
     }
     pg_pool.close().await;
 }
+
+/// A rejected batch falls back per job, emitting hooks and unlocking only persisted failures.
+#[tokio::test]
+async fn failure_batch_fallback_preserves_partial_persistence() {
+    let Some(pg_pool) = database_pool() else {
+        return;
+    };
+    for has_queue in [false, true] {
+        let schema = setup_schema(&pg_pool, "failure_partial").await;
+        let utils = crate::worker_utils::client::WorkerUtils::new(pg_pool.clone(), schema.clone());
+        let mut jobs = Vec::new();
+        for poison in [true, false] {
+            jobs.push(
+                utils
+                    .add_raw_job(
+                        "failure_partial_job",
+                        serde_json::json!({"poison": poison}),
+                        crate::JobSpec {
+                            queue_name: has_queue.then(|| format!("failure_partial_{poison}")),
+                            ..Default::default()
+                        },
+                    )
+                    .await
+                    .unwrap(),
+            );
+        }
+        safe_query(format!(
+            "UPDATE {schema}._private_jobs SET locked_by='worker', locked_at=now(), attempts=1"
+        ))
+        .execute(&pg_pool)
+        .await
+        .unwrap();
+        if has_queue {
+            safe_query(format!(
+                "UPDATE {schema}._private_job_queues SET locked_by='worker', locked_at=now()"
+            ))
+            .execute(&pg_pool)
+            .await
+            .unwrap();
+        }
+        safe_query(format!("CREATE SEQUENCE {schema}.rejected_updates"))
+            .execute(&pg_pool)
+            .await
+            .unwrap();
+        safe_query(format!("CREATE FUNCTION {schema}.reject_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM nextval('{schema}.rejected_updates'); RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='injected partial failure'; END $$"))
+            .execute(&pg_pool).await.unwrap();
+        safe_query(format!("CREATE TRIGGER reject_failure BEFORE UPDATE ON {schema}._private_jobs FOR EACH ROW WHEN (OLD.payload::jsonb->>'poison'='true' AND NEW.locked_by IS NULL) EXECUTE FUNCTION {schema}.reject_failure()"))
+            .execute(&pg_pool).await.unwrap();
+        let failed = Arc::new(AtomicUsize::new(0));
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+        let batcher = FailureBatcher::new(
+            Duration::from_secs(60),
+            pg_pool.clone(),
+            schema.clone(),
+            "worker".into(),
+            failure_hooks(failed.clone()),
+            async move {
+                let _ = shutdown_rx.await;
+            }
+            .boxed()
+            .shared(),
+        );
+        for job in &jobs {
+            batcher
+                .fail(FailureRequest {
+                    job: Arc::new(job.clone()),
+                    error: "handler failed".into(),
+                    will_retry: true,
+                })
+                .await
+                .expect("open channel accepts failure requests");
+        }
+        assert_eq!(failed.load(Ordering::SeqCst), 0);
+        shutdown_tx.send(()).unwrap();
+        tokio::time::timeout(Duration::from_secs(5), batcher.await_shutdown())
+            .await
+            .expect("asynchronous batch and single-job fallback drain");
+        let rejected: (i64,) =
+            safe_query_as(format!("SELECT last_value FROM {schema}.rejected_updates"))
+                .fetch_one(&pg_pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            rejected.0, 2,
+            "both the batch and the poisoned single-job retry must fail"
+        );
+        assert_eq!(
+            failed.load(Ordering::SeqCst),
+            1,
+            "only persisted failure emits a hook"
+        );
+        for (i, job) in jobs.iter().enumerate() {
+            let persisted = i == 1;
+            let row: (Option<String>, Option<String>, bool) = safe_query_as(format!(
+                "SELECT last_error,locked_by,locked_at IS NOT NULL FROM {schema}._private_jobs WHERE id=$1"
+            )).bind(job.id()).fetch_one(&pg_pool).await.unwrap();
+            assert_eq!(
+                row,
+                if persisted {
+                    (Some("handler failed".into()), None, false)
+                } else {
+                    (None, Some("worker".into()), true)
+                }
+            );
+            if let Some(queue_id) = job.job_queue_id() {
+                let queue: (Option<String>, bool) = safe_query_as(format!(
+                    "SELECT locked_by,locked_at IS NOT NULL FROM {schema}._private_job_queues WHERE id=$1"
+                )).bind(queue_id).fetch_one(&pg_pool).await.unwrap();
+                assert_eq!(
+                    queue,
+                    if persisted {
+                        (None, false)
+                    } else {
+                        (Some("worker".into()), true)
+                    }
+                );
+            }
+        }
+        drop_schema(&pg_pool, &schema).await;
+    }
+    pg_pool.close().await;
+}
