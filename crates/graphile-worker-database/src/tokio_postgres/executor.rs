@@ -19,6 +19,15 @@ impl From<::tokio_postgres::Error> for DbError {
 
 impl From<deadpool_postgres::PoolError> for DbError {
     fn from(error: deadpool_postgres::PoolError) -> Self {
+        if matches!(error, deadpool_postgres::PoolError::Timeout(_)) {
+            return DbError::connection_failure(error.to_string(), "ETIMEDOUT");
+        }
+        if let Some(code) = DbError::connection_io_code(&error) {
+            return DbError::connection_failure(error.to_string(), code);
+        }
+        if let deadpool_postgres::PoolError::Backend(error) = error {
+            return error.into();
+        }
         DbError::new(error.to_string())
     }
 }

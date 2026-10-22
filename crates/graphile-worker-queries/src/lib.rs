@@ -16,3 +16,5 @@ pub mod schema_names;
 pub mod task_identifiers;
 mod telemetry;
 pub mod worker_heartbeat;
+
+pub mod get_queue_names;

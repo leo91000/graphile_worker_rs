@@ -22,13 +22,30 @@ pub trait TransactionDriver: DbExecutor {
 #[derive(Clone)]
 pub struct Database {
     inner: Arc<dyn DatabaseDriver>,
+    #[cfg(any(feature = "runtime-tokio", feature = "runtime-async-std"))]
+    retry_policy: Option<crate::SqlRetryPolicy>,
 }
 
 impl Database {
     pub fn new(driver: impl DatabaseDriver + 'static) -> Self {
         Self {
             inner: Arc::new(driver),
+            #[cfg(any(feature = "runtime-tokio", feature = "runtime-async-std"))]
+            retry_policy: None,
         }
+    }
+
+    /// Enables retries on this handle's pooled execute/fetch operations.
+    ///
+    /// The driver must execute each operation in its own autocommit transaction.
+    /// Do not enable this on a custom driver retaining a caller-managed transaction.
+    /// Transactions returned by `begin`, raw driver/pool access and LISTEN retain
+    /// their original behavior. Clones retain the policy; existing handles do not.
+    /// Retries are disabled by default to preserve immediate error propagation.
+    #[cfg(any(feature = "runtime-tokio", feature = "runtime-async-std"))]
+    pub fn with_retry_policy(mut self, policy: crate::SqlRetryPolicy) -> Self {
+        self.retry_policy = Some(policy);
+        self
     }
 
     pub fn downcast_ref<T: 'static>(&self) -> Option<&T> {
@@ -62,6 +79,12 @@ impl DbExecutor for Database {
         sql: &'a str,
         params: DbParams,
     ) -> BoxFuture<'a, Result<u64, DbError>> {
+        #[cfg(any(feature = "runtime-tokio", feature = "runtime-async-std"))]
+        if let Some(policy) = self.retry_policy {
+            return Box::pin(async move {
+                policy.run(|| self.inner.execute(sql, params.clone())).await
+            });
+        }
         self.inner.execute(sql, params)
     }
 
@@ -70,6 +93,14 @@ impl DbExecutor for Database {
         sql: &'a str,
         params: DbParams,
     ) -> BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
+        #[cfg(any(feature = "runtime-tokio", feature = "runtime-async-std"))]
+        if let Some(policy) = self.retry_policy {
+            return Box::pin(async move {
+                policy
+                    .run(|| self.inner.fetch_all(sql, params.clone()))
+                    .await
+            });
+        }
         self.inner.fetch_all(sql, params)
     }
 }

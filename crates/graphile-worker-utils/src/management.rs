@@ -91,7 +91,21 @@ impl WorkerUtils {
     /// the latest cache. Database cleanup may already have committed; retry when
     /// registrations settle.
     pub async fn cleanup(&self, tasks: &[CleanupTask]) -> Result<(), GraphileWorkerError> {
-        maintenance::cleanup(self, tasks).await
+        maintenance::cleanup(self, tasks, &[]).await
+    }
+
+    /// Runs cleanup while preserving additional task identifiers owned by other workers.
+    ///
+    /// The keep list is combined with this worker's registered identifiers for
+    /// `GcTaskIdentifiers`; it does not register tasks or change the worker cache.
+    /// Other cleanup tasks retain their existing behavior. Stop workers whose
+    /// cached identifiers are absent from both lists before collecting task rows.
+    pub async fn cleanup_with_keep(
+        &self,
+        tasks: &[CleanupTask],
+        task_identifiers_to_keep: &[String],
+    ) -> Result<(), GraphileWorkerError> {
+        maintenance::cleanup(self, tasks, task_identifiers_to_keep).await
     }
 
     /// Runs database migrations to ensure the schema is up to date.

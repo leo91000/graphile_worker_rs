@@ -50,6 +50,7 @@ pub(super) async fn sweep_stale_workers_with_config(
 pub(super) async fn cleanup(
     utils: &WorkerUtils,
     tasks: &[CleanupTask],
+    task_identifiers_to_keep: &[String],
 ) -> Result<(), GraphileWorkerError> {
     for task in tasks {
         if !matches!(task, CleanupTask::GcTaskIdentifiers) {
@@ -61,7 +62,10 @@ pub(super) async fn cleanup(
         // hold the task cache across that wait: the transaction may need it for
         // another add. It is taken only to read the keep list and to store the
         // refreshed details.
-        let task_names = utils.task_details.task_names().await;
+        let mut task_names = utils.task_details.task_names().await;
+        task_names.extend_from_slice(task_identifiers_to_keep);
+        task_names.sort_unstable();
+        task_names.dedup();
         execute_cleanup_task(utils, task, &task_names).await?;
         refresh_task_details(utils).await?;
     }

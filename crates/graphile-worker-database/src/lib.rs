@@ -23,3 +23,8 @@ pub mod sqlx;
 
 #[cfg(feature = "driver-tokio-postgres")]
 pub mod tokio_postgres;
+
+#[cfg(any(feature = "runtime-tokio", feature = "runtime-async-std"))]
+mod retry;
+#[cfg(any(feature = "runtime-tokio", feature = "runtime-async-std"))]
+pub use retry::SqlRetryPolicy;

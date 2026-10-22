@@ -12,7 +12,10 @@ pub(crate) async fn cleanup(cli: &Cli, args: &CleanupArgs, utils: &WorkerUtils) 
         args.tasks.clone()
     };
     let tasks: Vec<CleanupTask> = requested_tasks.iter().copied().map(Into::into).collect();
-    utils.cleanup(&tasks).await.context("failed to cleanup")?;
+    utils
+        .cleanup_with_keep(&tasks, &args.task_identifiers_to_keep)
+        .await
+        .context("failed to cleanup")?;
 
     if cli.json {
         print_json(&serde_json::json!({ "cleanup_tasks": requested_tasks }))?;

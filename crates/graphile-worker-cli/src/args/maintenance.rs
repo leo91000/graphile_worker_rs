@@ -11,6 +11,10 @@ pub(crate) struct CleanupArgs {
     /// Cleanup tasks to run. Defaults to all tasks when omitted.
     #[arg(value_enum)]
     pub(crate) tasks: Vec<CleanupTaskArg>,
+
+    /// Task identifiers to retain during task GC; repeat or separate with commas.
+    #[arg(long = "keep-task", value_delimiter = ',')]
+    pub(crate) task_identifiers_to_keep: Vec<String>,
 }
 
 #[derive(Args, Debug)]
@@ -59,5 +63,34 @@ impl From<CleanupTaskArg> for CleanupTask {
             CleanupTaskArg::GcTaskIdentifiers => CleanupTask::GcTaskIdentifiers,
             CleanupTaskArg::GcJobQueues => CleanupTask::GcJobQueues,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::args::{Cli, Command};
+    use clap::Parser;
+
+    /// Explicit keeps may be repeated or comma-separated without changing task selection.
+    #[test]
+    fn cleanup_parses_explicit_keep_identifiers() {
+        let cli = Cli::try_parse_from([
+            "graphile-worker",
+            "cleanup",
+            "gc-task-identifiers",
+            "--keep-task",
+            "other/a,other/b",
+            "--keep-task",
+            "other/c",
+        ])
+        .unwrap();
+        let Command::Cleanup(args) = cli.command else {
+            panic!("expected cleanup")
+        };
+        assert_eq!(args.tasks.len(), 1);
+        assert_eq!(
+            args.task_identifiers_to_keep,
+            ["other/a", "other/b", "other/c"]
+        );
     }
 }

@@ -105,3 +105,16 @@ impl DatabaseDriver for SqlxDatabase {
         })
     }
 }
+
+/// Pool acquisition happens before execution, so these faults are safe to retry.
+pub(crate) fn acquisition_error(error: sqlx::Error) -> DbError {
+    let code = if matches!(error, sqlx::Error::PoolTimedOut) {
+        Some("ETIMEDOUT")
+    } else {
+        DbError::connection_io_code(&error)
+    };
+    match code {
+        Some(code) => DbError::connection_failure(error.to_string(), code),
+        None => error.into(),
+    }
+}

@@ -348,3 +348,19 @@ graphile-worker sweep-stale-workers --dry-run
 
 Use the Rust API from application code and purpose-built operator services. Use
 the CLI for ad hoc inspection, maintenance, and recovery tasks.
+
+### Preserving other workers' task identifiers
+
+Use an explicit keep list when collecting unused task identifiers:
+
+```rust,ignore
+utils.cleanup_with_keep(
+    &[CleanupTask::GcTaskIdentifiers],
+    &["other_worker/send_email".to_owned()],
+).await?;
+```
+
+This also preserves this worker's registered identifiers. It does not register
+the extra names or add them to the worker's handler cache. Stop workers whose
+cached identifiers are absent from both lists before task GC. The CLI accepts
+`cleanup gc-task-identifiers --keep-task other_worker/send_email`.

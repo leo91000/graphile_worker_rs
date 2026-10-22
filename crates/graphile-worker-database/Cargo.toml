@@ -13,10 +13,12 @@ readme = "README.md"
 
 [dependencies]
 chrono.workspace = true
+graphile_worker_runtime = { workspace = true, optional = true }
 deadpool-postgres = { workspace = true, optional = true }
 futures.workspace = true
 graphile_worker_postgres_tls = { workspace = true, optional = true }
 serde_json.workspace = true
+rand.workspace = true
 sqlx = { workspace = true, optional = true }
 thiserror.workspace = true
 tokio = { workspace = true, optional = true, features = ["macros", "rt", "sync", "time"] }
@@ -38,12 +40,15 @@ driver-tokio-postgres = [
   "tokio-stream",
 ]
 runtime-tokio = [
+  "dep:graphile_worker_runtime",
+  "graphile_worker_runtime/runtime-tokio",
   "sqlx?/runtime-tokio",
   "tokio-postgres?/runtime",
 ]
-runtime-async-std = ["sqlx?/runtime-async-std"]
+runtime-async-std = ["sqlx?/runtime-async-std", "dep:graphile_worker_runtime", "graphile_worker_runtime/runtime-async-std"]
 tls-native-tls = ["sqlx?/tls-native-tls", "graphile_worker_postgres_tls?/tls-native-tls"]
 tls-rustls = ["sqlx?/tls-rustls", "graphile_worker_postgres_tls?/tls-rustls"]
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+async-std.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time", "test-util"] }

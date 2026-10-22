@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use chrono::Utc;
-use futures::{FutureExt, Stream};
+use futures::{FutureExt, Stream, StreamExt};
 use graphile_worker_database::{Database, Schema};
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use tracing::error;
@@ -68,8 +68,30 @@ pub fn job_stream_with_filter<'a>(
     filter: JobFlagFilter<'a>,
     use_local_time: bool,
 ) -> impl Stream<Item = Job> + 'a {
+    try_job_stream_with_filter(
+        database,
+        shutdown_signal,
+        task_details,
+        schema,
+        worker_id,
+        filter,
+        use_local_time,
+    )
+    .filter_map(|result| async move { result.ok() })
+}
+
+/// Yields a fetch error once before terminating, allowing callers to drain active jobs.
+pub(crate) fn try_job_stream_with_filter<'a>(
+    database: Database,
+    shutdown_signal: ShutdownSignal,
+    task_details: SharedTaskDetails,
+    schema: Schema,
+    worker_id: String,
+    filter: JobFlagFilter<'a>,
+    use_local_time: bool,
+) -> impl Stream<Item = crate::errors::Result<Job>> + 'a {
     let filter = Arc::new(filter);
-    futures::stream::unfold((), move |()| {
+    futures::stream::unfold(false, move |finished| {
         let database = database.clone();
         let task_details = task_details.clone();
         let schema = schema.clone();
@@ -77,6 +99,9 @@ pub fn job_stream_with_filter<'a>(
         let filter = filter.clone();
 
         let job_fut = async move {
+            if finished {
+                return None;
+            }
             let now = use_local_time.then(Utc::now);
             let task_details_guard = task_details.read().await;
             let job = get_job_with_filter(
@@ -94,12 +119,9 @@ pub fn job_stream_with_filter<'a>(
             });
 
             match job {
-                Ok(Some(job)) => Some((job, ())),
+                Ok(Some(job)) => Some((Ok(job), false)),
                 Ok(None) => None,
-                Err(_) => {
-                    error!("Error occurred while trying to get job : {:?}", job);
-                    None
-                }
+                Err(error) => Some((Err(error), true)),
             }
         };
         let shutdown_fut = shutdown_signal.clone();

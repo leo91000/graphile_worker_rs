@@ -38,6 +38,17 @@ pub(super) async fn connect_default_database(
 }
 
 impl WorkerOptions {
+    /// Enables bounded SQL retries for this worker and its utility/context handles.
+    ///
+    /// Disabled by default. Retries selected aborted statements and pre-execution
+    /// connection failures using the upstream exponential backoff with jitter. Transactions,
+    /// raw driver access and LISTEN are excluded. A custom database driver must
+    /// use autocommit for each execute/fetch operation.
+    pub fn sql_retry_policy(mut self, policy: graphile_worker_database::SqlRetryPolicy) -> Self {
+        self.sql_retry_policy = Some(policy);
+        self
+    }
+
     /// Sets an existing PostgreSQL database connection for the worker to use.
     ///
     /// Allows reusing an existing driver-specific pool or configuring the

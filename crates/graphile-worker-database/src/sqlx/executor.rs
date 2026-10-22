@@ -47,7 +47,12 @@ impl DbExecutor for SqlxDatabase {
         params: DbParams,
     ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
         Box::pin(async move {
-            execute_with_executor(&self.pool, sql, params, self.prepared_statements).await
+            let mut connection = self
+                .pool
+                .acquire()
+                .await
+                .map_err(super::driver::acquisition_error)?;
+            execute_with_executor(&mut *connection, sql, params, self.prepared_statements).await
         })
     }
 
@@ -57,7 +62,12 @@ impl DbExecutor for SqlxDatabase {
         params: DbParams,
     ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
         Box::pin(async move {
-            fetch_all_with_executor(&self.pool, sql, params, self.prepared_statements).await
+            let mut connection = self
+                .pool
+                .acquire()
+                .await
+                .map_err(super::driver::acquisition_error)?;
+            fetch_all_with_executor(&mut *connection, sql, params, self.prepared_statements).await
         })
     }
 }

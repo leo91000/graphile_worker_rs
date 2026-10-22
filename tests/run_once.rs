@@ -18,3 +18,6 @@ mod removal;
 mod retry;
 #[path = "run_once/scheduling.rs"]
 mod scheduling;
+
+#[path = "run_once/fetch_errors.rs"]
+mod fetch_errors;
