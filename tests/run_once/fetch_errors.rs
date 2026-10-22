@@ -178,3 +178,206 @@ async fn stream_fetch_error_drains_sibling() {
 async fn named_followup_fetch_error_propagates() {
     check_fetch_error(true, true).await;
 }
+
+/// Delegates real PostgreSQL operations, injecting one causally gated fetch fault.
+#[derive(Debug)]
+struct SiblingFetchFault {
+    database: graphile_worker::Database,
+    gate: FetchGate,
+    claims: std::sync::atomic::AtomicUsize,
+    race: Option<bool>,
+    claimed: Notify,
+    faulted: Notify,
+}
+
+impl graphile_worker_database::DbExecutor for SiblingFetchFault {
+    /// Leaves all mutation and return SQL on the real driver.
+    fn execute<'a>(
+        &'a self,
+        sql: &'a str,
+        params: graphile_worker_database::DbParams,
+    ) -> graphile_worker_database::BoxFuture<'a, Result<u64, graphile_worker_database::DbError>>
+    {
+        graphile_worker_database::DbExecutor::execute(&self.database, sql, params)
+    }
+
+    /// Fails the second claim only after the first handler has started.
+    fn fetch_all<'a>(
+        &'a self,
+        sql: &'a str,
+        params: graphile_worker_database::DbParams,
+    ) -> graphile_worker_database::BoxFuture<
+        'a,
+        Result<Vec<graphile_worker_database::DbRow>, graphile_worker_database::DbError>,
+    > {
+        Box::pin(async move {
+            if sql.contains("with j as (") {
+                let claim = self.claims.fetch_add(1, Ordering::SeqCst);
+                if let Some(stream_fault) = self.race {
+                    let fault_claim = if stream_fault { 1 } else { 2 };
+                    let delayed_claim = if stream_fault { 2 } else { 1 };
+                    if claim == fault_claim {
+                        self.claimed.notified().await;
+                        self.faulted.notify_one();
+                        return Err(graphile_worker_database::DbError::with_code(
+                            "sibling fetch fault",
+                            "40001",
+                        ));
+                    }
+                    if claim == delayed_claim {
+                        let result = graphile_worker_database::DbExecutor::fetch_all(
+                            &self.database,
+                            sql,
+                            params,
+                        )
+                        .await;
+                        assert_eq!(
+                            result.as_ref().unwrap().len(),
+                            1,
+                            "fixture must hold a committed claim"
+                        );
+                        self.claimed.notify_one();
+                        self.faulted.notified().await;
+                        return result;
+                    }
+                } else if claim == 1 {
+                    self.gate.started.notified().await;
+                    // This current-thread fixture cannot poll the healthy task until
+                    // this error has propagated through the stream's ready future.
+                    self.gate.finish.notify_one();
+                    return Err(graphile_worker_database::DbError::with_code(
+                        "sibling fetch fault",
+                        "40001",
+                    ));
+                }
+            }
+            graphile_worker_database::DbExecutor::fetch_all(&self.database, sql, params).await
+        })
+    }
+}
+
+impl graphile_worker_database::DatabaseDriver for SiblingFetchFault {
+    /// Supports the Database driver's diagnostic downcast contract.
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    /// Delegates initialization and explicit transactions without fault injection.
+    fn begin<'a>(
+        &'a self,
+    ) -> graphile_worker_database::BoxFuture<
+        'a,
+        Result<graphile_worker_database::DbTransaction, graphile_worker_database::DbError>,
+    > {
+        Box::pin(self.database.begin())
+    }
+    /// Preserves the underlying driver's listener behavior.
+    fn listen<'a>(
+        &'a self,
+        channel: &'a str,
+    ) -> graphile_worker_database::BoxFuture<
+        'a,
+        Result<
+            Option<graphile_worker_database::NotificationStream>,
+            graphile_worker_database::DbError,
+        >,
+    > {
+        Box::pin(self.database.listen(channel))
+    }
+}
+
+/// Exercises stopped claims with real queue locks and explicit cross-fetch gates.
+async fn check_stop_continuations(race: Option<bool>) {
+    helpers::with_test_db(move |db| async move {
+        let gate = FetchGate::default();
+        let worker = db
+            .create_worker_options()
+            .database(graphile_worker::Database::new(SiblingFetchFault {
+                database: db.database.clone(),
+                gate: gate.clone(),
+                claims: Default::default(),
+                race,
+                claimed: Notify::new(),
+                faulted: Notify::new(),
+            }))
+            .concurrency(2)
+            .add_extension(gate.clone())
+            .define_job::<FetchJob>()
+            .init()
+            .await
+            .unwrap();
+        let utils = worker.create_utils();
+        utils
+            .add_job(
+                FetchJob {
+                    poison: false,
+                    wait: race.is_none(),
+                },
+                JobSpec {
+                    queue_name: Some("healthy-backlog".into()),
+                    priority: Some(-1),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        let pending = utils
+            .add_job(
+                FetchJob {
+                    poison: false,
+                    wait: false,
+                },
+                JobSpec {
+                    queue_name: Some(
+                        if race.is_some() {
+                            "in-flight"
+                        } else {
+                            "healthy-backlog"
+                        }
+                        .into(),
+                    ),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        let error = tokio::time::timeout(std::time::Duration::from_secs(5), worker.run_once())
+            .await
+            .expect("fetch error must return after draining active work")
+            .unwrap_err();
+        assert!(error.to_string().contains("sibling fetch fault"));
+        assert!(gate.finished.load(Ordering::SeqCst));
+        let jobs = db.get_jobs().await;
+        assert_eq!(
+            jobs.len(),
+            1,
+            "work not active at the fetch fault must remain pending"
+        );
+        assert_eq!(jobs[0].id, *pending.id());
+        assert_eq!(jobs[0].attempts, 0);
+        assert!(jobs[0].locked_by.is_none());
+        assert!(db
+            .get_job_queues()
+            .await
+            .iter()
+            .all(|queue| queue.locked_by.is_none()));
+    })
+    .await;
+}
+
+/// A stream fetch fault drains the active queued job without consuming its backlog.
+#[tokio::test]
+async fn stream_fetch_error_stops_named_queue_continuations() {
+    check_stop_continuations(None).await;
+}
+
+/// A committed continuation claim finishing after a stream fault is returned, not run.
+#[tokio::test]
+async fn stream_fetch_error_returns_in_flight_continuation() {
+    check_stop_continuations(Some(true)).await;
+}
+
+/// A continuation fault also stops the stream and returns its in-flight claim.
+#[tokio::test]
+async fn continuation_fetch_error_returns_in_flight_stream_claim() {
+    check_stop_continuations(Some(false)).await;
+}

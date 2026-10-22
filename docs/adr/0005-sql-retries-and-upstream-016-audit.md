@@ -78,12 +78,16 @@ task GC. A keep list applies to one cleanup call only.
 An independent comparison with proposed upstream runner error handling found
 that Rust's run_once fetch stream and named-queue continuation discarded errors.
 It now retains the first fetch or persistence error while draining active jobs.
+A fetch error stops new stream and named-queue claims. Already committed,
+unstarted claims finishing concurrently are returned with the existing
+retirement-aware SQL; their attempts and queue locks are restored. Persistence
+errors retain their existing continuation behavior.
 The existing public job streams keep their Job-only API; the worker uses an
 internal fallible stream that yields a fetch error once and then terminates.
 No new public error variants or signatures replace existing ones.
 
-No migration SQL, private row type, PostgreSQL minimum, locking order, retry
-attempt accounting, job-key retirement or mixed-worker guarantee changes.
+No migration SQL, private row type, PostgreSQL minimum, locking order, job
+retry-attempt accounting, job-key retirement or mixed-worker guarantee changes.
 Applied migrations 1–22 must remain byte-for-byte unchanged. This audit does
 not import the migration in open upstream proposal #646: its locked-array retry
 behavior is not merged upstream and differs from Rust's documented retirement

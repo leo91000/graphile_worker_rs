@@ -340,3 +340,51 @@ cleanup before any rerun. The bounded parser regression passed with 1.2.2; its
 1.2.1 baseline failed specifically at the oversized-offset rejection. mdBook
 built successfully. Both CSS builds were 42,530 bytes with SHA256
 `674236a02f506c6a1cc8a44d2c591091b7baf55c29d7ac423104d17df03c293a`.
+
+
+### Full re-review follow-up
+
+The explicitly requested review of head `1024f6133e3ebae525de0b76a99d47fc0fd0aff9`
+returned **CHANGES_REQUESTED**, despite successful bot/check statuses. All three
+findings were evaluated against current source. The source-map regression is
+now run by the Check workflow after installing the locked UI development
+dependencies (scripts disabled), and ADR 0005 explicitly distinguishes job
+retry-attempt accounting from SQL statement retries.
+
+The valid run-once finding exposed continued named-queue claims after a sibling
+fetch error. A causal gate around the real PostgreSQL driver reproduces it on
+the prior head: the pending healthy job was consumed instead of remaining
+available. Run-once now shares a fetch-stop signal between stream and named
+continuations, records stream errors before polling another ready continuation,
+and drains handlers already running. Claims already in flight are awaited and
+returned through the existing retirement-aware return SQL before another
+handler is started. Their consumed attempts and queue locks are restored;
+claim cancellation is avoided because an autocommit may already have committed.
+Ordinary processing/persistence errors do not set the fetch-stop signal.
+
+Three regression scenarios cover the pending named backlog, a committed
+continuation claim completing after a stream error, and a committed stream
+claim completing after a continuation error. Explicit notification gates and
+five-second outer bounds replace timing assumptions. The first stop-signal
+implementation additionally failed the in-flight continuation scenario because
+it signalled only in the queued error handler; moving publication to the stream
+observation point fixed that ordering defect. All 25 run-once tests then passed.
+The real drivers and complete required suites are validated again for this
+follow-up; delivery evidence records the final-head checks and actual review.
+
+
+Required validation after these review fixes: `just lint` passed and
+`just test-docker` completed with **523 passed, 0 failed, 6 ignored**. mdBook
+built successfully, and the exact new CI npm-install/parser-check commands
+passed locally. The added workflow uses the repository's existing Node.js
+24.22.0 release-workflow version and an officially verified setup-node v7 SHA;
+local npm/parser execution used the installed Node.js 24.21.0. No project pin
+was upgraded by this follow-up.
+
+
+The full follow-up `runtime-tokio`/`driver-tokio-postgres` matrix passed:
+**286 passed, 0 failed, 2 ignored**. The full `runtime-async-std`/`driver-sqlx`
+matrix passed: **521 passed, 0 failed, 6 ignored**, with the same fixture/runtime
+limitations explained above. Both include all six fetch-error scenarios. The
+isolated PostgreSQL fixture was removed after these runs; no queue schema or
+applied migration changed in the review fixes.
