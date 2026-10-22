@@ -81,6 +81,9 @@ pub struct WorkerOptions {
     /// PostgreSQL connection pool
     database: Option<Database>,
 
+    /// Optional retries for pooled statements; caller-owned transactions are excluded.
+    sql_retry_policy: Option<graphile_worker_database::SqlRetryPolicy>,
+
     /// PostgreSQL connection string
     database_url: Option<String>,
 

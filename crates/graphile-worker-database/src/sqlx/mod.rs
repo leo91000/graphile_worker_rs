@@ -1,4 +1,4 @@
-mod driver;
+pub(crate) mod driver;
 mod executor;
 mod params;
 mod rows;

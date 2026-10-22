@@ -339,3 +339,29 @@ let worker = WorkerOptions::default()
 Tune these values with your own workload, PostgreSQL latency, pool size, and job
 duration. Higher concurrency is useful only when the database pool and task
 workload can support it.
+
+## SQL retries
+
+SQL errors propagate immediately by default. Enable bounded retries for pooled
+statements with the upstream retry policy:
+
+```rust,ignore
+use graphile_worker::{SqlRetryPolicy, WorkerOptions};
+use std::num::NonZeroU32;
+
+let options = WorkerOptions::default()
+    .sql_retry_policy(SqlRetryPolicy::new(NonZeroU32::new(5).unwrap()));
+```
+
+`SqlRetryPolicy::default()` allows 100 total attempts. Serialization failures
+and deadlocks start at 50ms and cap at 5s; unavailable connections start at 3s
+and cap at 120s. Delays multiply by 1.5 per failure, then by random jitter
+between 0.5 and 1.5 after capping.
+Only connection failures proven to occur before SQL execution are retried.
+Unknown execution outcomes and other SQL errors propagate immediately.
+Transactions, commits, raw pool access and LISTEN are excluded. Retry entire
+caller-managed transactions in application code. A custom driver must use
+autocommit before enabling retries. The policy applies to the worker's utility
+and context Database handles too. Choose an attempt limit compatible with the
+application's shutdown budget; persisting outcomes can outlast a handler's
+shutdown grace period.

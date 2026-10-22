@@ -138,3 +138,31 @@ async fn gc_task_identifiers_preserves_known_identifiers_for_horizontal_scaling(
     })
     .await;
 }
+
+/// Explicit keeps protect other workers without registering their handlers locally.
+#[tokio::test]
+async fn explicit_keep_preserves_external_identity_without_changing_local_cache() {
+    with_test_db(|db| async move {
+        #[derive(Serialize, Deserialize)]
+        struct LocalJob;
+        impl TaskHandler for LocalJob {
+            const IDENTIFIER: &'static str = "local_registered";
+            async fn run(self, _: WorkerContext) -> impl IntoTaskHandlerResult {}
+        }
+        let worker = db.create_worker_options().define_job::<LocalJob>().init().await.unwrap();
+        let utils = worker.create_utils();
+        sqlx::query("INSERT INTO graphile_worker._private_tasks (identifier) VALUES ('external_keep'), ('external_remove')")
+            .execute(&db.test_pool).await.unwrap();
+        let before = db.get_task_id("external_keep").await;
+        utils.cleanup_with_keep(&[CleanupTask::GcTaskIdentifiers], &["external_keep".into(), "external_keep".into(), "not_registered".into()])
+            .await.unwrap();
+        let mut tasks = db.get_tasks().await;
+        tasks.sort();
+        assert_eq!(tasks, ["external_keep", "local_registered"]);
+        assert_eq!(db.get_task_id("external_keep").await, before);
+        assert_eq!(worker.task_details().task_names().await, ["local_registered"]);
+        // Keeps apply to this cleanup invocation only and do not enter the cache.
+        utils.cleanup(&[CleanupTask::GcTaskIdentifiers]).await.unwrap();
+        assert_eq!(db.get_tasks().await, ["local_registered"]);
+    }).await;
+}

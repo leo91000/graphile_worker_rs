@@ -67,6 +67,11 @@ impl WorkerOptions {
             }
         };
 
+        let database = match self.sql_retry_policy {
+            Some(policy) => database.with_retry_policy(policy),
+            None => database,
+        };
+
         let schema = self.schema.unwrap_or_default();
 
         migrate(&database, &schema).await?;

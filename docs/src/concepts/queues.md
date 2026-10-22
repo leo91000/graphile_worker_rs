@@ -207,3 +207,11 @@ internals.
 Avoid assigning a random queue name to every job. Queue rows add lookup and
 locking overhead, and high cardinality can reduce fetch throughput. Leave
 `queue_name` unset for jobs that do not need serialization.
+
+Inside a task handler, import `WorkerContextQueueExt` and await
+`ctx.get_queue_name()` to resolve the current job's queue. It returns
+`Result<Option<String>, GraphileWorkerError>`: unnamed or missing queues return
+`None`, while database failures remain errors. The query helper
+`graphile_worker::sql::get_queue_names::get_queue_names` resolves multiple queue
+IDs in input order, preserving duplicates and missing entries. Names are fetched
+immediately without a retained cache.

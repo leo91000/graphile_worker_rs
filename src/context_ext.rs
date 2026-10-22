@@ -93,3 +93,28 @@ impl WorkerContextExt for WorkerContext {
         self.utils().add_batch_job(payloads, spec).await
     }
 }
+
+/// Queue identity lookup from a running task, independent of scheduling helpers.
+pub trait WorkerContextQueueExt {
+    /// Resolves the job's queue name; unnamed or missing queues return None.
+    /// Database errors remain visible to the handler.
+    fn get_queue_name(
+        &self,
+    ) -> impl core::future::Future<Output = Result<Option<String>, GraphileWorkerError>> + Send;
+}
+
+impl WorkerContextQueueExt for WorkerContext {
+    /// Resolves this job's queue through the same database handle and schema.
+    async fn get_queue_name(&self) -> Result<Option<String>, GraphileWorkerError> {
+        let Some(id) = self.job().job_queue_id() else {
+            return Ok(None);
+        };
+        let names = graphile_worker_queries::get_queue_names::get_queue_names(
+            self.database(),
+            self.schema(),
+            &[*id],
+        )
+        .await?;
+        Ok(names.into_iter().next().flatten())
+    }
+}

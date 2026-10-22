@@ -41,23 +41,35 @@ where
 }
 
 impl DbExecutor for SqlxDatabase {
+    /// Acquires before executing so acquisition faults can be classified separately.
     fn execute<'a>(
         &'a self,
         sql: &'a str,
         params: DbParams,
     ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
         Box::pin(async move {
-            execute_with_executor(&self.pool, sql, params, self.prepared_statements).await
+            let mut connection = self
+                .pool
+                .acquire()
+                .await
+                .map_err(super::driver::acquisition_error)?;
+            execute_with_executor(&mut *connection, sql, params, self.prepared_statements).await
         })
     }
 
+    /// Acquires before fetching while retaining the configured statement policy.
     fn fetch_all<'a>(
         &'a self,
         sql: &'a str,
         params: DbParams,
     ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
         Box::pin(async move {
-            fetch_all_with_executor(&self.pool, sql, params, self.prepared_statements).await
+            let mut connection = self
+                .pool
+                .acquire()
+                .await
+                .map_err(super::driver::acquisition_error)?;
+            fetch_all_with_executor(&mut *connection, sql, params, self.prepared_statements).await
         })
     }
 }
