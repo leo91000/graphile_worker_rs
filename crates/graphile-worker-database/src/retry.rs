@@ -18,6 +18,7 @@ pub struct SqlRetryPolicy {
 }
 
 impl Default for SqlRetryPolicy {
+    /// Uses the upstream limit of 100 total attempts.
     fn default() -> Self {
         Self::new(NonZeroU32::new(100).unwrap())
     }

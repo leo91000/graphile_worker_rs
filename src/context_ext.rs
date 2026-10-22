@@ -104,6 +104,7 @@ pub trait WorkerContextQueueExt {
 }
 
 impl WorkerContextQueueExt for WorkerContext {
+    /// Resolves this job's queue through the same database handle and schema.
     async fn get_queue_name(&self) -> Result<Option<String>, GraphileWorkerError> {
         let Some(id) = self.job().job_queue_id() else {
             return Ok(None);

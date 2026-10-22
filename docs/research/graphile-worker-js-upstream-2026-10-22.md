@@ -4,7 +4,8 @@
 
 This audit implements missing SQL retry, queue-name lookup and explicit cleanup
 keep-list capabilities found by broadening the historical comparison. It also
-fixes an independently reproduced run-once fetch-error defect. There is one
+fixes an independently reproduced run-once fetch-error defect and an admin UI
+build-parser security advisory. There is one
 newly merged upstream dependency delta and no newly merged queue implementation.
 This report does not claim full parity.
 
@@ -45,7 +46,7 @@ on an old PR is taken as evidence about the new task head.
 
 | Upstream commit / PR | Changed behavior, affected components and disposition |
 | --- | --- |
-| [7a2405b / #634](https://github.com/graphile/worker/commit/7a2405bdd3b6322fb6b0d48dc0543bcc89166930), branch [29b73dc](https://github.com/graphile/worker/commit/29b73dcc5dc817399f7dcb5c564f701639a3228d) | **Inapplicable security dependency delta.** yarn.lock upgrades Joi 17.11.0 to 17.13.7 and its address dependency/ranges. The PR includes prototype-injection and date-validation dependency fixes; these are meaningful security fixes for that dependency, but Rust queue crates do not execute Joi, its schema validators, or the Node website dependency graph. Cargo manifests, Rust typed configuration and the separate admin UI manifests have no Joi dependency. No src/, sql/ or worker-test delta exists between stable and main. Do not call this a published stable change or port npm dependencies into Cargo. |
+| [7a2405b / #634](https://github.com/graphile/worker/commit/7a2405bdd3b6322fb6b0d48dc0543bcc89166930), branch [29b73dc](https://github.com/graphile/worker/commit/29b73dcc5dc817399f7dcb5c564f701639a3228d) | **Inapplicable security dependency delta.** yarn.lock upgrades Joi 17.11.0 to 17.13.7 and its address dependency/ranges. The PR includes prototype-injection and date-validation dependency fixes; these are meaningful security fixes for that dependency, but Rust queue crates do not execute Joi, its schema validators, or the Node website dependency graph. Cargo manifests, typed configuration in Rust and the separate admin UI manifests have no Joi dependency. No src/, sql/ or worker-test delta exists between stable and main. Do not call this a published stable change or port npm dependencies into Cargo. |
 
 ## Broadened published-stable ledger: v0.16.0..v0.16.6
 
@@ -108,9 +109,9 @@ items rather than inferring parity from similar names.
 | --- | --- |
 | #622 / e9f3e3f: named-queue batch claims | **Already supported.** `batch_get_jobs.rs` locks candidates before DISTINCT ON queue identity, retaining individual unnamed jobs and binding the candidate limit. `tests/upstream_sync.rs` checks sibling state, priority and concurrent claimers. Flag routing precedes the limit. |
 | #623 / be38db6: identity allocation | **Already supported.** Rust migration 21 and `task_identifiers.rs` filter existing names before INSERT; revision 22 retains the SQL. Repeated/exhausted identity and dual revision-20 upgrade tests remain. |
-| #627 / 9fc851b: SQL/helper allocations | **Already supported / Rust design.** `fetch_query_cache.rs` bounds SQL text to 128 entries per thread, keyed by schema, all filter shapes, clock and fetch mode. No values, results or connections are cached. Rust owned context handles replace JS closure rebuilding. No new throughput claim. |
+| #627 / 9fc851b: SQL/helper allocations | **Already supported / Rust design.** `fetch_query_cache.rs` bounds SQL text to 128 entries per thread, keyed by schema, all filter shapes, clock and fetch mode. No values, results or connections are cached. owned context handles in Rust replace JS closure rebuilding. No new throughput claim. |
 | #557 / 90ea860: observer errors | **Already supported.** `events/observer.rs` catches both construction and future-polling panics; lifecycle tests retain both failure sites and repeated emission. Aborting panics/application side effects remain outside rollback. |
-| #474 / 5a305b9, including 0bd0b77: batching, persistent statements and retry calculator | **Supported capabilities plus retry gap implemented here.** Prepared-statement opt-out still reaches SQLx direct/transaction paths. Current upstream retry source changed the earlier square-root policy to exponential jitter; `SqlRetryPolicy` implements the current constants/calculator with opt-in Rust semantics, safe acquisition classification and caller-owned transaction exclusion. This corrects incomplete historical coverage of that mixed diff. Rust's bounded channels and failure-batch per-job fallback remain, and asynchronous batch error policy remains different. |
+| #474 / 5a305b9, including 0bd0b77: batching, persistent statements and retry calculator | **Supported capabilities plus retry gap implemented here.** Prepared-statement opt-out still reaches SQLx direct/transaction paths. Current upstream retry source changed the earlier square-root policy to exponential jitter; `SqlRetryPolicy` implements the current constants/calculator with opt-in Rust semantics, safe acquisition classification and caller-owned transaction exclusion. This corrects incomplete historical coverage of that mixed diff. Rust's bounded channels and per-job fallback for failure batches remain, and asynchronous batch error policy remains different. |
 | #612 / 7de3c85 and #613 / 58d1ed2: failure IDs | **Already supported.** Batch failure parameters use I64Array/bigint[]; upstream-sync tests check IDs above i32::MAX with/without named queues and release state. |
 | #544 / b94bcf8: cron recovery | **Already supported.** CronRunner retries registration/backfill from 200ms to a 60s cap, resets on a healthy tick and races the whole loop against shutdown. Clock-driven recovery, timezone/boundary and backfill tests remain. Its outer scheduler retry policy is deliberately separate from optional SQL statement retries. |
 | #543 / bb03d1c: nested cron identifiers | **Already supported.** Parser tests preserve options, JSON payload and subsequent entries; whole-input/location validation remains. Compiled task registration is intentional. |
@@ -135,15 +136,15 @@ can reveal independent Rust defects, but do not establish merged requirements.
 
 | Proposal / inspected head | Rust comparison and disposition |
 | --- | --- |
-| #633 `13679fe51b7751597db8dc1ffebaf8a69f58e2cb` | **Open; track.** Explicit migration entrypoints/error cleanup. WorkerUtils construction does not migrate; its migrate method is explicit; WorkerOptions init migrates before registration. Rust owned handles/Results replace Node releaser arrays. |
+| #633 `13679fe51b7751597db8dc1ffebaf8a69f58e2cb` | **Open; track.** Explicit migration entrypoints/error cleanup. WorkerUtils construction does not migrate; its migrate method is explicit; WorkerOptions init migrates before registration. owned Rust handles and Results replace Node releaser arrays. |
 | #637 `3925e59a44d9f0d2d3fda2445053183d4c093ed3` | **Open; track.** Rejected/stale task-cache completion. Rust queries return fresh Results, init shares success only, and cleanup refresh compares snapshots under the write lock and bounds contention rather than overwriting concurrent registration. Existing race tests verify this. |
 | #640 `74ccbfd8c8780e5ca9b81ed3ee5924f8c87e0375` | **Closed unmerged on October 18.** Alternate cache rejection fix; retain #637 tracking, not a merged port. |
 | #642 `6c6b57897d303db3713e9b9bf3c21d4e3666f725` | **Open; inapplicable.** Upstream sponsorship copy does not establish Rust sponsorship or worker behavior. |
 | #643 `11201b5e52a64f533b62a99c1d01bfdab8e608cc` | **Open; track, existing Rust fixes confirmed.** Direct outcomes await and propagate errors; last week's #568 preserved run-once persistence errors and closed-channel failure fallback errors. This audit separately fixes silently swallowed claim errors. Asynchronous batch persistence failures still follow their existing logging/fallback policy. |
-| #644 `7db0b5ff0cd36d2283b65e0eaee20bbad695a9be` | **Open; track.** Ordered advisory-key serialization. Rust migration 19 introduced sorted advisory locks and row locks, retained through 22, plus GWNOR missing-result guard. Existing bulk locked-key contention regression validates results and one surviving key. Different advisory namespaces do not prove mixed Node/Rust producer coordination. |
+| #644 `7db0b5ff0cd36d2283b65e0eaee20bbad695a9be` | **Open; track.** Ordered advisory-key serialization. Rust migration 19 introduced sorted advisory locks and row locks, retained through 22, plus GWNOR missing-result guard. Existing contention regression for bulk job keys validates results and one surviving key. Different advisory namespaces do not prove mixed Node/Rust producer coordination. |
 | #645 `0a77c0704669a0a06adda3c5ff504c8507889e58` | **Open; track with differences.** Node batch retry-loop/backpressure-deferred repair. Rust uses bounded channels; it has no matching break/deferred-refcount protocol. Optional pooled statement retries now provide a distinct capability, but do not make Rust's asynchronous batch failure/shutdown policy equivalent to the proposal. Re-evaluate final merged behavior and fault cases if it lands. |
 | #646 `5105a7a40e9ace7ed0d6bd75323459c9d1721309` | **Open; track with compatibility decision.** Keyed add/claim race and retry attempts for locked array payloads. Rust already takes keyed advisory and row locks before retiring old rows; existing keyed contention tests remain. The proposed array retirement exemption is absent from stable upstream and differs from Rust revision-22 retirement semantics. It is not silently imported into an applied migration. Re-evaluate final merged SQL, partial batch failures, recovery and upgrade paths when merged (ADR 0005). |
-| #647 `1bf3da11c43711975f9cfd4f75a53f2b43df0c32` | **Open; inapplicable Node dependencies.** yarn.lock updates seven npm packages (follow-redirects, handlebars, http-cache-semantics, Joi, shell-quote, source-map-js and undici). Rust worker crates do not execute those Node website/build packages. No SQL/worker source changes. |
+| #647 `1bf3da11c43711975f9cfd4f75a53f2b43df0c32` | **Open; mixed tooling disposition.** yarn.lock updates seven npm packages (follow-redirects, handlebars, http-cache-semantics, Joi, shell-quote, source-map-js and undici). These are not merged queue changes. Rust workers do not execute the Node dependency graph, but the downstream admin UI Tailwind build independently uses vulnerable source-map-js 1.2.1. This audit patches that shared development dependency to 1.2.2 based on the public advisory, not on the proposal's open status. Other listed npm changes have no affected Rust queue/runtime component in this delta. |
 | #648 `91ef5723e730b48de6b563b04cd2d1800e6c64b2` | **Open; track; independent Rust fetch fix implemented.** Node runner.promise/CLI fatal-error propagation. Rust continuous run already returns source errors after draining, requests shutdown and keeps the original error if deregistration also fails. Comparison exposed run_once's discarded stream/follow-up fetch errors; three new live PostgreSQL regressions reproduce and fix that defect. No JS runner promise API is added. |
 
 ## Implemented behavior and compatibility
@@ -249,7 +250,7 @@ checks. Generated build output was cleaned through Cargo and debug information
 was disabled to fit all matrices on this node; assertions, test selection and
 supported-platform coverage were not weakened. One in-progress compile attempt
 failed before API wiring was complete; it is not a behavioral reproduction or
-a passing gate. The clean final required run above passed.
+a passing gate. The clean final validation run above passed.
 
 The differential fault SQL is shared in `tests/fixtures/sql_retry_faults.sql`;
 its whitespace-trimmed SHA256 is
@@ -258,3 +259,84 @@ The source manifest, extracted pinned functions, harness and results are
 preserved with the durable run evidence. PR checks, actual final-head review
 and guarded merge/main CI are subsequent delivery gates, recorded in the final
 checkpoint and run report rather than inferred from these local passes.
+
+
+### Admin UI build-parser security follow-up
+
+The branch push surfaced existing downstream Dependabot alert #2:
+[GHSA-68fv-2mgg-jv7q / CVE-2026-93749](https://github.com/advisories/GHSA-68fv-2mgg-jv7q).
+Unlike the worker's Rust crates, admin UI asset generation does execute
+source-map-js through `@tailwindcss/node` 4.3.3. The installed lockfile contained
+1.2.1. The Rust HTTP server serves prebuilt CSS/WASM and does not parse these
+source maps; this is a build/development dependency fix, not a queue SQL change.
+
+The lockfile now resolves 1.2.2, the first patched release. Its official source
+fix [cf765805](https://github.com/7rulnik/source-map-js/commit/cf7658058ceeaa8619d5ae0ec90be6905209d016)
+validates indexed section offsets and bounds large/nested offsets, avoids
+repeated nested source enumeration and improves large line-gap handling. These
+behaviors belong to that dependency; no copy is ported into Rust. All top-level
+Tailwind/icon pins remain unchanged, and no shipped/prebuilt UI asset changes.
+This independent advisory finding also corrects the overly broad initial
+inapplicable disposition of open upstream #647's shared source-map dependency.
+
+`node .github/scripts/check_source_map_offsets.cjs` after the admin UI's
+`npm ci --include=dev --ignore-scripts --no-audit --no-fund` rejects an indexed
+map with offset line 10,000,001 and checks an ordinary indexed map resolves its
+source/line. The old 1.2.1 constructor accepts the oversized offset, reproducing
+the failure safely without expanding a malicious map. An initial normal-case
+probe used an unmapped indexed-map column; that fixture was corrected to column
+1. Baseline failure is specifically missing offset rejection, not that fixture
+mistake. Tailwind builds before/after the lock update produce byte-identical
+CSS. Fresh required Rust validation and final-head PR review/checks apply to
+this follow-up as well. No manual release, package publication or deployment is
+performed.
+
+
+### Review of the initial delivery head
+
+[PR #576](https://github.com/leo91000/graphile_worker_rs/pull/576) initially used
+head `5fa159f84abd3d71100e6f26c4e4bcc950a515f6`. Its actual review was
+**COMMENTED**, not APPROVED or CHANGES_REQUESTED. It reported no actionable code
+findings, two unverified wording suggestions, and insufficient docstring
+coverage (65.22% against 80%). The wording was clarified and affected database
+construction/conversion, pooled execution, retry defaults, queue lookup and
+mock-driver methods now document their contracts. Function bodies are unchanged
+by that documentation update. The suggested PR description remains inapplicable:
+the selected delivery skill explicitly requires an empty body; detailed evidence
+is committed here. No successful bot status is treated as approval.
+
+Initial Codecov checks succeeded with 98.23789% patch coverage and 97.4% project
+coverage. Four uncovered changed lines were reported; thresholds, exclusions
+and assertions remain unchanged. The security follow-up and documentation need
+fresh-head checks and review. The review service reports one included review
+per hour, with no allowance remaining immediately after this review; a quota
+reset must be honored before explicitly requesting any stalled re-review.
+
+### Remaining development dependency advisory
+
+After patching source-map-js, `npm audit` reports four high entries propagating
+one unpatched [braces advisory, GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
+through micromatch, @parcel/watcher and @tailwindcss/cli. The live registry's
+latest braces is 3.0.3 and the advisory lists no patched version. npm proposes a
+Tailwind downgrade from pinned 4.3.3 to 4.3.0; no forced fix or pin change is
+made. The affected watcher/glob tooling operates on repository-controlled build
+patterns; the Rust worker/server does not parse job payloads as brace patterns,
+and this task does not enable watch mode.
+
+**Disposition: deferred development-tooling update, with an exact external
+unblock condition.** Revisit when a compatible patched braces version is
+published, or an approved compatible Tailwind/watcher dependency update removes
+that code. This is independent of the applicable merged queue ports and does
+not erase the alert or claim an audit with zero npm advisories. Source-map-js
+is separately fixed with its reproduced regression and unchanged CSS output.
+
+
+### Follow-up local validation
+
+After the source-map lock update and review documentation changes, `just lint`
+passed and `just test-docker` again completed with **520 passed, 0 failed,
+6 ignored**. Recovery inspection verified the completed logs and container
+cleanup before any rerun. The bounded parser regression passed with 1.2.2; its
+1.2.1 baseline failed specifically at the oversized-offset rejection. mdBook
+built successfully. Both CSS builds were 42,530 bytes with SHA256
+`674236a02f506c6a1cc8a44d2c591091b7baf55c29d7ac423104d17df03c293a`.

@@ -27,6 +27,7 @@ pub struct Database {
 }
 
 impl Database {
+    /// Wraps a pooled driver with immediate error propagation by default.
     pub fn new(driver: impl DatabaseDriver + 'static) -> Self {
         Self {
             inner: Arc::new(driver),
@@ -74,6 +75,7 @@ impl fmt::Debug for Database {
 }
 
 impl DbExecutor for Database {
+    /// Executes pooled SQL with the optional policy, preserving bindings on retries.
     fn execute<'a>(
         &'a self,
         sql: &'a str,
@@ -88,6 +90,7 @@ impl DbExecutor for Database {
         self.inner.execute(sql, params)
     }
 
+    /// Fetches pooled rows with the optional policy and original error diagnostics.
     fn fetch_all<'a>(
         &'a self,
         sql: &'a str,

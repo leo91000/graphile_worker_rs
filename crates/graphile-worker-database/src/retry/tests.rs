@@ -40,6 +40,7 @@ impl Scripted {
 }
 
 impl DbExecutor for Scripted {
+    /// Records a scripted execution for replay-count and bind assertions.
     fn execute<'a>(
         &'a self,
         sql: &'a str,
@@ -47,6 +48,7 @@ impl DbExecutor for Scripted {
     ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
         Box::pin(async move { self.call(sql, params).map(|()| 1) })
     }
+    /// Records a scripted fetch through the other pooled execution entrypoint.
     fn fetch_all<'a>(
         &'a self,
         sql: &'a str,
@@ -57,12 +59,15 @@ impl DbExecutor for Scripted {
 }
 
 impl DatabaseDriver for Scripted {
+    /// Exposes the underlying test driver to verify policy-preserving downcasts.
     fn as_any(&self) -> &dyn Any {
         self
     }
+    /// Creates an unwrapped transaction sharing the scripted operation log.
     fn begin<'a>(&'a self) -> crate::BoxFuture<'a, Result<DbTransaction, DbError>> {
         Box::pin(async move { Ok(DbTransaction::new(Box::new(self.clone()))) })
     }
+    /// Records listener calls so unintended listener retries fail the test.
     fn listen<'a>(
         &'a self,
         channel: &'a str,
@@ -75,6 +80,7 @@ impl DatabaseDriver for Scripted {
 }
 
 impl TransactionDriver for Scripted {
+    /// Records commit once to verify that a pool policy cannot replay it.
     fn commit(self: Box<Self>) -> crate::BoxFuture<'static, Result<(), DbError>> {
         Box::pin(async move { self.call("commit", DbParams::new()) })
     }

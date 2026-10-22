@@ -41,6 +41,7 @@ where
 }
 
 impl DbExecutor for SqlxDatabase {
+    /// Acquires before executing so acquisition faults can be classified separately.
     fn execute<'a>(
         &'a self,
         sql: &'a str,
@@ -56,6 +57,7 @@ impl DbExecutor for SqlxDatabase {
         })
     }
 
+    /// Acquires before fetching while retaining the configured statement policy.
     fn fetch_all<'a>(
         &'a self,
         sql: &'a str,

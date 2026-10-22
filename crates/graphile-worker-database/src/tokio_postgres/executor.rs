@@ -18,6 +18,7 @@ impl From<::tokio_postgres::Error> for DbError {
 }
 
 impl From<deadpool_postgres::PoolError> for DbError {
+    /// Preserves backend SQLSTATEs and marks only known acquisition-time I/O faults.
     fn from(error: deadpool_postgres::PoolError) -> Self {
         if matches!(error, deadpool_postgres::PoolError::Timeout(_)) {
             return DbError::connection_failure(error.to_string(), "ETIMEDOUT");

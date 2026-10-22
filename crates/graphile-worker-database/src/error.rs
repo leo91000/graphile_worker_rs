@@ -9,6 +9,7 @@ pub struct DbError {
 }
 
 impl DbError {
+    /// Creates an unclassified error whose execution outcome must not be assumed.
     pub fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
@@ -17,6 +18,7 @@ impl DbError {
         }
     }
 
+    /// Preserves a server code without asserting a pre-execution connection failure.
     pub fn with_code(message: impl Into<String>, code: impl Into<String>) -> Self {
         Self {
             message: message.into(),
