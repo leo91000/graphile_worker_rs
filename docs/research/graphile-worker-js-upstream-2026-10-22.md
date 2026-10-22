@@ -388,3 +388,30 @@ matrix passed: **521 passed, 0 failed, 6 ignored**, with the same fixture/runtim
 limitations explained above. Both include all six fetch-error scenarios. The
 isolated PostgreSQL fixture was removed after these runs; no queue schema or
 applied migration changed in the review fixes.
+
+
+### Failed-return coverage follow-up
+
+All applicable workflows at `1e17b7a6c40f8d7157c3325d38211c18bc7ef841`
+passed, but the separate Codecov patch check failed: **96.12403%** against
+**97.3%**. This is a failed gate, not waived by successful Coverage workflows.
+The uncovered unstarted-return failure branch now has a real PostgreSQL trigger
+fault: a committed in-flight claim's return is rejected with SQLSTATE 40001.
+The test verifies the healthy active job persisted, the original fetch error
+remains the returned diagnostic, and the unstarted job and queue retain their
+ownership and consumed attempt after rollback. A nontransactional sequence
+proves the failed return reached the server. The return failure is logged;
+the claim remains eligible for the existing stale-worker recovery rather than
+being executed or silently discarded. Production logic, coverage targets,
+exclusions and assertions are unchanged by this additional fault scenario.
+
+Review replies confirmed all three previous findings fixed and resolved their
+threads. The provider explicitly stated its reply does not supersede the
+blocking review. A full review must still be requested after its quota reset.
+
+
+This test-only follow-up passed `just lint` and `just test-docker`:
+**524 passed, 0 failed, 6 ignored**. All **26 run-once tests** also passed in
+each supported tokio-postgres and async-std/SQLx configuration. Production
+sources are unchanged from the full 286/521-test driver/runtime passes above.
+Fresh CI must confirm the patch-coverage gate before merge.

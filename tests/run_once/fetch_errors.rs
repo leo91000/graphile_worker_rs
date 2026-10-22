@@ -286,7 +286,7 @@ impl graphile_worker_database::DatabaseDriver for SiblingFetchFault {
 }
 
 /// Exercises stopped claims with real queue locks and explicit cross-fetch gates.
-async fn check_stop_continuations(race: Option<bool>) {
+async fn check_stop_continuations(race: Option<bool>, fail_return: bool) {
     helpers::with_test_db(move |db| async move {
         let gate = FetchGate::default();
         let worker = db
@@ -340,6 +340,18 @@ async fn check_stop_continuations(race: Option<bool>) {
             )
             .await
             .unwrap();
+        if fail_return {
+            sqlx::raw_sql(
+                "CREATE SEQUENCE graphile_worker.return_attempts MINVALUE 0 START 0; \
+                 CREATE FUNCTION graphile_worker.reject_unstarted_return() RETURNS trigger LANGUAGE plpgsql AS $$ \
+                 BEGIN PERFORM nextval('graphile_worker.return_attempts'); \
+                   RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='injected return failure'; END $$; \
+                 CREATE TRIGGER reject_unstarted_return BEFORE UPDATE ON graphile_worker._private_jobs \
+                 FOR EACH ROW WHEN (OLD.locked_by IS NOT NULL AND NEW.locked_by IS NULL \
+                   AND OLD.payload::jsonb->>'wait' = 'false') \
+                 EXECUTE FUNCTION graphile_worker.reject_unstarted_return();",
+            ).execute(&db.test_pool).await.unwrap();
+        }
         let error = tokio::time::timeout(std::time::Duration::from_secs(5), worker.run_once())
             .await
             .expect("fetch error must return after draining active work")
@@ -353,13 +365,20 @@ async fn check_stop_continuations(race: Option<bool>) {
             "work not active at the fetch fault must remain pending"
         );
         assert_eq!(jobs[0].id, *pending.id());
-        assert_eq!(jobs[0].attempts, 0);
-        assert!(jobs[0].locked_by.is_none());
-        assert!(db
-            .get_job_queues()
-            .await
-            .iter()
-            .all(|queue| queue.locked_by.is_none()));
+        if fail_return {
+            assert!(sqlx::query_scalar::<_, bool>("SELECT is_called FROM graphile_worker.return_attempts")
+                .fetch_one(&db.test_pool).await.unwrap(), "the server must have rejected the return");
+            assert_eq!(jobs[0].attempts, 1);
+            assert_eq!(jobs[0].locked_by.as_ref(), Some(worker.worker_id()));
+            let queues = db.get_job_queues().await;
+            let retained = queues.iter().find(|queue| queue.id == jobs[0].job_queue_id.unwrap()).unwrap();
+            assert_eq!(retained.locked_by.as_ref(), Some(worker.worker_id()));
+            assert!(retained.locked_at.is_some());
+        } else {
+            assert_eq!(jobs[0].attempts, 0);
+            assert!(jobs[0].locked_by.is_none());
+            assert!(db.get_job_queues().await.iter().all(|queue| queue.locked_by.is_none()));
+        }
     })
     .await;
 }
@@ -367,17 +386,23 @@ async fn check_stop_continuations(race: Option<bool>) {
 /// A stream fetch fault drains the active queued job without consuming its backlog.
 #[tokio::test]
 async fn stream_fetch_error_stops_named_queue_continuations() {
-    check_stop_continuations(None).await;
+    check_stop_continuations(None, false).await;
 }
 
 /// A committed continuation claim finishing after a stream fault is returned, not run.
 #[tokio::test]
 async fn stream_fetch_error_returns_in_flight_continuation() {
-    check_stop_continuations(Some(true)).await;
+    check_stop_continuations(Some(true), false).await;
 }
 
 /// A continuation fault also stops the stream and returns its in-flight claim.
 #[tokio::test]
 async fn continuation_fetch_error_returns_in_flight_stream_claim() {
-    check_stop_continuations(Some(false)).await;
+    check_stop_continuations(Some(false), false).await;
+}
+
+/// A rejected unstarted return retains ownership and cannot replace the first fetch error.
+#[tokio::test]
+async fn failed_unstarted_return_preserves_first_fetch_error_and_claim() {
+    check_stop_continuations(Some(true), true).await;
 }
