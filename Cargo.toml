@@ -295,6 +295,10 @@ name = "local_queue"
 required-features = ["driver-sqlx"]
 
 [[example]]
+name = "producer"
+required-features = ["runtime-tokio", "driver-sqlx"]
+
+[[example]]
 name = "run_once"
 required-features = ["driver-sqlx"]
 

@@ -41,7 +41,52 @@ select * from graphile_worker.add_job(
 
 ## Scheduling From Rust
 
-Create `WorkerUtils` from a running worker when you want it to share the
+### Scheduling Without A Worker
+
+Hosts that only enqueue jobs can construct `WorkerUtils` directly from a
+PostgreSQL pool and schema. This does not create a worker or start a job
+processing loop.
+
+With the default Tokio and SQLx features, add these dependencies:
+
+```toml
+[dependencies]
+graphile_worker = "0.14"
+serde_json = "1"
+sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+The SQLx version must match the version used by your `graphile_worker` release
+so its `PgPool` can be converted into a worker database handle.
+
+This complete producer program connects, migrates the schema, enqueues a job,
+and exits:
+
+```rust,no_run
+{{#include ../../../examples/producer.rs}}
+```
+
+Run the repository example with `DATABASE_URL` pointing to your PostgreSQL
+database:
+
+```bash
+DATABASE_URL=postgres://postgres:password@localhost/mydb cargo run --example producer
+```
+
+Use the same database and schema on the producer and worker hosts. The worker
+hosts must register a task handler whose `IDENTIFIER` is `send_email` and whose
+payload accepts the `to` and `subject` fields. The producer does not need to
+implement or register that handler when using `add_raw_job`. If it shares the
+task type with the worker, it can also use the typed `add_job` API.
+
+The schema must be migrated before jobs can be enqueued. This example calls
+`utils.migrate().await?`; if your deployment already runs migrations, producer
+hosts can omit that call and use credentials permitted to enqueue jobs.
+
+### Scheduling From An Initialized Worker
+
+Create `WorkerUtils` from an initialized worker when you want it to share the
 worker's database, schema, hooks, task details, and time configuration:
 
 ```rust,ignore
