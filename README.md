@@ -93,6 +93,11 @@ For a complete walkthrough, read
 and
 [First Worker](https://leo91000.github.io/graphile_worker_rs/getting-started/first-worker.html).
 
+Applications that only enqueue jobs can construct `WorkerUtils` directly,
+without creating or running a worker. See
+[Scheduling Without A Worker](https://leo91000.github.io/graphile_worker_rs/guides/scheduling-jobs.html#scheduling-without-a-worker)
+and the runnable [producer example](examples/producer.rs).
+
 ## Highlights
 
 - PostgreSQL-backed durable queue with `SKIP LOCKED` job claiming.

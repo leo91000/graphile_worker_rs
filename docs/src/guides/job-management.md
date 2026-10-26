@@ -17,8 +17,8 @@ let worker = graphile_worker::WorkerOptions::default()
 let utils = worker.create_utils();
 ```
 
-Operator tools that do not run a worker can construct utilities directly from a
-database handle and schema:
+Applications that only enqueue jobs and operator tools that do not run a worker
+can construct utilities directly from a database handle and schema:
 
 ```rust,ignore
 use graphile_worker::WorkerUtils;
@@ -26,6 +26,9 @@ use graphile_worker::WorkerUtils;
 let utils = WorkerUtils::new(database, "graphile_worker");
 utils.migrate().await?;
 ```
+
+See [Scheduling Without A Worker](./scheduling-jobs.md#scheduling-without-a-worker)
+for a complete program, dependencies, and deployment requirements.
 
 ## Using An Existing Transaction
 
