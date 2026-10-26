@@ -32,7 +32,7 @@ Tokio, rustls, and SQLx are enabled by default:
 
 ```toml
 [dependencies]
-graphile_worker = "0.13"
+graphile_worker = "0.14"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 serde = { version = "1", features = ["derive"] }
 ```
