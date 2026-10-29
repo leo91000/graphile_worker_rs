@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.14.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.14.1...graphile_worker-v0.14.2) - 2026-10-29
+
+### Added
+
+- port upstream SQL retries and maintenance helpers ([#576](https://github.com/leo91000/graphile_worker_rs/pull/576))
+
+### Fixed
+
+- preserve run-once persistence errors and server diagnostics ([#568](https://github.com/leo91000/graphile_worker_rs/pull/568))
+
+### Other
+
+- record upstream synchronization audit for 2026-10-29 ([#580](https://github.com/leo91000/graphile_worker_rs/pull/580))
+- document scheduling jobs without a worker ([#579](https://github.com/leo91000/graphile_worker_rs/pull/579))
+- *(deps)* update all non-major dependencies ([#574](https://github.com/leo91000/graphile_worker_rs/pull/574))
+- *(deps)* update dependency @iconify-json/lucide to v1.2.146 ([#572](https://github.com/leo91000/graphile_worker_rs/pull/572))
+- *(deps)* update dependency @iconify-json/lucide to v1.2.145 ([#571](https://github.com/leo91000/graphile_worker_rs/pull/571))
+- *(deps)* update rust to v1.99.1 ([#570](https://github.com/leo91000/graphile_worker_rs/pull/570))
+- *(deps)* update dependency node to v24.22.0 ([#567](https://github.com/leo91000/graphile_worker_rs/pull/567))
+- *(deps)* update all non-major dependencies ([#566](https://github.com/leo91000/graphile_worker_rs/pull/566))
+- *(deps)* update all non-major dependencies ([#565](https://github.com/leo91000/graphile_worker_rs/pull/565))
+- *(deps)* update dependency @iconify-json/lucide to v1.2.143 ([#564](https://github.com/leo91000/graphile_worker_rs/pull/564))
+- *(deps)* update all non-major dependencies ([#561](https://github.com/leo91000/graphile_worker_rs/pull/561))
+
 ## [0.14.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.14.0...graphile_worker-v0.14.1) - 2026-10-11
 
 ### Added
