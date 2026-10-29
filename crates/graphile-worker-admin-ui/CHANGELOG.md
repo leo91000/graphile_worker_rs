@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.10](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_admin_ui-v0.2.9...graphile_worker_admin_ui-v0.2.10) - 2026-10-29
+
+### Added
+
+- port upstream SQL retries and maintenance helpers ([#576](https://github.com/leo91000/graphile_worker_rs/pull/576))
+
+### Other
+
+- *(deps)* update all non-major dependencies ([#574](https://github.com/leo91000/graphile_worker_rs/pull/574))
+- *(deps)* update dependency @iconify-json/lucide to v1.2.146 ([#572](https://github.com/leo91000/graphile_worker_rs/pull/572))
+- *(deps)* update dependency @iconify-json/lucide to v1.2.145 ([#571](https://github.com/leo91000/graphile_worker_rs/pull/571))
+- *(deps)* update all non-major dependencies ([#566](https://github.com/leo91000/graphile_worker_rs/pull/566))
+- *(deps)* update dependency @iconify-json/lucide to v1.2.143 ([#564](https://github.com/leo91000/graphile_worker_rs/pull/564))
+
 ## [0.2.9](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_admin_ui-v0.2.8...graphile_worker_admin_ui-v0.2.9) - 2026-10-11
 
 ### Other

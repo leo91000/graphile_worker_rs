@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.13](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_cli-v0.1.12...graphile_worker_cli-v0.1.13) - 2026-10-29
+
+### Added
+
+- port upstream SQL retries and maintenance helpers ([#576](https://github.com/leo91000/graphile_worker_rs/pull/576))
+
 ## [0.1.12](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_cli-v0.1.11...graphile_worker_cli-v0.1.12) - 2026-10-11
 
 ### Other
