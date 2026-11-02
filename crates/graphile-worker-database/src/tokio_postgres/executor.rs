@@ -7,29 +7,30 @@ use super::TokioPostgresDatabase;
 use crate::{DbError, DbExecutor, DbExecutorArg, DbParams, DbRow};
 
 impl From<::tokio_postgres::Error> for DbError {
-    /// Retains server diagnostics and SQLSTATE when the driver exposes them.
+    /// Retains server diagnostics and the complete native source for structured inspection.
     fn from(error: ::tokio_postgres::Error) -> Self {
-        if let Some(db_error) = error.as_db_error() {
-            return DbError::with_code(format!("{error}: {db_error}"), db_error.code().code());
-        }
-
-        DbError::new(error.to_string())
+        DbError::tokio_postgres_diagnostic(&error).with_source(error)
     }
 }
 
 impl From<deadpool_postgres::PoolError> for DbError {
-    /// Preserves backend SQLSTATEs and marks only known acquisition-time I/O faults.
+    /// Preserves backend causes and marks only known acquisition-time I/O faults.
     fn from(error: deadpool_postgres::PoolError) -> Self {
-        if matches!(error, deadpool_postgres::PoolError::Timeout(_)) {
-            return DbError::connection_failure(error.to_string(), "ETIMEDOUT");
-        }
-        if let Some(code) = DbError::connection_io_code(&error) {
-            return DbError::connection_failure(error.to_string(), code);
-        }
-        if let deadpool_postgres::PoolError::Backend(error) = error {
-            return error.into();
-        }
-        DbError::new(error.to_string())
+        let failure = match &error {
+            deadpool_postgres::PoolError::Timeout(_) => {
+                DbError::connection_failure(error.to_string(), "ETIMEDOUT")
+            }
+            _ => match DbError::connection_io_code(&error) {
+                Some(code) => DbError::connection_failure(error.to_string(), code),
+                None => match &error {
+                    deadpool_postgres::PoolError::Backend(source) => {
+                        DbError::tokio_postgres_diagnostic(source)
+                    }
+                    _ => DbError::new(error.to_string()),
+                },
+            },
+        };
+        failure.with_source(error)
     }
 }
 

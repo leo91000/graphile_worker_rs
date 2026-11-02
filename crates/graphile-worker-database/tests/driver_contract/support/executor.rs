@@ -133,16 +133,49 @@ pub(crate) async fn exercise_database(database: &Database) {
 
     // Both drivers must preserve the server message as well as SQLSTATE, even
     // when the driver's outer error display contains only "db error".
-    let reject = "do $$ begin raise exception using errcode='40001', message='driver contract failure'; end $$";
+    let reject = "do $$ begin raise exception using errcode='40001', message='driver contract failure', detail='driver contract detail'; end $$";
     let error = database.execute(reject, DbParams::new()).await.unwrap_err();
     assert_eq!(error.code(), Some("40001"));
     assert!(error.to_string().contains("driver contract failure"));
+    #[cfg(feature = "driver-tokio-postgres")]
+    if database.downcast_ref::<TokioPostgresDatabase>().is_some() {
+        assert_eq!(
+            native_server_diagnostic(&error),
+            Some((
+                "40001",
+                "driver contract failure",
+                Some("driver contract detail"),
+                "ERROR"
+            ))
+        );
+    }
 
     let tx = database.begin().await.unwrap();
     let error = tx.fetch_all(reject, DbParams::new()).await.unwrap_err();
     assert_eq!(error.code(), Some("40001"));
     assert!(error.to_string().contains("driver contract failure"));
+    #[cfg(feature = "driver-tokio-postgres")]
+    if database.downcast_ref::<TokioPostgresDatabase>().is_some() {
+        assert_eq!(
+            native_server_diagnostic(&error),
+            Some((
+                "40001",
+                "driver contract failure",
+                Some("driver contract detail"),
+                "ERROR"
+            ))
+        );
+    }
     drop(tx);
+
+    #[cfg(feature = "driver-tokio-postgres")]
+    if database.downcast_ref::<TokioPostgresDatabase>().is_some() {
+        let proof = verify_missing_database_pool_refusal().await;
+        assert!(
+            proof.is_ok(),
+            "pool refusal did not retain its native cause: {proof:?}"
+        );
+    }
 
     let tx = database.begin().await.unwrap();
     tx.execute(
@@ -174,4 +207,50 @@ pub(crate) async fn exercise_database(database: &Database) {
     tx.execute("select 1", DbParams::new()).await.unwrap();
     drop(tx);
     tokio::time::sleep(Duration::from_millis(20)).await;
+}
+
+#[cfg(feature = "driver-tokio-postgres")]
+fn native_server_diagnostic(error: &DbError) -> Option<(&str, &str, Option<&str>, &str)> {
+    let mut source: Option<&(dyn std::error::Error + 'static)> = Some(error);
+    while let Some(current_source) = source {
+        match current_source.downcast_ref::<::tokio_postgres::Error>() {
+            Some(driver_error) => {
+                return driver_error.as_db_error().map(|server_error| {
+                    (
+                        server_error.code().code(),
+                        server_error.message(),
+                        server_error.detail(),
+                        server_error.severity(),
+                    )
+                })
+            }
+            None => source = current_source.source(),
+        }
+    }
+    None
+}
+
+#[cfg(feature = "driver-tokio-postgres")]
+async fn verify_missing_database_pool_refusal(
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = match database_url().parse::<::tokio_postgres::Config>() {
+        Ok(config) => config,
+        Err(error) => return Err(error.into()),
+    };
+    let missing_database = unique_channel("driver_contract_missing");
+    config.dbname(&missing_database);
+    let database = match TokioPostgresDatabase::from_config(config, 1) {
+        Ok(database) => Database::from(database),
+        Err(error) => return Err(error.into()),
+    };
+    let error = match database.execute("select 1", DbParams::new()).await {
+        Ok(_) => return Err("the fixture's nonexistent database was accepted".into()),
+        Err(error) => error,
+    };
+    assert_eq!(error.code(), Some("3D000"));
+    let expected_message = format!("database \"{missing_database}\" does not exist");
+    let expected = Some(("3D000", expected_message.as_str(), None, "FATAL"));
+    assert_eq!(native_server_diagnostic(&error), expected);
+    assert_eq!(native_server_diagnostic(&error.clone()), expected);
+    Ok(())
 }
