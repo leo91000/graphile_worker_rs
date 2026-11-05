@@ -20,7 +20,7 @@ jobs:
       matrix:
         postgres: [14, 15, 16, 17, 18]
     timeout-minutes: 20
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     env:
       CARGO_INCREMENTAL: 0
       DATABASE_URL: postgres://testuser:testpassword@localhost:5432/testdb
