@@ -145,7 +145,7 @@ pub(crate) async fn exercise_database(database: &Database) {
                 "40001",
                 "driver contract failure",
                 Some("driver contract detail"),
-                "ERROR"
+                Some(::tokio_postgres::error::Severity::Error)
             ))
         );
     }
@@ -162,7 +162,7 @@ pub(crate) async fn exercise_database(database: &Database) {
                 "40001",
                 "driver contract failure",
                 Some("driver contract detail"),
-                "ERROR"
+                Some(::tokio_postgres::error::Severity::Error)
             ))
         );
     }
@@ -210,7 +210,14 @@ pub(crate) async fn exercise_database(database: &Database) {
 }
 
 #[cfg(feature = "driver-tokio-postgres")]
-fn native_server_diagnostic(error: &DbError) -> Option<(&str, &str, Option<&str>, &str)> {
+fn native_server_diagnostic(
+    error: &DbError,
+) -> Option<(
+    &str,
+    &str,
+    Option<&str>,
+    Option<::tokio_postgres::error::Severity>,
+)> {
     let mut source: Option<&(dyn std::error::Error + 'static)> = Some(error);
     while let Some(current_source) = source {
         match current_source.downcast_ref::<::tokio_postgres::Error>() {
@@ -220,7 +227,7 @@ fn native_server_diagnostic(error: &DbError) -> Option<(&str, &str, Option<&str>
                         server_error.code().code(),
                         server_error.message(),
                         server_error.detail(),
-                        server_error.severity(),
+                        server_error.parsed_severity(),
                     )
                 })
             }
@@ -248,9 +255,18 @@ async fn verify_missing_database_pool_refusal(
         Err(error) => error,
     };
     assert_eq!(error.code(), Some("3D000"));
-    let expected_message = format!("database \"{missing_database}\" does not exist");
-    let expected = Some(("3D000", expected_message.as_str(), None, "FATAL"));
-    assert_eq!(native_server_diagnostic(&error), expected);
-    assert_eq!(native_server_diagnostic(&error.clone()), expected);
+    let assert_locale_stable_diagnostic = |error: &DbError| {
+        let (code, message, detail, severity) =
+            native_server_diagnostic(error).expect("native cause retained");
+        assert_eq!(code, "3D000");
+        assert!(
+            message.contains(missing_database.as_str()),
+            "server message should name the missing database: {message}"
+        );
+        assert_eq!(detail, None);
+        assert_eq!(severity, Some(::tokio_postgres::error::Severity::Fatal));
+    };
+    assert_locale_stable_diagnostic(&error);
+    assert_locale_stable_diagnostic(&error.clone());
     Ok(())
 }
