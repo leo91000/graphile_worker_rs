@@ -16,6 +16,16 @@ Unnamed outcomes, failed persistence and mere batch enqueueing do not wake the
 worker. A partially persisted failure batch counts only successful outcomes;
 closed-channel direct fallbacks follow the same rule.
 
+A direct slot continues fetching after each processed job until a fetch returns
+no ready work. That fetch outcome is the continuation feedback: higher-priority
+unnamed jobs cannot consume a one-shot release fanout and strand a finite named
+backlog. Continuation polls use the existing Polling hook source. Each claim is
+preceded by a shutdown check, and an already started claim/handler/persistence
+operation is awaited rather than cancelled. Batched named outcomes still need
+the post-persistence hint because the slot can reach an empty fetch before the
+queue unlock commits. This also restores Node's ordinary continue-until-empty
+behavior for a finite unnamed backlog without adding an unbounded hint queue.
+
 Hints own no jobs, allocate no unbounded event queue, spawn no detached tasks,
 and never send PostgreSQL notifications. Another process still needs its own
 poll or notification. LocalQueue pulses retain configured refetch delays,

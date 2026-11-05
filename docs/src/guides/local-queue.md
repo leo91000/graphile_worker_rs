@@ -186,3 +186,7 @@ drain without an insert notification or a full polling interval between jobs.
 Pulses retain the configured refetch delay and its abort threshold. This wakeup
 is local to the completing worker; other processes still rely on their own
 notifications or polling. Direct workers also receive an immediate poll hint.
+
+Direct slots continue draining ready jobs after a wakeup until a fetch returns
+none, including when higher-priority unnamed jobs precede the named backlog.
+Shutdown is checked between claims; already started processing is awaited.

@@ -372,3 +372,101 @@ the manual benchmark remains explicitly ignored in this regression command).
 Together with the complete 532-test SQLx/async-std run on the updated source,
 these validate the atomic cleanup without weakening assertions or runtime
 coverage. Fresh-head hosted CI and actual re-review are still required.
+
+
+### Mixed-backlog review finding and direct continuation
+
+The explicitly requested full re-review at 2026-11-05T11:35:20Z returned
+**CHANGES_REQUESTED** on `97a73c8e37b52a776658be59a21c4e772e0c8b17`.
+Its new finding is valid: a one-shot direct fanout can be consumed entirely by
+higher-priority unnamed jobs after a named queue releases, leaving the remaining
+named backlog waiting for a poll. This is separate from the atomic cleanup.
+
+A gated regression reproduces the defect before the fix. The first named
+handler holds its claim while twelve higher-priority unnamed jobs are inserted,
+with two more named jobs already pending, no notifications and a 60-second poll.
+At concurrency one, the initial PR head completes exactly **one named and one
+unnamed job**, then exceeds the unchanged five-second progress bound. The gate
+establishes insertion/claim order without timing sleeps.
+
+Direct slots now continue on each successful `Some(job)` fetch outcome until
+`None` reports that no ready work remains. A named release hint can therefore
+start a drain that passes through the finite unnamed prefix rather than being
+spent on one fetch per slot. This is the same continue-until-empty model as
+Node's ordinary worker loop. Subsequent polls use the existing Polling hook
+source. Each additional claim is preceded by polling the shutdown signal;
+in-flight claim/handler/persistence is still awaited, avoiding uncertain
+commit cancellation. SQL ownership, filters, priority, retries, batching,
+LocalQueue pulses and run-once behavior remain unchanged. ADR 0006 and the
+architecture/queue guide document the stronger continuation contract.
+
+The regression varies concurrency one/three and direct/10ms-batched completion.
+It checks all fifteen outcomes persisted, no overlap of named handlers and
+released queue locks before any normal poll. A second gated case requests and
+observes shutdown before releasing the first handler; all fourteen unstarted
+jobs must retain zero attempts and unlocked ownership. It covers batched and
+unbatched outcomes. Required checks and affected runtime/driver coverage are
+repeated for this functional follow-up; previous heads' results remain separate.
+
+A second pinned Node differential reproduces the same mixed fixture at
+concurrency one/three with direct/10ms-batched completion. Each UUID database
+starts with three named jobs; the gated first handler pauses while twelve
+higher-priority unnamed jobs are inserted. The caller-owned pg pool suppresses
+its clients' `notification` events to match Rust's disabled insert-notification
+delivery, without editing vendor source or suppressing post-persistence pool
+nudges. All eight fixtures retain serial-named-handler assertions and wait for
+persisted rows/queue locks; pools and database sessions are awaited before cleanup.
+
+Published v0.18.0 completes twelve unnamed and two named jobs in all four cases,
+leaving one named job pending after the five-second progress budget. Pinned
+upstream `b4f1b41c7abd747586879bf68a46a5a22897fa96` completes all fifteen jobs,
+with zero rows and released queue locks in every case (384–878ms wall time,
+including setup). The corrected Rust regressions likewise complete all fifteen
+outcomes. This confirms that direct continuation plus the post-persistence
+release hint is needed; additional insert notifications cannot mask the test.
+
+
+The first functional-follow-up required run passed lint and all 60 root unit
+tests, then failed the existing continuous accepted-flags routing matrix at
+its five-second **shutdown** bound (five other accepted-flags tests passed).
+The unchanged focused matrix subsequently passed all fifteen direct/one-local/
+two-local filter combinations in 29.40s without concurrent compilation. This
+resembles an earlier documented VM timing failure, but does not establish the
+precise cause. The failed log is retained separately. A fresh full required
+recipe uses the unchanged assertions, deadlines and PostgreSQL durability
+settings, with serialized database tests and no concurrent compilation.
+
+The fresh functional-follow-up `just test-docker` recipe passed **536 tests,
+zero failed, seven ignored**, across 89 suites, including all eight wakeup
+regressions. Its fixture container was successfully removed. `just lint` and
+the pinned mdBook 0.4.52 build also passed. Alternate runtime/driver runs and
+the manual 1,200-job drain measurement follow sequentially, preserving the
+failed attempt and all previous-head results as separate evidence.
+
+The functional follow-up's full SQLx/async-std matrix passed **534 tests, zero
+failed, seven ignored**, across 89 suites. This includes all mixed/direct
+continuation, shutdown, recovery, cleanup and migration assertions on the new
+source; earlier atomic-only runtime results are not substituted for it.
+
+The first full Tokio/tokio-postgres attempt passed all 53 applicable root tests,
+then failed the existing accepted-flags matrix's unchanged five-second progress
+bound: four of nine eligible jobs executed and the remaining five rows were
+unclaimed. The unchanged focused fifteen-case matrix passed in 36.34s. Slow
+statement logging on the disposable server observed COMMIT/fixture operations
+above 500ms in that passing run; this is storage-latency evidence, not proof of
+the exact failure cause. No source, deadline, assertion or database durability
+setting was relaxed. The failed attempt is retained separately; the complete
+driver suite is repeated without compilation, with slow statements retained.
+
+The fresh full Tokio/tokio-postgres matrix passed **298 tests, zero failed,
+three ignored**, across 37 suites, including all eight wakeup regressions.
+The repeated manual benchmark also passed all six 200-job configurations
+(**1,200 persisted jobs**, serial named handlers, no locked queue left behind).
+Without concurrent compilation, direct/one-local/two-local queues took
+3,549/4,135/4,464ms unbatched and 7,392/10,991/7,736ms with 10ms completion
+batching. All are below the unchanged 30-second stall bound. These are
+representative end-to-end VM measurements with a 1ms handler await and variable
+storage synchronization, not a controlled universal throughput comparison.
+Fresh-head hosted workflows and an actual nonblocking review decision remain
+required before guarded merge; final run output records their exact SHAs and
+results rather than attributing earlier-head checks to this functional fix.

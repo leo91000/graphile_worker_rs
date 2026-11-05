@@ -191,3 +191,6 @@ async fn benchmark_named_queue_drain() {
     backlog_drains(false, None, 200).await;
     backlog_drains(true, None, 200).await;
 }
+
+#[path = "queue_wakeup/mixed.rs"]
+mod mixed;
