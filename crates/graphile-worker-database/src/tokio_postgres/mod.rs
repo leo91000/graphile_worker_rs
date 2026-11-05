@@ -51,8 +51,8 @@ impl TokioPostgresDatabase {
     #[allow(clippy::clone_on_copy)] // NoTls is Copy; TLS connectors are only Clone.
     pub fn from_config(config: ::tokio_postgres::Config, max_size: usize) -> Result<Self, DbError> {
         let root_cert = std::env::var_os("PGSSLROOTCERT");
-        let tls = tls::connector(root_cert.as_deref().map(std::path::Path::new))
-            .map_err(|error| DbError::new(error.to_string()))?;
+        let root_cert_path = root_cert.as_deref().map(std::path::Path::new);
+        let tls = tls::connector(root_cert_path).map_err(DbError::from_source)?;
         // The no-TLS connector is Copy; both TLS connectors require cloning.
         #[allow(clippy::clone_on_copy)]
         let pool_tls = tls.clone();
@@ -66,7 +66,7 @@ impl TokioPostgresDatabase {
         let pool = Pool::builder(manager)
             .max_size(max_size)
             .build()
-            .map_err(|error| DbError::new(error.to_string()))?;
+            .map_err(DbError::from_source)?;
         Ok(Self {
             pool,
             listener_config: Some(ListenerConfig { config, tls }),
@@ -76,7 +76,7 @@ impl TokioPostgresDatabase {
     pub fn from_url(url: &str, max_size: usize) -> Result<Self, DbError> {
         let config = url
             .parse::<::tokio_postgres::Config>()
-            .map_err(|error| DbError::new(error.to_string()))?;
+            .map_err(DbError::from)?;
         Self::from_config(config, max_size)
     }
 }
