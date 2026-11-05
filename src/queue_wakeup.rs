@@ -17,10 +17,9 @@ impl QueueWakeup {
             return;
         }
         self.count
-            .try_update(Ordering::AcqRel, Ordering::Acquire, |pending| {
-                Some(pending.saturating_add(count))
-            })
-            .expect("the counter update always succeeds");
+            .update(Ordering::AcqRel, Ordering::Acquire, |pending| {
+                pending.saturating_add(count)
+            });
         self.notify.notify_one();
     }
 

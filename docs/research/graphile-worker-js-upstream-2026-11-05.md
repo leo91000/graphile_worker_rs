@@ -231,6 +231,25 @@ is enforced.
    and mixed-version recovery are not certified by this task. Existing ADRs and
    compatibility guidance retain the operational boundaries.
 
+8. **Separate requirements/capabilities model remains a product design proposal
+   (ADR 0004), not missing merged upstream behavior.** Upstream still uses job
+   flags for routing/operational labels and has no merged separate capability
+   taxonomy. Rust's accepted/forbidden filters and optional allowlist requiring all flag keys
+   remain supported and tested, including operational flags. A separate model
+   requires an explicit taxonomy, public protocol and worker rollout
+   contract, or a final merged upstream design to compare. No such contract can
+   be inferred from #653's wakeup change; no existing filtering capability is
+   removed or silently reclassified.
+9. **Historical retirement events before Rust revision 22 cannot be inferred.**
+   Existing rows lack the replacement/removal markers that distinguish retired
+   jobs from legitimate final attempts. ADR 0002 deliberately leaves those rows
+   unmarked; guessing from exhausted attempts or a missing key would change
+   legitimate recovery behavior. Extending protection retroactively requires
+   trustworthy historical event evidence or an explicit administrative decision
+   for known jobs. No production data operation is performed, and the applied
+   migration history remains unchanged. Current replacement/return/reschedule
+   race tests verify the path using retirement markers, not recovery of lost history.
+
 ## Validation and delivery
 
 Validation results are appended after commands complete. Applicable final-head
@@ -308,3 +327,48 @@ final results, PR/head/merge SHAs, actual review decisions and all workflow IDs
 are retained in the task checkpoint and durable final run output. They must
 complete before delivery; successful default tests or old CI do not substitute
 for those results. No supported feature/driver assertion is removed.
+
+
+### Review follow-up
+
+The review at `aca8e551aaee3ce11ac9faf19c3c83469139fa10` returned
+**CHANGES_REQUESTED**, despite its walkthrough describing minimal merge risk.
+Its one inline finding is valid: the counter update closure always produces a
+new value, so `AtomicUsize::update` removes an unnecessary Result/expect path.
+The pinned Rust 1.99.1 supports this API. The follow-up retains AcqRel/Acquire
+orderings, saturating addition, notification placement and all assertions.
+Existing coalescing, saturation, stale-permit and shutdown regressions verify
+the unchanged behavior. Required validation is repeated before committing.
+
+Initial Codecov reports all modified coverable lines tested and 97.5% project
+coverage. These results belong to the initial head; the follow-up needs fresh
+CI. The included review allowance is one per hour, exhausted after the review
+submitted at 2026-11-05T10:18:58Z. A full re-review must be explicitly requested
+after the provider's reset if it does not resume. Resolved threads, replies or
+a successful review status do not supersede that blocking decision. The
+inconclusive description suggestion is inapplicable because the selected skill
+requires an empty PR body; the detailed evidence is committed in this report.
+
+
+The initial head's actual Check, Test (PG14–18 and TLS1.2/TLS1.3), Coverage,
+Docs, codecov/patch and codecov/project gates all passed. Its full local
+Tokio/tokio-postgres matrix passed **296 tests, zero failed, three ignored**.
+These successes do not clear CHANGES_REQUESTED or validate the follow-up head;
+all applicable hosted gates and the actual review decision are checked again.
+
+The complete SQLx/async-std matrix then passed on the atomic follow-up source:
+**532 passed, zero failed, seven ignored**, including all six named-backlog
+regressions. Database tests remained sequential and used isolated UUID fixtures.
+The broader Tokio/tokio-postgres pass above remains initial-head evidence;
+the changed counter and named-backlog regressions are rerun specifically for
+that driver on the follow-up, in addition to fresh required default checks.
+
+
+The follow-up passed `just lint` and the complete required `just test-docker`
+recipe again: **534 passed, zero failed, seven ignored**, with successful
+container cleanup. The fresh Tokio/tokio-postgres checks passed both counter/
+shutdown unit regressions and all six backlog tests (18 queue-mode scenarios;
+the manual benchmark remains explicitly ignored in this regression command).
+Together with the complete 532-test SQLx/async-std run on the updated source,
+these validate the atomic cleanup without weakening assertions or runtime
+coverage. Fresh-head hosted CI and actual re-review are still required.
