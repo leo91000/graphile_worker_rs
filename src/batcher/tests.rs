@@ -78,6 +78,7 @@ fn ready_shutdown_signal() -> ShutdownSignal {
 }
 
 #[tokio::test]
+/// Closed-channel completion persists before emitting a named release hint.
 async fn completion_batcher_falls_back_after_shutdown() {
     let Some(pg_pool) = database_pool() else {
         return;
@@ -107,6 +108,7 @@ async fn completion_batcher_falls_back_after_shutdown() {
         }
         let hook_count = Arc::new(AtomicUsize::new(0));
 
+        let wakeup = Arc::new(crate::queue_wakeup::QueueWakeup::default());
         let batcher = CompletionBatcher::new(
             Duration::from_secs(60),
             pg_pool.clone(),
@@ -114,6 +116,7 @@ async fn completion_batcher_falls_back_after_shutdown() {
             "worker".to_string(),
             completion_hooks(hook_count.clone()),
             ready_shutdown_signal(),
+            wakeup.clone(),
         );
         batcher.await_shutdown().await;
 
@@ -128,6 +131,7 @@ async fn completion_batcher_falls_back_after_shutdown() {
             .expect("direct fallback completion must persist successfully");
 
         assert_eq!(hook_count.load(Ordering::SeqCst), 1);
+        assert_eq!(wakeup.next().now_or_never(), has_queue.then_some(1));
 
         let remaining: (i64,) = safe_query_as(format!(
             "SELECT COUNT(*) FROM {schema}._private_jobs WHERE id = $1"
@@ -187,6 +191,7 @@ async fn completion_batcher_acknowledges_enqueue_before_persistence() {
         "worker".into(),
         completion_hooks(completed.clone()),
         shutdown_signal,
+        Default::default(),
     );
     batcher
         .complete(CompletionRequest {
@@ -225,63 +230,72 @@ async fn completion_batcher_acknowledges_enqueue_before_persistence() {
 
 #[tokio::test]
 /// Successful direct fallback persists the error and emits its failure hook.
+/// Closed-channel failure persists before emitting a named release hint.
 async fn failure_batcher_falls_back_after_shutdown() {
     let Some(pg_pool) = database_pool() else {
         return;
     };
-    let schema = setup_schema(&pg_pool, "failure_fallback").await;
-    let utils = crate::worker_utils::client::WorkerUtils::new(pg_pool.clone(), schema.clone());
-    let job = utils
-        .add_raw_job(
-            "failure_fallback_job",
-            serde_json::json!({}),
-            crate::JobSpec::default(),
-        )
+    for has_queue in [false, true] {
+        let schema = setup_schema(&pg_pool, "failure_fallback").await;
+        let utils = crate::worker_utils::client::WorkerUtils::new(pg_pool.clone(), schema.clone());
+        let job = utils
+            .add_raw_job(
+                "failure_fallback_job",
+                serde_json::json!({}),
+                crate::JobSpec {
+                    queue_name: has_queue.then(|| "serial".into()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("Failed to add failure fallback job");
+        let job_id = *job.id();
+        safe_query(format!(
+            "UPDATE {schema}._private_jobs SET locked_by = $1, locked_at = now() WHERE id = $2"
+        ))
+        .bind("worker")
+        .bind(job_id)
+        .execute(&pg_pool)
         .await
-        .expect("Failed to add failure fallback job");
-    let job_id = *job.id();
-    safe_query(format!(
-        "UPDATE {schema}._private_jobs SET locked_by = $1, locked_at = now() WHERE id = $2"
-    ))
-    .bind("worker")
-    .bind(job_id)
-    .execute(&pg_pool)
-    .await
-    .expect("Failed to lock failure fallback job");
-    let hook_count = Arc::new(AtomicUsize::new(0));
+        .expect("Failed to lock failure fallback job");
+        let hook_count = Arc::new(AtomicUsize::new(0));
 
-    let batcher = FailureBatcher::new(
-        Duration::from_secs(60),
-        pg_pool.clone(),
-        schema.clone(),
-        "worker".to_string(),
-        failure_hooks(hook_count.clone()),
-        ready_shutdown_signal(),
-    );
-    batcher.await_shutdown().await;
+        let wakeup = Arc::new(crate::queue_wakeup::QueueWakeup::default());
+        let batcher = FailureBatcher::new(
+            Duration::from_secs(60),
+            pg_pool.clone(),
+            schema.clone(),
+            "worker".to_string(),
+            failure_hooks(hook_count.clone()),
+            ready_shutdown_signal(),
+            wakeup.clone(),
+        );
+        batcher.await_shutdown().await;
 
-    batcher
-        .fail(FailureRequest {
-            job: Arc::new(job),
-            error: "direct failure".to_string(),
-            will_retry: true,
-        })
+        batcher
+            .fail(FailureRequest {
+                job: Arc::new(job),
+                error: "direct failure".to_string(),
+                will_retry: true,
+            })
+            .await
+            .expect("direct fallback failure must persist successfully");
+
+        assert_eq!(hook_count.load(Ordering::SeqCst), 1);
+        assert_eq!(wakeup.next().now_or_never(), has_queue.then_some(1));
+
+        let row: (Option<String>, Option<String>) = safe_query_as(format!(
+            "SELECT last_error, locked_by FROM {schema}._private_jobs WHERE id = $1"
+        ))
+        .bind(job_id)
+        .fetch_one(&pg_pool)
         .await
-        .expect("direct fallback failure must persist successfully");
+        .expect("Failed to fetch failed fallback job");
+        assert_eq!(row.0.as_deref(), Some("direct failure"));
+        assert!(row.1.is_none());
 
-    assert_eq!(hook_count.load(Ordering::SeqCst), 1);
-
-    let row: (Option<String>, Option<String>) = safe_query_as(format!(
-        "SELECT last_error, locked_by FROM {schema}._private_jobs WHERE id = $1"
-    ))
-    .bind(job_id)
-    .fetch_one(&pg_pool)
-    .await
-    .expect("Failed to fetch failed fallback job");
-    assert_eq!(row.0.as_deref(), Some("direct failure"));
-    assert!(row.1.is_none());
-
-    drop_schema(&pg_pool, &schema).await;
+        drop_schema(&pg_pool, &schema).await;
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -602,6 +616,7 @@ async fn failure_batch_fallback_preserves_partial_persistence() {
             .execute(&pg_pool).await.unwrap();
         let failed = Arc::new(AtomicUsize::new(0));
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+        let wakeup = Arc::new(crate::queue_wakeup::QueueWakeup::default());
         let batcher = FailureBatcher::new(
             Duration::from_secs(60),
             pg_pool.clone(),
@@ -613,6 +628,7 @@ async fn failure_batch_fallback_preserves_partial_persistence() {
             }
             .boxed()
             .shared(),
+            wakeup.clone(),
         );
         for job in &jobs {
             batcher
@@ -625,10 +641,12 @@ async fn failure_batch_fallback_preserves_partial_persistence() {
                 .expect("open channel accepts failure requests");
         }
         assert_eq!(failed.load(Ordering::SeqCst), 0);
+        assert!(wakeup.next().now_or_never().is_none());
         shutdown_tx.send(()).unwrap();
         tokio::time::timeout(Duration::from_secs(5), batcher.await_shutdown())
             .await
             .expect("asynchronous batch and single-job fallback drain");
+        assert_eq!(wakeup.next().now_or_never(), has_queue.then_some(1));
         let rejected: (i64,) =
             safe_query_as(format!("SELECT last_value FROM {schema}.rejected_updates"))
                 .fetch_one(&pg_pool)
@@ -672,5 +690,121 @@ async fn failure_batch_fallback_preserves_partial_persistence() {
         }
         drop_schema(&pg_pool, &schema).await;
     }
+    pg_pool.close().await;
+}
+
+/// A failed named completion group must not wake fetchers just because the
+/// independent unnamed group commits. A later acknowledged fallback may wake.
+#[tokio::test]
+async fn partial_completion_only_wakes_after_named_persistence() {
+    let Some(pg_pool) = database_pool() else {
+        return;
+    };
+    let schema = setup_schema(&pg_pool, "completion_partial").await;
+    let utils = crate::worker_utils::client::WorkerUtils::new(pg_pool.clone(), schema.clone());
+    let mut jobs = Vec::new();
+    for has_queue in [true, false] {
+        jobs.push(
+            utils
+                .add_raw_job(
+                    "completion_partial",
+                    serde_json::json!({}),
+                    crate::JobSpec {
+                        queue_name: has_queue.then(|| "serial".into()),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap(),
+        );
+    }
+    safe_query(format!(
+        "UPDATE {schema}._private_jobs SET locked_by='worker', locked_at=now(), attempts=1"
+    ))
+    .execute(&pg_pool)
+    .await
+    .unwrap();
+    safe_query(format!(
+        "UPDATE {schema}._private_job_queues SET locked_by='worker', locked_at=now()"
+    ))
+    .execute(&pg_pool)
+    .await
+    .unwrap();
+    safe_query(format!("CREATE FUNCTION {schema}.reject_completion() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='injected named completion'; END $$"))
+        .execute(&pg_pool).await.unwrap();
+    safe_query(format!("CREATE TRIGGER reject_completion BEFORE DELETE ON {schema}._private_jobs FOR EACH ROW WHEN (OLD.job_queue_id IS NOT NULL) EXECUTE FUNCTION {schema}.reject_completion()"))
+        .execute(&pg_pool).await.unwrap();
+    let completed = Arc::new(AtomicUsize::new(0));
+    let wakeup = Arc::new(crate::queue_wakeup::QueueWakeup::default());
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    let batcher = CompletionBatcher::new(
+        Duration::from_secs(60),
+        pg_pool.clone(),
+        schema.clone(),
+        "worker".into(),
+        completion_hooks(completed.clone()),
+        async move {
+            let _ = shutdown_rx.await;
+        }
+        .boxed()
+        .shared(),
+        wakeup.clone(),
+    );
+    for job in &jobs {
+        batcher
+            .complete(CompletionRequest {
+                job_id: *job.id(),
+                has_queue: job.job_queue_id().is_some(),
+                job: Arc::new(job.clone()),
+                duration: Duration::ZERO,
+            })
+            .await
+            .unwrap();
+    }
+    assert!(
+        wakeup.next().now_or_never().is_none(),
+        "enqueueing is not persistence"
+    );
+    shutdown_tx.send(()).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), batcher.await_shutdown())
+        .await
+        .unwrap();
+    assert_eq!(completed.load(Ordering::SeqCst), 1);
+    assert!(
+        wakeup.next().now_or_never().is_none(),
+        "named group rolled back"
+    );
+    let remaining: (i64, String, i16) = safe_query_as(format!(
+        "SELECT id,locked_by,attempts FROM {schema}._private_jobs"
+    ))
+    .fetch_one(&pg_pool)
+    .await
+    .unwrap();
+    assert_eq!(remaining, (*jobs[0].id(), "worker".into(), 1));
+    safe_query(format!(
+        "DROP TRIGGER reject_completion ON {schema}._private_jobs"
+    ))
+    .execute(&pg_pool)
+    .await
+    .unwrap();
+    batcher
+        .complete(CompletionRequest {
+            job_id: *jobs[0].id(),
+            has_queue: true,
+            job: Arc::new(jobs.remove(0)),
+            duration: Duration::ZERO,
+        })
+        .await
+        .unwrap();
+    assert_eq!(wakeup.next().now_or_never(), Some(1));
+    assert_eq!(completed.load(Ordering::SeqCst), 2);
+    let queue: (bool, bool) = safe_query_as(format!(
+        "SELECT locked_by IS NULL,locked_at IS NULL FROM {schema}._private_job_queues"
+    ))
+    .fetch_one(&pg_pool)
+    .await
+    .unwrap();
+    assert_eq!(queue, (true, true));
+    drop_schema(&pg_pool, &schema).await;
     pg_pool.close().await;
 }

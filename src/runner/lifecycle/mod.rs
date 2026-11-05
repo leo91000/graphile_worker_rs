@@ -82,6 +82,7 @@ impl Worker {
             crontabs: self.crontabs.clone(),
             use_local_time: self.use_local_time,
             shutdown_signal: self.shutdown_signal.clone(),
+            queue_wakeup: self.queue_wakeup.clone(),
             shutdown_notifier: self.shutdown_notifier.clone(),
             extensions: self.extensions.clone(),
             hooks: self.hooks.clone(),

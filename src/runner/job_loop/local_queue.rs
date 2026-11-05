@@ -9,6 +9,8 @@ use super::super::{sources, Worker, WorkerRuntimeError};
 use crate::local_queue::{LocalQueue, LocalQueueSignalReceiver};
 use crate::streams::job_signal::{job_signal_stream, JobSignalStreamConfig};
 
+/// Runs local-queue consumers alongside external signals and persisted queue
+/// release pulses, then awaits all claim returns during shutdown.
 pub(super) async fn run(
     worker: &Worker,
     local_queues: Vec<LocalQueue>,
@@ -38,6 +40,12 @@ pub(super) async fn run(
     let worker_handles = FuturesUnordered::new();
     let runner = worker.runner();
     let local_queues = Arc::new(local_queues);
+    let job_signal = sources::with_queue_wakeups(
+        job_signal,
+        worker.queue_wakeup.clone(),
+        worker.shutdown_signal.clone(),
+        local_queues.clone(),
+    );
 
     for index in 0..worker.concurrency {
         let local_queues = local_queues.clone();

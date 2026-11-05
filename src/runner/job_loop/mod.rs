@@ -22,6 +22,7 @@ impl Worker {
             job_flag_filter: self.job_flag_filter.clone(),
             use_local_time: self.use_local_time,
             shutdown_signal: self.shutdown_signal.clone(),
+            queue_wakeup: self.queue_wakeup.clone(),
             extensions: self.extensions.clone(),
             hooks: self.hooks.clone(),
             completion_batcher: self.completion_batcher.clone(),

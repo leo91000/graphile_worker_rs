@@ -15,13 +15,13 @@ use state::{JobSignalStreamData, NextSignal};
 /// Indicates why a worker should check for jobs.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(crate) enum JobSignalSource {
-    /// Job processing was triggered by a regular polling interval.
+    /// Job processing was triggered by a database poll, including a local queue-release hint.
     Polling,
     /// Job processing was triggered by a PostgreSQL notification.
     Notification,
     /// Job processing came from a one-time run request.
     RunOnce,
-    /// Job processing was triggered by LocalQueue cache activity.
+    /// Job processing was triggered by LocalQueue activity or a queue-release pulse.
     LocalQueue,
 }
 

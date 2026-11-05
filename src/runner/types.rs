@@ -63,6 +63,9 @@ pub struct Worker {
     pub(crate) use_local_time: bool,
     /// Signal that can be triggered to gracefully shut down the worker
     pub(crate) shutdown_signal: ShutdownSignal,
+    /// Coalesced hint emitted only after a named queue outcome is persisted.
+    #[getset(skip)]
+    pub(crate) queue_wakeup: Arc<crate::queue_wakeup::QueueWakeup>,
     /// Internal notifier used to request shutdown programmatically
     #[getset(skip)]
     pub(crate) shutdown_notifier: Arc<runtime::Notify>,
@@ -102,6 +105,7 @@ pub(crate) struct WorkerRunner {
     pub(crate) job_flag_filter: Arc<JobFlagFilter<'static>>,
     pub(crate) use_local_time: bool,
     pub(crate) shutdown_signal: ShutdownSignal,
+    pub(crate) queue_wakeup: Arc<crate::queue_wakeup::QueueWakeup>,
     pub(crate) extensions: ReadOnlyExtensions,
     pub(crate) hooks: Arc<HookRegistry>,
     pub(crate) completion_batcher: Option<Arc<crate::batcher::CompletionBatcher>>,
