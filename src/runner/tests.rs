@@ -78,6 +78,7 @@ fn runner_for(
         job_flag_filter: Arc::new(crate::JobFlagFilter::default()),
         use_local_time: false,
         shutdown_signal,
+        queue_wakeup: Default::default(),
         extensions: ReadOnlyExtensions::from(Extensions::new()),
         hooks,
         completion_batcher: None,
@@ -87,6 +88,7 @@ fn runner_for(
 }
 
 #[tokio::test]
+/// Closed-channel persistence errors emit neither success hooks nor wakeups.
 async fn release_job_propagates_closed_completion_batcher_failure() {
     for has_queue in [false, true] {
         let database = Database::new(FailingDriver);
@@ -103,6 +105,7 @@ async fn release_job_propagates_closed_completion_batcher_failure() {
         });
         let hooks = Arc::new(hooks);
         let shutdown_signal = futures::future::ready(()).boxed().shared();
+        let queue_wakeup = Arc::new(crate::queue_wakeup::QueueWakeup::default());
         let batcher = Arc::new(crate::batcher::CompletionBatcher::new(
             Duration::from_secs(60),
             database.clone(),
@@ -110,10 +113,12 @@ async fn release_job_propagates_closed_completion_batcher_failure() {
             "worker".into(),
             hooks.clone(),
             shutdown_signal.clone(),
+            queue_wakeup.clone(),
         ));
         batcher.await_shutdown().await;
         let mut worker = runner_for(database, hooks, shutdown_signal);
         worker.completion_batcher = Some(batcher);
+        worker.queue_wakeup = queue_wakeup;
         let mut job = Job::builder().id(42).locked_by("worker".to_string());
         if has_queue {
             job = job.job_queue_id(1);
@@ -124,6 +129,7 @@ async fn release_job_propagates_closed_completion_batcher_failure() {
         assert_eq!(error.job_id, 42);
         assert!(error.source.to_string().contains("forced failure"));
         assert_eq!(completed.load(Ordering::SeqCst), 0);
+        assert!(worker.queue_wakeup.next().now_or_never().is_none());
     }
 }
 
@@ -208,6 +214,7 @@ async fn release_job_returns_error_when_replacement_payload_cannot_be_persisted(
         "worker".to_string(),
         hooks.clone(),
         shutdown_signal.clone(),
+        Default::default(),
     ));
     let mut worker = runner_for(database, hooks, shutdown_signal);
     worker.failure_batcher = Some(failure_batcher);
@@ -236,4 +243,36 @@ async fn release_job_returns_error_when_replacement_payload_cannot_be_persisted(
 
     assert_eq!(error.job_id, 42);
     assert!(error.source.to_string().contains("forced failure"));
+    assert!(worker.queue_wakeup.next().now_or_never().is_none());
+}
+
+/// Persistence errors retain the queue claim and cannot turn a release hint
+/// into a tight fetch/retry loop, including replacement-payload failures.
+#[tokio::test]
+async fn failed_named_persistence_does_not_wake_fetchers() {
+    for result in [
+        Ok(()),
+        Err(RunJobError::TaskError("failure".into())),
+        Err(RunJobError::TaskErrorWithReplacement {
+            message: "failure".into(),
+            replacement_payload: Redacted::new(serde_json::json!([1])),
+        }),
+    ] {
+        let worker = runner_for(
+            Database::new(FailingDriver),
+            Arc::new(HookRegistry::default()),
+            pending_shutdown_signal(),
+        );
+        let job = Arc::new(
+            Job::builder()
+                .id(42)
+                .job_queue_id(1)
+                .locked_by("worker".to_string())
+                .build(),
+        );
+        assert!(release_job(result, job, &worker, Duration::ZERO)
+            .await
+            .is_err());
+        assert!(worker.queue_wakeup.next().now_or_never().is_none());
+    }
 }

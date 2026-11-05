@@ -30,9 +30,11 @@ pub struct CompletionBatcher {
     schema: Schema,
     worker_id: String,
     hooks: Arc<HookRegistry>,
+    queue_wakeup: Arc<crate::queue_wakeup::QueueWakeup>,
 }
 
 impl CompletionBatcher {
+    /// Starts a batcher sharing the worker's post-persistence queue wakeups.
     pub fn new(
         delay: Duration,
         database: impl Into<Database>,
@@ -40,6 +42,7 @@ impl CompletionBatcher {
         worker_id: String,
         hooks: Arc<HookRegistry>,
         shutdown_signal: ShutdownSignal,
+        queue_wakeup: Arc<crate::queue_wakeup::QueueWakeup>,
     ) -> Self {
         let database = database.into();
         let schema = schema.into();
@@ -49,6 +52,7 @@ impl CompletionBatcher {
             schema: schema.clone(),
             worker_id: worker_id.clone(),
             hooks: hooks.clone(),
+            queue_wakeup: queue_wakeup.clone(),
         };
 
         let task = runtime::spawn(run_batcher_task(rx, delay, processor, shutdown_signal));
@@ -60,6 +64,7 @@ impl CompletionBatcher {
             schema,
             worker_id,
             hooks,
+            queue_wakeup,
         }
     }
 
@@ -72,6 +77,9 @@ impl CompletionBatcher {
             warn!("Batcher closed, completing job directly");
             let req = e.0;
             complete_job_direct(&req, &self.database, &self.schema, &self.worker_id).await?;
+            if req.has_queue {
+                self.queue_wakeup.wake(1);
+            }
             emit_completion_hook(&req, &self.worker_id, &self.hooks).await;
         }
         Ok(())
@@ -87,6 +95,7 @@ struct CompletionProcessor {
     schema: Schema,
     worker_id: String,
     hooks: Arc<HookRegistry>,
+    queue_wakeup: Arc<crate::queue_wakeup::QueueWakeup>,
 }
 
 impl BatchProcessor<CompletionRequest> for CompletionProcessor {
@@ -101,18 +110,22 @@ impl BatchProcessor<CompletionRequest> for CompletionProcessor {
                 &self.schema,
                 &self.worker_id,
                 &self.hooks,
+                &self.queue_wakeup,
             )
             .await;
         })
     }
 }
 
+/// Persists both completion groups and wakes fetchers only for successful
+/// named outcomes, before running application observers.
 async fn flush_batch(
     batch: &[CompletionRequest],
     database: &Database,
     schema: &Schema,
     worker_id: &str,
     hooks: &Arc<HookRegistry>,
+    queue_wakeup: &crate::queue_wakeup::QueueWakeup,
 ) {
     if batch.is_empty() {
         return;
@@ -121,6 +134,13 @@ async fn flush_batch(
     trace!(batch_size = batch.len(), "Flushing completion batch");
 
     let batch_result = complete_batch(batch, database, schema, worker_id).await;
+
+    queue_wakeup.wake(
+        batch
+            .iter()
+            .filter(|req| req.has_queue && batch_result.persisted(req))
+            .count(),
+    );
 
     if !hooks.is_empty() {
         for req in batch {

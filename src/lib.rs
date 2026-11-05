@@ -51,6 +51,7 @@ pub mod local_queue;
 
 /// Batchers for batching job completions and failures to reduce SQL round trips
 pub(crate) mod batcher;
+mod queue_wakeup;
 
 pub(crate) mod background_tasks;
 

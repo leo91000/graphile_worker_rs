@@ -32,9 +32,11 @@ pub struct FailureBatcher {
     schema: Schema,
     worker_id: String,
     hooks: Arc<HookRegistry>,
+    queue_wakeup: Arc<crate::queue_wakeup::QueueWakeup>,
 }
 
 impl FailureBatcher {
+    /// Starts a batcher sharing the worker's post-persistence queue wakeups.
     pub fn new(
         delay: Duration,
         database: impl Into<Database>,
@@ -42,6 +44,7 @@ impl FailureBatcher {
         worker_id: String,
         hooks: Arc<HookRegistry>,
         shutdown_signal: ShutdownSignal,
+        queue_wakeup: Arc<crate::queue_wakeup::QueueWakeup>,
     ) -> Self {
         let database = database.into();
         let schema = schema.into();
@@ -51,6 +54,7 @@ impl FailureBatcher {
             schema: schema.clone(),
             worker_id: worker_id.clone(),
             hooks: hooks.clone(),
+            queue_wakeup: queue_wakeup.clone(),
         };
 
         let task = runtime::spawn(run_batcher_task(rx, delay, processor, shutdown_signal));
@@ -62,6 +66,7 @@ impl FailureBatcher {
             schema,
             worker_id,
             hooks,
+            queue_wakeup,
         }
     }
 
@@ -71,6 +76,9 @@ impl FailureBatcher {
             warn!("Batcher closed, failing job directly");
             let req = e.0;
             fail_job_direct(&req, &self.database, &self.schema, &self.worker_id).await?;
+            if req.job.job_queue_id().is_some() {
+                self.queue_wakeup.wake(1);
+            }
             emit_failure_hook(&req, &self.worker_id, &self.hooks).await;
         }
         Ok(())
@@ -86,6 +94,7 @@ struct FailureProcessor {
     schema: Schema,
     worker_id: String,
     hooks: Arc<HookRegistry>,
+    queue_wakeup: Arc<crate::queue_wakeup::QueueWakeup>,
 }
 
 impl BatchProcessor<FailureRequest> for FailureProcessor {
@@ -100,18 +109,22 @@ impl BatchProcessor<FailureRequest> for FailureProcessor {
                 &self.schema,
                 &self.worker_id,
                 &self.hooks,
+                &self.queue_wakeup,
             )
             .await;
         })
     }
 }
 
+/// Persists failures (including per-job fallbacks) and counts only acknowledged
+/// named outcomes before emitting hooks.
 async fn flush_failure_batch(
     batch: &[FailureRequest],
     database: &Database,
     schema: &Schema,
     worker_id: &str,
     hooks: &Arc<HookRegistry>,
+    queue_wakeup: &crate::queue_wakeup::QueueWakeup,
 ) {
     if batch.is_empty() {
         return;
@@ -120,6 +133,13 @@ async fn flush_failure_batch(
     trace!(batch_size = batch.len(), "Flushing failure batch");
 
     let batch_result = persist_failure_batch(batch, database, schema, worker_id).await;
+    queue_wakeup.wake(
+        batch
+            .iter()
+            .zip(batch_result.persisted())
+            .filter(|(req, persisted)| **persisted && req.job.job_queue_id().is_some())
+            .count(),
+    );
     if hooks.is_empty() {
         return;
     }

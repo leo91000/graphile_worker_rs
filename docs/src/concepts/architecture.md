@@ -130,7 +130,10 @@ without taking the same job.
 6. Stop recovery tasks, emit shutdown hooks, and deregister the worker.
 
 The job runner listens for job signals. A signal can come from the PostgreSQL
-listener, the polling interval, `run_once`, or the local queue. Each signal is
+listener, the polling interval, `run_once`, the local queue, or a persisted named
+queue release. A release wakes direct fetchers or pulses LocalQueue after the
+queue lock is released, so a named backlog need not wait for another insert or
+polling interval. Each signal is
 fanned out to the configured concurrency so idle worker tasks can attempt to
 fetch jobs. Signals are wakeup hints rather than durable work items, so the
 dispatcher coalesces them when worker tasks are already saturated. This keeps

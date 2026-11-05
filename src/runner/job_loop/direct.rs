@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use futures::stream::FuturesUnordered;
 use graphile_worker_runtime as runtime;
 use tracing::debug;
@@ -7,6 +9,8 @@ use super::super::job_execution::process_one_job;
 use super::super::{sources, Worker, WorkerRuntimeError};
 use crate::streams::job_signal::{job_signal_stream, JobSignalStreamConfig};
 
+/// Runs direct fetch slots, polling again after a persisted named outcome
+/// without waiting for the next interval or insert notification.
 pub(super) async fn run(worker: &Worker) -> Result<(), WorkerRuntimeError> {
     let job_signal = job_signal_stream(JobSignalStreamConfig::new(
         worker.database.clone(),
@@ -15,6 +19,13 @@ pub(super) async fn run(worker: &Worker) -> Result<(), WorkerRuntimeError> {
         worker.shutdown_signal.clone(),
     ))
     .await?;
+
+    let job_signal = sources::with_queue_wakeups(
+        job_signal,
+        worker.queue_wakeup.clone(),
+        worker.shutdown_signal.clone(),
+        Arc::new(Vec::new()),
+    );
 
     debug!("Listening for jobs...");
     let (source_tx, source_rx) = runtime::channel(worker.concurrency * 4);

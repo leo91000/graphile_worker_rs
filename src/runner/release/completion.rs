@@ -10,6 +10,8 @@ use graphile_worker_queries::complete_job::complete_job;
 use super::super::errors::ReleaseJobError;
 use super::super::WorkerRunner;
 
+/// Enqueues completion or persists it directly, waking fetchers only after a
+/// named queue can be observed as released.
 pub(super) async fn release_completed_job(
     job: Arc<Job>,
     worker: &WorkerRunner,
@@ -35,6 +37,9 @@ pub(super) async fn release_completed_job(
             source,
         })?;
 
+    if job.job_queue_id().is_some() {
+        worker.queue_wakeup.wake(1);
+    }
     emit_completion_hook(job, worker, duration).await;
     Ok(())
 }

@@ -46,6 +46,9 @@ pub(super) async fn release_failed_job(
     }
 
     persist_failed_job(&job, worker, &persisted_error, replacement_payload).await?;
+    if job.job_queue_id().is_some() {
+        worker.queue_wakeup.wake(1);
+    }
     emit_failure_hook(job, worker, persisted_error, will_retry).await;
     Ok(())
 }

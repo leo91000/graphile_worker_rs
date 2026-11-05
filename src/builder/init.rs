@@ -100,6 +100,8 @@ impl WorkerOptions {
             config.validate(poll_interval)?;
         }
 
+        let queue_wakeup = Arc::new(crate::queue_wakeup::QueueWakeup::default());
+
         let completion_batcher = self.complete_job_batch_delay.map(|delay| {
             Arc::new(CompletionBatcher::new(
                 delay,
@@ -108,6 +110,7 @@ impl WorkerOptions {
                 worker_id.clone(),
                 hooks.clone(),
                 shutdown_signal.clone(),
+                queue_wakeup.clone(),
             ))
         });
 
@@ -119,6 +122,7 @@ impl WorkerOptions {
                 worker_id.clone(),
                 hooks.clone(),
                 shutdown_signal.clone(),
+                queue_wakeup.clone(),
             ))
         });
 
@@ -156,6 +160,7 @@ impl WorkerOptions {
             crontabs: self.crontabs.unwrap_or_default(),
             use_local_time: self.use_local_time,
             shutdown_signal,
+            queue_wakeup,
             shutdown_notifier,
             extensions: self.extensions.into(),
             hooks,
