@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_database-v0.1.8...graphile_worker_database-v0.2.0) - 2026-11-10
+
+### Added
+
+- port upstream SQL retries and maintenance helpers ([#576](https://github.com/leo91000/graphile_worker_rs/pull/576))
+
+### Fixed
+
+- *(database)* Retain native PostgreSQL error sources ([#582](https://github.com/leo91000/graphile_worker_rs/pull/582))
+- preserve run-once persistence errors and server diagnostics ([#568](https://github.com/leo91000/graphile_worker_rs/pull/568))
+
 ## [0.1.8](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_database-v0.1.7...graphile_worker_database-v0.1.8) - 2026-10-06
 
 ### Other
