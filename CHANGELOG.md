@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.14.3](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.14.2...graphile_worker-v0.14.3) - 2026-11-12
+
+### Other
+
+- record upstream synchronization audit for 2026-11-12 ([#583](https://github.com/leo91000/graphile_worker_rs/pull/583))
+
 ## [0.14.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.14.1...graphile_worker-v0.14.2) - 2026-11-10
 
 ### Added
