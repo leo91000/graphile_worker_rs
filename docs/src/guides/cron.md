@@ -127,7 +127,9 @@ The text format is:
 ```
 
 The five schedule fields are minute, hour, day of month, month, and day of week.
-Days of week use `0..=6`. By default, these fields are matched in UTC for both
+Sunday can be written as `0` or `7`. Monday through Saturday use `1..=6`.
+When both the day of month and day of week fields are restricted, the Rust
+timer requires both fields to match. By default, cron matches in UTC for both
 normal scheduling and backfill.
 
 Setting `WorkerOptions::use_local_time(true)` instead matches these fields in
@@ -169,6 +171,27 @@ The entire crontab must be valid: malformed entries or trailing text produce an
 error with a line and column instead of silently accepting a partial schedule.
 Blank lines, comment lines starting with `#`, and surrounding spaces are allowed.
 
+## Programmatic matchers
+
+Use `with_cron_matcher` to replace an entry's timer with a Rust predicate.
+The predicate receives each minute in the configured calendar, including during
+catch-up and backfill. Keep it fast, deterministic and free of side effects.
+
+```rust,ignore
+use chrono::{Datelike, Timelike, Weekday};
+use graphile_worker::{Cron, WorkerOptions};
+
+let options = WorkerOptions::default()
+    .define_job::<SendDigest>()
+    .with_cron_matcher(Cron::every_minute::<SendDigest>().id("workdays"), |at| {
+        at.hour() == 8 && at.minute() == 0
+            && !matches!(at.weekday(), Weekday::Sat | Weekday::Sun)
+    });
+```
+
+The timer and the matcher do not affect cron entry identity. Give each entry
+its own stable identifier when multiple schedules target the same task.
+
 ## Options
 
 Crontab text options use query-string syntax and must start with `?`.
@@ -194,8 +217,9 @@ entry. Prefer setting a stable `id` when a task has multiple cron schedules.
 
 ## Payloads
 
-Cron jobs receive a JSON object payload. The worker adds a `_cron` object to the
-payload for each scheduled job:
+When a cron entry supplies a JSON object, the worker adds a `_cron` object to
+that payload. Provide `{}` in a text entry if you want only this metadata.
+Rust preserves non-object payloads so typed cron tasks can deserialize them.
 
 ```json
 {

@@ -118,6 +118,17 @@ impl DatabaseDriver for TokioPostgresDatabase {
         &'a self,
         channel: &'a str,
     ) -> crate::BoxFuture<'a, Result<Option<NotificationStream>, DbError>> {
-        Box::pin(async move { listener::listen(self.listener_config.clone(), channel).await })
+        self.listen_with_channels(channel, &[])
+    }
+
+    fn listen_with_channels<'a>(
+        &'a self,
+        primary: &'a str,
+        additional: &'a [&'a str],
+    ) -> crate::BoxFuture<'a, Result<Option<NotificationStream>, DbError>> {
+        Box::pin(async move {
+            let channels = std::iter::once(primary).chain(additional.iter().copied());
+            listener::listen(self.listener_config.clone(), channels).await
+        })
     }
 }

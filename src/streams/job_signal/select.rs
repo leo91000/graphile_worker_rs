@@ -1,5 +1,6 @@
 use futures::{FutureExt, StreamExt};
 use graphile_worker_database::{DbError, Notification, NotificationStream};
+use graphile_worker_migrations::MIGRATION_CHANNEL;
 use graphile_worker_runtime as runtime;
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use tracing::warn;
@@ -110,6 +111,14 @@ fn pg_listener_result_to_signal(
     result: Option<std::result::Result<Notification, DbError>>,
 ) -> NextSignal {
     match result {
+        Some(Ok(notification)) if notification.channel == MIGRATION_CHANNEL => {
+            match serde_json::from_str::<serde_json::Value>(&notification.payload) {
+                Ok(payload) if payload["breaking"].as_bool() == Some(true) => {
+                    NextSignal::CheckMigration
+                }
+                _ => NextSignal::IgnoreNotification,
+            }
+        }
         Some(Ok(_)) => NextSignal::Source(JobSignalSource::Notification),
         Some(Err(error)) => {
             warn!(

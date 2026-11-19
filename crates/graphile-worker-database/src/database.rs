@@ -13,6 +13,17 @@ pub trait DatabaseDriver: DbExecutor + fmt::Debug + Any {
         &'a self,
         channel: &'a str,
     ) -> BoxFuture<'a, Result<Option<NotificationStream>, DbError>>;
+
+    /// Listen on a primary channel and, where supported, additional channels
+    /// on the same connection. Single-channel drivers retain their primary
+    /// subscription by default.
+    fn listen_with_channels<'a>(
+        &'a self,
+        primary: &'a str,
+        _additional: &'a [&'a str],
+    ) -> BoxFuture<'a, Result<Option<NotificationStream>, DbError>> {
+        self.listen(primary)
+    }
 }
 
 pub trait TransactionDriver: DbExecutor {
@@ -59,6 +70,15 @@ impl Database {
 
     pub async fn listen(&self, channel: &str) -> Result<Option<NotificationStream>, DbError> {
         self.inner.listen(channel).await
+    }
+
+    /// Listen on a primary channel and any additional channels supported by the driver.
+    pub async fn listen_with_channels(
+        &self,
+        primary: &str,
+        additional: &[&str],
+    ) -> Result<Option<NotificationStream>, DbError> {
+        self.inner.listen_with_channels(primary, additional).await
     }
 }
 

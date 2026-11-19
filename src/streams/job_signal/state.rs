@@ -41,5 +41,7 @@ pub(super) enum NextSignal {
     Source(JobSignalSource),
     LocalQueueClosed,
     NotificationListenerClosed,
+    CheckMigration,
+    IgnoreNotification,
     Shutdown,
 }

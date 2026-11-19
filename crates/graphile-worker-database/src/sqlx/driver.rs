@@ -90,9 +90,18 @@ impl DatabaseDriver for SqlxDatabase {
         &'a self,
         channel: &'a str,
     ) -> crate::BoxFuture<'a, Result<Option<NotificationStream>, DbError>> {
+        self.listen_with_channels(channel, &[])
+    }
+
+    fn listen_with_channels<'a>(
+        &'a self,
+        primary: &'a str,
+        additional: &'a [&'a str],
+    ) -> crate::BoxFuture<'a, Result<Option<NotificationStream>, DbError>> {
         Box::pin(async move {
             let mut listener = sqlx::postgres::PgListener::connect_with(&self.pool).await?;
-            listener.listen(channel).await?;
+            let channels = std::iter::once(primary).chain(additional.iter().copied());
+            listener.listen_all(channels).await?;
             let stream = listener.into_stream().map(|result| {
                 result
                     .map(|notification| Notification {

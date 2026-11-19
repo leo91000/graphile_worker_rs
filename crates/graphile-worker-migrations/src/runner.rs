@@ -5,7 +5,10 @@ use crate::clash::is_clash_error;
 use crate::error::MigrateError;
 use crate::pg_version::check_postgres_version;
 use crate::sql::{MigrationExecuteExt, GRAPHILE_WORKER_MIGRATIONS};
-use crate::state::get_last_migration;
+use crate::state::{get_last_migration, read_last_migration};
+
+/// Notification channel used by Graphile Worker to announce committed migrations.
+pub const MIGRATION_CHANNEL: &str = "worker:migrate";
 
 /// Runs the migrations against the database.
 pub async fn migrate(
@@ -73,6 +76,18 @@ pub async fn migrate(
             let result = migration.execute(&tx, &schema).await;
             check_migration_error(migration_number, result)?;
 
+            // Use upstream's notification protocol. PostgreSQL delivers it only
+            // if both the schema change and its revision record commit.
+            tx.execute(
+                "select pg_notify($1, json_build_object('migrationNumber', $2::int, 'breaking', $3::boolean)::text)",
+                vec![
+                    DbValue::Text(MIGRATION_CHANNEL.to_owned()),
+                    DbValue::I32(migration_number as i32),
+                    DbValue::Bool(migration.is_breaking()),
+                ]
+                .into(),
+            )
+            .await?;
             tx.commit().await?;
         }
     }
@@ -86,6 +101,18 @@ pub async fn migrate(
         latest_breaking_migration,
         highest_migration,
     )
+}
+
+/// Verifies a running worker's schema without installing or updating it.
+pub async fn check_running_schema(
+    database: &Database,
+    schema: &Schema,
+) -> Result<(), MigrateError> {
+    let last = read_last_migration(database, schema).await?;
+    let highest_migration = GRAPHILE_WORKER_MIGRATIONS
+        .last()
+        .map_or(0, |migration| migration.migration_number());
+    check_compatible_revision(last.id, last.biggest_breaking_id, highest_migration)
 }
 
 fn check_compatible_revision(

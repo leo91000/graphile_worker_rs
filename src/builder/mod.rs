@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use crate::local_queue::LocalQueueConfig;
 use crate::runner::WorkerFn;
+use graphile_worker_crontab_runner::CronMatcher;
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_database::{Database, Schema};
 use graphile_worker_extensions::Extensions;
@@ -104,6 +105,8 @@ pub struct WorkerOptions {
 
     /// List of crontab entries for scheduled jobs
     crontabs: Option<Vec<Crontab>>,
+
+    cron_matchers: HashMap<usize, CronMatcher>,
 
     /// Whether to use local application time (true) or database time (false) for timestamps
     use_local_time: bool,

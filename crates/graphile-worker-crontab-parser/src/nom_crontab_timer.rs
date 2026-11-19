@@ -25,7 +25,7 @@ impl CrontabPart {
             CrontabPart::Hours => (0, 23),
             CrontabPart::Days => (1, 31),
             CrontabPart::Months => (1, 12),
-            CrontabPart::DaysOfWeek => (0, 6),
+            CrontabPart::DaysOfWeek => (0, 7),
         }
     }
 }

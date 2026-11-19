@@ -41,7 +41,7 @@ pub(in crate::runner) async fn dispatch_job_signals<S>(
     shutdown_notifier: &runtime::Notify,
 ) -> Result<(), WorkerRuntimeError>
 where
-    S: Stream<Item = JobSignalSource>,
+    S: Stream<Item = Result<JobSignalSource, WorkerRuntimeError>>,
 {
     let job_signal = job_signal.fuse();
     futures::pin_mut!(job_signal);
@@ -70,8 +70,14 @@ where
                 }
             }
             source = next_source => {
-                let Some(source) = source else {
-                    break;
+                let source = match source {
+                    Some(Ok(source)) => source,
+                    Some(Err(error)) => {
+                        first_error = Some(error);
+                        shutdown_notifier.notify_one();
+                        break;
+                    }
+                    None => break,
                 };
 
                 if fanout_job_signal(&source_tx, source, fanout) == FanoutResult::Closed {

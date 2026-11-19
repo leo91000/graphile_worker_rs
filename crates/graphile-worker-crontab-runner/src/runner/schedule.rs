@@ -4,19 +4,21 @@ use graphile_worker_database::{DbExecutorArg, Schema};
 use graphile_worker_lifecycle_hooks::{CronJobScheduledContext, CronTickContext, HookRegistry};
 use tracing::debug;
 
+use super::CronEntries;
+
 use crate::sql::{schedule_cron_jobs, CrontabJob, ScheduleCronJobError};
 
 pub(super) async fn emit_tick_and_schedule_jobs(
     executor: &mut impl DbExecutorArg,
     schema: &Schema,
-    crontabs: &[Crontab],
+    entries: CronEntries<'_>,
     use_local_time: bool,
     hooks: &HookRegistry,
     ts: DateTime<Local>,
 ) -> Result<(), ScheduleCronJobError> {
-    emit_tick(hooks, crontabs, ts).await;
+    emit_tick(hooks, entries.crontabs, ts).await;
 
-    let jobs = collect_jobs_to_schedule(hooks, crontabs, ts, use_local_time).await;
+    let jobs = collect_jobs_to_schedule(hooks, entries, ts, use_local_time).await?;
     if jobs.is_empty() {
         return Ok(());
     }
@@ -38,10 +40,10 @@ async fn emit_tick(hooks: &HookRegistry, crontabs: &[Crontab], ts: DateTime<Loca
 
 async fn collect_jobs_to_schedule(
     hooks: &HookRegistry,
-    crontabs: &[Crontab],
+    entries: CronEntries<'_>,
     ts: DateTime<Local>,
     use_local_time: bool,
-) -> Vec<CrontabJob> {
+) -> Result<Vec<CrontabJob>, ScheduleCronJobError> {
     let mut jobs = Vec::new();
     let calendar_time = if use_local_time {
         ts.naive_local()
@@ -49,8 +51,8 @@ async fn collect_jobs_to_schedule(
         ts.naive_utc()
     };
 
-    for cron in crontabs {
-        if cron.should_run_at(&calendar_time) {
+    for (index, cron) in entries.crontabs.iter().enumerate() {
+        if entries.matches(index, &calendar_time)? {
             jobs.push(CrontabJob::for_cron(cron, &ts, false));
 
             let scheduled_ctx = CronJobScheduledContext {
@@ -61,5 +63,5 @@ async fn collect_jobs_to_schedule(
         }
     }
 
-    jobs
+    Ok(jobs)
 }

@@ -1,9 +1,11 @@
 use chrono::prelude::*;
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_database::{DbExecutorArg, Schema};
+use graphile_worker_lifecycle_hooks::{CronBackfillContext, CronBackfillEntry, HookRegistry};
 use tracing::debug;
 
 use crate::{
+    runner::CronEntries,
     sql::{
         get_known_crontabs, insert_unknown_crontabs, schedule_cron_jobs, CrontabJob, KnownCrontab,
         ScheduleCronJobError,
@@ -12,8 +14,9 @@ use crate::{
 };
 
 pub(crate) struct BackfillItemAndDate<'a, 'b> {
+    index: usize,
     item: &'a Crontab,
-    not_before: &'b DateTime<Local>,
+    known: &'b KnownCrontab,
 }
 
 pub(crate) struct BackfillAndUnknownItems<'a, 'b> {
@@ -28,20 +31,16 @@ pub(crate) fn get_backfill_and_unknown_items<'a, 'b>(
     let mut backfill_items_and_date = vec![];
     let mut unknown_identifiers = vec![];
 
-    for crontab in crontabs {
+    for (index, crontab) in crontabs.iter().enumerate() {
         let known = known_crontabs
             .iter()
             .find(|uc| uc.identifier() == crontab.identifier());
 
         if let Some(known) = known {
-            let not_before = known
-                .last_execution()
-                .as_ref()
-                .unwrap_or_else(|| known.known_since());
-
             backfill_items_and_date.push(BackfillItemAndDate {
+                index,
                 item: crontab,
-                not_before,
+                known,
             });
         } else {
             unknown_identifiers.push(crontab.identifier());
@@ -57,9 +56,10 @@ pub(crate) fn get_backfill_and_unknown_items<'a, 'b>(
 pub(crate) async fn register_and_backfill_items<Tz: TimeZone>(
     mut executor: impl DbExecutorArg,
     schema: &Schema,
-    crontabs: &[Crontab],
+    entries: CronEntries<'_>,
     start_time: &DateTime<Tz>,
     use_local_time: bool,
+    hooks: &HookRegistry,
 ) -> Result<(), ScheduleCronJobError>
 where
     Tz::Offset: Send + Sync,
@@ -69,7 +69,7 @@ where
     let BackfillAndUnknownItems {
         backfill_items_and_date,
         unknown_identifiers,
-    } = get_backfill_and_unknown_items(crontabs, &known_crontabs);
+    } = get_backfill_and_unknown_items(entries.crontabs, &known_crontabs);
 
     if !unknown_identifiers.is_empty() {
         insert_unknown_crontabs(&mut executor, schema, &unknown_identifiers, start_time).await?;
@@ -96,22 +96,46 @@ where
                 ts.naive_utc()
             };
 
-            let to_backfill: Vec<CrontabJob> = backfill_items_and_date
-                .iter()
-                .filter_map(|b| {
-                    let backfill = b.item.options().fill().as_ref()?;
-                    if backfill.to_secs() as i64 >= time_ago
-                        && &ts >= b.not_before
-                        && b.item.should_run_at(&calendar_time)
-                    {
-                        return Some(CrontabJob::for_cron(b.item, &ts, true));
-                    }
-                    None
-                })
-                .collect();
+            let mut candidates = Vec::new();
+            for candidate in &backfill_items_and_date {
+                let Some(backfill) = candidate.item.options().fill().as_ref() else {
+                    continue;
+                };
+                let not_before = candidate
+                    .known
+                    .last_execution()
+                    .as_ref()
+                    .unwrap_or_else(|| candidate.known.known_since());
+                if backfill.to_secs() as i64 >= time_ago
+                    && &ts >= not_before
+                    && entries.matches(candidate.index, &calendar_time)?
+                {
+                    candidates.push(candidate);
+                }
+            }
 
-            if !to_backfill.is_empty() {
-                debug!(nb_jobs = to_backfill.len(), at = ?ts, "cron:backfill");
+            if !candidates.is_empty() {
+                debug!(nb_jobs = candidates.len(), at = ?ts, "cron:backfill");
+                hooks
+                    .emit(CronBackfillContext {
+                        scheduled_at: ts.with_timezone(&Utc),
+                        entries: candidates
+                            .iter()
+                            .map(|candidate| CronBackfillEntry {
+                                crontab: candidate.item.clone(),
+                                known_since: candidate.known.known_since().with_timezone(&Utc),
+                                last_execution: candidate
+                                    .known
+                                    .last_execution()
+                                    .map(|time| time.with_timezone(&Utc)),
+                            })
+                            .collect(),
+                    })
+                    .await;
+                let to_backfill: Vec<_> = candidates
+                    .into_iter()
+                    .map(|candidate| CrontabJob::for_cron(candidate.item, &ts, true))
+                    .collect();
                 schedule_cron_jobs(&mut executor, &to_backfill, &ts, schema, use_local_time)
                     .await?;
             }

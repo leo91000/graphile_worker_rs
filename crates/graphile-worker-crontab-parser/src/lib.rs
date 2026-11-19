@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use graphile_worker_crontab_types::Crontab;
 pub use nom::error::ErrorKind;
 use nom::Finish;
@@ -48,7 +50,7 @@ impl<'a> From<nom::Err<nom::error::Error<&'a str>>> for CrontabParseError {
 /// │ ┌───────────── UTC hour (0 - 23)
 /// │ │ ┌───────────── UTC day of the month (1 - 31)
 /// │ │ │ ┌───────────── UTC month (1 - 12)
-/// │ │ │ │ ┌───────────── UTC day of the week (0 - 6) (Sunday to Saturday)
+/// │ │ │ │ ┌───────────── UTC day of the week (0 - 7) (Sunday = 0 or 7)
 /// │ │ │ │ │ ┌───────────── task (identifier) to schedule
 /// │ │ │ │ │ │    ┌────────── optional scheduling options
 /// │ │ │ │ │ │    │     ┌────── optional payload to merge
@@ -137,12 +139,63 @@ pub fn parse_crontab(crontab: &str) -> Result<Vec<Crontab>> {
         error.msg = format!("line {line}, column {column}: {}", error.msg);
         error
     })?;
+    let mut identifiers = HashSet::new();
+    for entry in &result {
+        let identifier = entry.identifier();
+        if !identifiers.insert(identifier) {
+            return Err(CrontabParseError {
+                msg: format!("duplicate crontab identifier '{identifier}'; use ?id=... to give each schedule its own identifier"),
+                input: identifier.to_owned(),
+                error_kind: ErrorKind::Verify,
+            });
+        }
+    }
     Ok(result)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sunday_zero_matches_in_single_values_and_ranges() {
+        let sunday = "2026-11-22T00:00:00".parse().unwrap();
+        let monday = "2026-11-23T00:00:00".parse().unwrap();
+        let saturday = "2026-11-21T00:00:00".parse().unwrap();
+        for (text, matches_monday) in [("0", false), ("7", false), ("0-2", true)] {
+            let text = format!("0 0 * * {text} job");
+            let cron = &parse_crontab(&text).unwrap()[0];
+            assert!(cron.should_run_at(&sunday));
+            assert_eq!(cron.should_run_at(&monday), matches_monday);
+            assert!(!cron.should_run_at(&saturday));
+        }
+    }
+
+    #[test]
+    fn duplicate_crontab_identifiers_must_be_given_distinct_ids() {
+        let error = parse_crontab(
+            "0 * * * * example
+30 * * * * example",
+        )
+        .unwrap_err();
+        assert_eq!(error.input, "example");
+        assert!(error.msg.contains("duplicate crontab identifier"));
+        let error = parse_crontab(
+            "0 * * * * example ?id=shared
+30 * * * * other ?id=shared",
+        )
+        .unwrap_err();
+        assert_eq!(error.input, "shared");
+        assert_eq!(
+            parse_crontab(
+                "0 * * * * example ?id=first
+30 * * * * example ?id=second"
+            )
+            .unwrap()
+            .len(),
+            2
+        );
+    }
 
     #[test]
     fn parse_error_captures_nom_details() {

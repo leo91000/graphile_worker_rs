@@ -11,6 +11,8 @@ pub enum ScheduleCronJobError {
     QueryError(#[from] DbError),
     #[error("A JSON serialization error occurred while scheduling cron job : {0}")]
     SerializationError(#[from] serde_json::Error),
+    #[error("The cron matcher for '{identifier}' panicked")]
+    MatcherPanicked { identifier: String },
 }
 
 pub(crate) async fn schedule_cron_jobs<Tz: TimeZone>(

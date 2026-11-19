@@ -4,6 +4,7 @@ use futures::{stream, FutureExt, Stream};
 
 use graphile_worker_shutdown_signal::ShutdownSignal;
 
+use super::super::WorkerRuntimeError;
 use crate::local_queue::LocalQueue;
 use crate::queue_wakeup::QueueWakeup;
 use crate::streams::job_signal::JobSignalSource;
@@ -16,9 +17,9 @@ pub(in crate::runner) fn with_queue_wakeups<S>(
     notify: Arc<QueueWakeup>,
     shutdown: ShutdownSignal,
     local_queues: Arc<Vec<LocalQueue>>,
-) -> impl Stream<Item = JobSignalSource>
+) -> impl Stream<Item = Result<JobSignalSource, WorkerRuntimeError>>
 where
-    S: Stream<Item = JobSignalSource>,
+    S: Stream<Item = Result<JobSignalSource, WorkerRuntimeError>>,
 {
     let wakeups = stream::unfold(
         (notify, shutdown, local_queues),
@@ -35,7 +36,7 @@ where
             } else {
                 JobSignalSource::LocalQueue
             };
-            Some((source, (notify, shutdown, queues)))
+            Some((Ok(source), (notify, shutdown, queues)))
         },
     );
     stream::select(signals, wakeups)
@@ -66,10 +67,13 @@ mod tests {
         );
         futures::pin_mut!(signals);
         wakeup.wake(2);
-        assert_eq!(signals.next().await, Some(JobSignalSource::Polling));
+        assert!(matches!(
+            signals.next().await,
+            Some(Ok(JobSignalSource::Polling))
+        ));
         wakeup.wake(1);
         shutdown_tx.send(()).unwrap();
-        assert_eq!(signals.next().await, None);
+        assert!(signals.next().await.is_none());
         wakeup.wake(1);
     }
 }

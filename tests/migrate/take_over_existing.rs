@@ -69,3 +69,36 @@ async fn migration_can_take_over_from_pre_existing_migrations_table() {
     })
     .await;
 }
+
+#[tokio::test]
+async fn upgrades_legacy_migration_table_and_keeps_its_jobs() {
+    with_test_db(|db| async move {
+        let tx = db.database.begin().await.unwrap();
+        tx.execute("create schema graphile_worker", DbParams::new()).await.unwrap();
+        tx.execute(
+            "create table graphile_worker.migrations(id int primary key, ts timestamptz default now() not null)",
+            DbParams::new(),
+        ).await.unwrap();
+        for migration in &GRAPHILE_WORKER_MIGRATIONS[..13] {
+            migration.execute(&tx, "graphile_worker").await.unwrap();
+            tx.execute("insert into graphile_worker.migrations (id) values ($1)",
+                vec![DbValue::I32(migration.migration_number() as i32)].into()).await.unwrap();
+        }
+        tx.commit().await.unwrap();
+        query(r#"select graphile_worker.add_job('legacy', '{"retained":true}'::json)"#)
+            .execute(&db.test_pool).await.unwrap();
+
+        migrate(&db.database, "graphile_worker").await.unwrap();
+
+        let migrations = db.get_migrations().await;
+        assert_eq!(migrations.len(), GRAPHILE_WORKER_MIGRATIONS.len());
+        for migration in GRAPHILE_WORKER_MIGRATIONS {
+            let row = migrations.iter().find(|row| row.id == migration.migration_number() as i32).unwrap();
+            assert_eq!(row.breaking, migration.is_breaking());
+        }
+        let jobs = db.get_jobs().await;
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].task_identifier, "legacy");
+        assert_eq!(jobs[0].payload, json!({"retained":true}));
+    }).await;
+}

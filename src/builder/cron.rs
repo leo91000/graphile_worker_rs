@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use chrono::NaiveDateTime;
 use graphile_worker_crontab_parser::CrontabParseError;
 use graphile_worker_crontab_types::Crontab;
 
@@ -54,6 +57,23 @@ impl WorkerOptions {
         C: Into<Crontab>,
     {
         self.append_crontabs(crontabs.into_iter().map(Into::into).collect());
+        self
+    }
+
+    /// Adds a cron entry whose timer is replaced by a Rust predicate.
+    ///
+    /// The predicate receives the calendar minute in UTC by default, or local
+    /// time when configured. It is also called during catch-up and backfill, so
+    /// keep it fast, deterministic, and free of side effects. Entry identity,
+    /// payload, and the other options come from the supplied crontab.
+    pub fn with_cron_matcher(
+        mut self,
+        crontab: impl Into<Crontab>,
+        matcher: impl Fn(&NaiveDateTime) -> bool + Send + Sync + 'static,
+    ) -> Self {
+        let index = self.crontabs.as_ref().map_or(0, Vec::len);
+        self.append_crontabs(vec![crontab.into()]);
+        self.cron_matchers.insert(index, Arc::new(matcher));
         self
     }
 

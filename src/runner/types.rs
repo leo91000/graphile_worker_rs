@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use getset::Getters;
+use graphile_worker_crontab_runner::CronMatcher;
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_database::{Database, Schema};
 use graphile_worker_extensions::ReadOnlyExtensions;
@@ -59,6 +60,8 @@ pub struct Worker {
     pub(crate) job_flag_filter: Arc<JobFlagFilter<'static>>,
     /// List of cron job definitions to be scheduled
     pub(crate) crontabs: Vec<Crontab>,
+    #[getset(skip)]
+    pub(crate) cron_matchers: HashMap<usize, CronMatcher>,
     /// Whether to use local application time (true) or database time (false) for timestamps
     pub(crate) use_local_time: bool,
     /// Signal that can be triggered to gracefully shut down the worker
