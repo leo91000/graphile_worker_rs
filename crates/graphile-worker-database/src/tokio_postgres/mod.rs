@@ -107,10 +107,8 @@ impl DatabaseDriver for TokioPostgresDatabase {
     fn begin<'a>(&'a self) -> crate::BoxFuture<'a, Result<DbTransaction, DbError>> {
         Box::pin(async move {
             let client = self.pool.get().await?;
-            client.batch_execute("BEGIN").await?;
-            Ok(DbTransaction::new(Box::new(TokioPostgresTransaction::new(
-                client,
-            ))))
+            let transaction = TokioPostgresTransaction::begin(client).await?;
+            Ok(DbTransaction::new(Box::new(transaction)))
         })
     }
 

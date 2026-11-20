@@ -1,18 +1,45 @@
+use deadpool_postgres::Client;
 use tokio::sync::Mutex;
 
 use super::params::{boxed_params, param_refs};
 use super::rows::tokio_row_to_db_row;
 use crate::{DbError, DbExecutor, DbParams, DbRow, TransactionDriver};
 
+/// Detaches a connection from the pool unless its owner confirms it is safe
+/// to reuse or transfers it to a transaction.
+struct PendingClient(Option<Client>);
+
+impl PendingClient {
+    fn get(&self) -> &Client {
+        self.0.as_ref().expect("pending client must be present")
+    }
+
+    fn take(mut self) -> Client {
+        self.0.take().expect("pending client must be present")
+    }
+}
+
+impl Drop for PendingClient {
+    fn drop(&mut self) {
+        if let Some(client) = self.0.take() {
+            drop(Client::take(client));
+        }
+    }
+}
+
 pub(super) struct TokioPostgresTransaction {
-    client: Mutex<Option<deadpool_postgres::Client>>,
+    client: Mutex<Option<Client>>,
 }
 
 impl TokioPostgresTransaction {
-    pub(super) fn new(client: deadpool_postgres::Client) -> Self {
-        Self {
-            client: Mutex::new(Some(client)),
-        }
+    pub(super) async fn begin(client: Client) -> Result<Self, DbError> {
+        // BEGIN can reach the server even if this future is dropped before
+        // the response arrives. Establish ownership before sending it.
+        let pending = PendingClient(Some(client));
+        pending.get().batch_execute("BEGIN").await?;
+        Ok(Self {
+            client: Mutex::new(Some(pending.take())),
+        })
     }
 }
 
@@ -70,8 +97,13 @@ impl Drop for TokioPostgresTransaction {
         let Some(client) = self.client.get_mut().take() else {
             return;
         };
+        // Hold the lease until rollback succeeds. Discard the connection if
+        // the cleanup task is cancelled or rollback cannot be confirmed.
+        let pending = PendingClient(Some(client));
         drop(tokio::spawn(async move {
-            let _ = client.batch_execute("ROLLBACK").await;
+            if pending.get().batch_execute("ROLLBACK").await.is_ok() {
+                drop(pending.take());
+            }
         }));
     }
 }

@@ -326,3 +326,22 @@ including the actual forced disconnect. The revised targeted integration
 suites passed with PostgreSQL 12.22 and SQLx (35 tests), PostgreSQL 18.7 and
 tokio-postgres/rustls (33 tests), and PostgreSQL 18.7 with async-std and SQLx
 (35 tests).
+
+The follow-up head `f6eb9b6` passed Check, Test, Coverage, Docs and Codecov,
+but the second review blocked merge on cancellation while native PostgreSQL
+`BEGIN` was awaiting its response. The driver-contract regression observes
+the server in `idle in transaction` via a second connection before cancelling
+the only checkout in a one-connection pool. On `f6eb9b6`, the next checkout
+reused that backend. The revised driver holds a guard before sending `BEGIN`.
+Cancellation or failure discards the unconfirmed connection. Asynchronous
+rollback uses the same guard and returns the connection only after PostgreSQL
+confirms rollback. SQLx's pinned version already guards and records transaction
+state before awaiting `BEGIN`. No SQLx behavior was changed.
+
+The regression passed with all seven native driver-contract tests. The TLS
+1.2 and 1.3 fixtures each passed 21 connector and driver tests, including the
+cancelled checkout and listener reconnection, across the three TLS feature
+combinations.
+
+Final local lint and the Docker suite passed (549 tests, 7 ignored).
+The targeted native-driver integration suite also passed all 33 tests.
