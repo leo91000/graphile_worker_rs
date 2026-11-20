@@ -90,7 +90,7 @@ pub(super) async fn get_last_migration(
 }
 
 pub(super) async fn read_last_migration(
-    executor: &Database,
+    executor: &impl DbExecutor,
     schema: &Schema,
 ) -> Result<LastMigration, DbError> {
     let migrations = schema.identifier("migrations");
@@ -105,7 +105,7 @@ pub(super) async fn read_last_migration(
 }
 
 async fn fetch_last_migration(
-    executor: &Database,
+    executor: &impl DbExecutor,
     migrations_status_query: &str,
 ) -> Result<LastMigration, DbError> {
     executor

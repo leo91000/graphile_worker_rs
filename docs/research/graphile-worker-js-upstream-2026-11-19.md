@@ -250,9 +250,10 @@ ledger upgrades retaining a real job, and fresh/Node and Rust revision-20
 upgrade paths. The cron mock-clock test verifies backfill at minutes 2 and 4,
 the predicate's live tick at 6, and an ordinary timer at 7, with persisted
 history fields and no extra jobs. Parser tests cover duplicate IDs and the two
-Sunday aliases. A separate mock-clock test injects a one-time matcher panic
-and verifies backoff, backfill and resumed scheduling. Another regression
-captures attempts and limits in structured success and failure logs.
+Sunday aliases. A separate mock-clock test repeatedly panics in one matcher
+during backfill and live ticks. Healthy entries without a fill window still
+persist every due occurrence. Another regression captures attempts and limits
+in structured success, retryable-failure and terminal-failure logs.
 
 The pinned published Node v0.18.0 package, verified by npm gitHead, was
 run with Node 24.22.0 against separate UUID PostgreSQL 18.7 fixtures. It
@@ -278,7 +279,7 @@ Local delivery evidence is recorded below. Exact-head hosted Check, Test,
 Coverage and Docs are delivery gates. Main results are verified at the actual
 merge SHA and recorded in durable run output.
 
-| Local check | Final result |
+| Local check at initial PR head | Result |
 | --- | --- |
 | `just lint` | Passed formatting, all-target checking and Clippy with warnings denied |
 | `just test-docker` | PostgreSQL 18.7, 545 passed, 0 failed, 7 ignored across 91 suites. The recipe cleaned up its container. |
@@ -290,3 +291,38 @@ merge SHA and recorded in durable run output.
 The local test resource settings used three build jobs, one test thread and
 disabled debug symbols for the final full workspace validation. All assertions
 and CI configurations were retained.
+
+
+## Review follow-up on PR #585
+
+The initial tokio-postgres listener formatted a single LISTEN with a trailing
+semicolon. The reconnect test uses PostgreSQL's recorded query to identify and
+terminate the dedicated backend. Its exact assertion timed out locally and in
+both TLS jobs and all three native-driver coverage jobs. The revised formatter
+preserves the single-channel statement and separates multiple subscriptions with
+semicolons. The original reconnect assertion remains. New coverage terminates
+a multi-channel listener and checks delivery on both channels after reconnect.
+
+The worker now bounds each live schema read with a PostgreSQL statement timeout
+and an end-to-end deadline that also covers connection acquisition. A held
+ledger lock and an exhausted pool are separate regression fixtures. LocalQueue
+checks the shutdown signal before starting another claim and under the cache
+lock before removing a prefetched job. The migration regression now keeps the
+second job eligible, verifies its claim was prefetched in local mode, and checks
+that shutdown returns it without running its handler.
+
+Cron predicate panics are isolated per entry. A panic skips that entry for the
+affected minute and leaves the scheduler free to commit healthy occurrences,
+including schedules without a fill window. SQL failures retain the existing
+registration and configured backfill policy. The cron guide's two entries for
+the same task now have distinct IDs. The programmatic builder test verifies that
+appending additional schedules preserves matcher association.
+
+Follow-up `just lint` and `just test-docker` passed (548 tests, 7 ignored). The cache-waiter regression
+also passed in isolation. It signals shutdown while a consumer waits for the
+cache lock and verifies that release still owns the job. The TLS Docker matrix
+passed all six connector and driver test suites for each of TLS 1.2 and 1.3,
+including the actual forced disconnect. The revised targeted integration
+suites passed with PostgreSQL 12.22 and SQLx (35 tests), PostgreSQL 18.7 and
+tokio-postgres/rustls (33 tests), and PostgreSQL 18.7 with async-std and SQLx
+(35 tests).

@@ -1,5 +1,6 @@
 use super::*;
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -16,6 +17,7 @@ const DEADLINE: Duration = Duration::from_secs(7);
 struct RunningJob {
     started: Arc<Notify>,
     finish: Arc<Notify>,
+    count: Arc<AtomicUsize>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -26,6 +28,7 @@ impl TaskHandler for InFlight {
 
     async fn run(self, ctx: WorkerContext) -> impl IntoTaskHandlerResult {
         let job = ctx.get_ext::<RunningJob>().unwrap();
+        job.count.fetch_add(1, Ordering::SeqCst);
         job.started.notify_one();
         job.finish.notified().await;
     }
@@ -48,6 +51,10 @@ async fn committed_breaking_migration_drains_direct_and_local_workers() {
             }
             let worker: Arc<Worker> = Arc::new(options.init().await.unwrap());
             let first = worker.create_utils().add_job(InFlight, JobSpec::default()).await.unwrap();
+            let second = worker.create_utils().add_job(InFlight, JobSpec {
+                priority: Some(1),
+                ..Default::default()
+            }).await.unwrap();
             let running = tokio::task::spawn_local({
                 let worker = worker.clone();
                 async move { worker.run().await }
@@ -81,10 +88,11 @@ async fn committed_breaking_migration_drains_direct_and_local_workers() {
                 .execute(&mut *tx).await.unwrap();
             tx.commit().await.unwrap();
 
-            let second = worker.create_utils().add_job(InFlight, JobSpec {
-                run_at: Some(chrono::Utc::now() + chrono::Duration::hours(1)),
-                ..Default::default()
-            }).await.unwrap();
+            let jobs = db.get_jobs().await;
+            let queued = jobs.iter().find(|job| job.id == *second.id()).unwrap();
+            assert_eq!(queued.locked_by.as_deref(), use_local_queue.then_some(worker.worker_id().as_str()));
+            assert_eq!(queued.attempts, if use_local_queue { 1 } else { 0 });
+            assert!(queued.run_at <= chrono::Utc::now(), "second job must be due");
             let shutdown = worker.shutdown_signal().clone();
             assert!(timeout(Duration::from_millis(150), shutdown.clone()).await.is_err());
 
@@ -98,6 +106,7 @@ async fn committed_breaking_migration_drains_direct_and_local_workers() {
             state.finish.notify_one();
             let error = timeout(DEADLINE, running).await.unwrap().unwrap().unwrap_err();
             assert!(error.to_string().contains("999999"), "{error}");
+            assert_eq!(state.count.load(Ordering::SeqCst), 1, "second job must not start");
             let jobs = db.get_jobs().await;
             assert!(jobs.iter().all(|job| job.id != *first.id()));
             let second = jobs.iter().find(|job| job.id == *second.id()).unwrap();
@@ -153,4 +162,74 @@ async fn first_poll_rechecks_schema_when_notifications_are_disabled() {
         assert!(result.unwrap_err().to_string().contains("999999"));
     })
     .await;
+}
+
+#[tokio::test]
+async fn blocked_migration_read_does_not_stall_job_dispatch() {
+    with_test_db(|db| async move {
+        let state = RunningJob::default();
+        let worker = Arc::new(
+            db.create_worker_options()
+                .define_job::<InFlight>()
+                .add_extension(state.clone())
+                .concurrency(1)
+                .use_notification_delivery(false)
+                .listen_os_shutdown_signals(false)
+                .init()
+                .await
+                .unwrap(),
+        );
+        worker
+            .create_utils()
+            .add_job(InFlight, JobSpec::default())
+            .await
+            .unwrap();
+
+        let mut lock = db.test_pool.begin().await.unwrap();
+        query("lock table graphile_worker.migrations in access exclusive mode")
+            .execute(&mut *lock)
+            .await
+            .unwrap();
+        let running = tokio::task::spawn_local({
+            let worker = worker.clone();
+            async move { worker.run().await }
+        });
+
+        timeout(DEADLINE, state.started.notified())
+            .await
+            .expect("a locked migration ledger must not prevent job dispatch");
+        worker.request_shutdown();
+        state.finish.notify_one();
+        timeout(DEADLINE, running).await.unwrap().unwrap().unwrap();
+        lock.rollback().await.unwrap();
+        assert!(db.get_jobs().await.is_empty());
+    })
+    .await;
+}
+
+#[cfg(feature = "driver-sqlx")]
+#[tokio::test]
+async fn running_schema_check_is_bounded_while_waiting_for_a_connection() {
+    with_test_db(|db| async move {
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(Duration::from_secs(30))
+            .connect_with((*db.test_pool.connect_options()).clone())
+            .await
+            .unwrap();
+        let held = pool.acquire().await.unwrap();
+        let database = graphile_worker::Database::from(pool);
+        let error = timeout(
+            DEADLINE,
+            graphile_worker_migrations::check_running_schema(
+                &database,
+                &graphile_worker::Schema::default(),
+            ),
+        )
+        .await
+        .expect("schema check must finish before the pool's acquisition timeout")
+        .unwrap_err();
+        assert!(matches!(error, MigrateError::SqlError(error) if error.to_string().contains("timed out")));
+        drop(held);
+    }).await;
 }

@@ -10,6 +10,7 @@ use graphile_worker_database::{Database, Schema};
 use graphile_worker_job::Job;
 use graphile_worker_lifecycle_hooks::{HookRegistry, LocalQueueMode};
 use graphile_worker_runtime as runtime;
+use graphile_worker_shutdown_signal::ShutdownSignal;
 
 use crate::background_tasks::TaskSlot;
 use graphile_worker_queries::flag_filter::JobFlagFilter;
@@ -51,6 +52,7 @@ pub(super) struct LocalQueueState {
     pub(super) state_notify: runtime::Notify,
     pub(super) run_task: TaskSlot,
     pub(super) shutdown_task: TaskSlot,
+    pub(super) shutdown_signal: Option<ShutdownSignal>,
     pub(super) refetch_delay_task: TaskSlot,
     pub(super) ttl_timer_task: TaskSlot,
     pub(super) run_complete_notify: runtime::Notify,
@@ -91,6 +93,7 @@ impl LocalQueueState {
             state_notify: runtime::Notify::new(),
             run_task: TaskSlot::empty("local_queue_run"),
             shutdown_task: TaskSlot::empty("local_queue_shutdown"),
+            shutdown_signal: params.shutdown_signal,
             refetch_delay_task: TaskSlot::empty("local_queue_refetch_delay"),
             ttl_timer_task: TaskSlot::empty("local_queue_ttl"),
             run_complete_notify: runtime::Notify::new(),

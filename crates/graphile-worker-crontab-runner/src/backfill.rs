@@ -108,7 +108,7 @@ where
                     .unwrap_or_else(|| candidate.known.known_since());
                 if backfill.to_secs() as i64 >= time_ago
                     && &ts >= not_before
-                    && entries.matches(candidate.index, &calendar_time)?
+                    && entries.matches(candidate.index, &calendar_time)
                 {
                     candidates.push(candidate);
                 }

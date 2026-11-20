@@ -202,53 +202,48 @@ async fn programmatic_matcher_and_backfill_observer_use_the_same_calendar_as_liv
 }
 
 #[tokio::test]
-async fn a_panicking_matcher_retries_through_cron_recovery() {
-    use std::sync::atomic::{AtomicBool, Ordering};
-
+async fn a_panicking_matcher_does_not_block_healthy_entries_without_fill() {
     use graphile_worker_crontab_runner::CronMatcher;
 
     with_test_db(|db| async move {
         db.worker_utils().migrate().await.unwrap();
         let (clock, mut sleeps) = ObservedClock::new();
-        let crontabs = parse_crontab("* * * * * retry ?fill=1m").unwrap();
-        let fail_once = AtomicBool::new(true);
-        let predicate: CronMatcher = Arc::new(move |_| {
-            assert!(
-                !fail_once.swap(false, Ordering::SeqCst),
-                "injected matcher panic"
-            );
-            true
-        });
-        let matchers = [(0, predicate)].into();
+        let crontabs = parse_crontab("* * * * * first\n* * * * * broken ?fill=2m\n* * * * * last").unwrap();
+        query("insert into graphile_worker._private_known_crontabs (identifier, known_since) values ('broken', $1)")
+            .bind(clock.now() - Duration::minutes(1))
+            .execute(&db.test_pool).await.unwrap();
+        let predicate: CronMatcher = Arc::new(|_| panic!("injected matcher panic"));
+        let matchers = [(1, predicate)].into();
         let (shutdown, notify) = create_shutdown_signal();
         let handle = spawn_local({
             let database = db.database.clone();
             let clock = clock.clone();
             async move {
-                CronRunner::new(
-                    &database,
-                    "graphile_worker",
-                    &crontabs,
-                    &HookRegistry::default(),
-                )
-                .with_matchers(&matchers)
-                .with_clock(clock)
-                .run(shutdown)
-                .await
+                CronRunner::new(&database, "graphile_worker", &crontabs, &HookRegistry::default())
+                    .with_matchers(&matchers)
+                    .with_clock(clock)
+                    .run(shutdown)
+                    .await
             }
         });
-        let tick = next_sleep(&mut sleeps).await;
-        clock.clock.set_time(tick);
-        let retry = next_sleep(&mut sleeps).await;
-        assert_eq!(retry - tick, Duration::milliseconds(200));
-        assert!(db.get_jobs().await.is_empty());
 
-        clock.clock.set_time(retry);
-        assert_eq!(next_sleep(&mut sleeps).await, tick + Duration::minutes(1));
-        let jobs = db.get_jobs().await;
-        assert_eq!(jobs.len(), 1);
-        assert_eq!(jobs[0].run_at, tick);
+        let first_tick = next_sleep(&mut sleeps).await;
+        clock.clock.set_time(first_tick);
+        let second_tick = next_sleep(&mut sleeps).await;
+        assert_eq!(second_tick, first_tick + Duration::minutes(1));
+        clock.clock.set_time(second_tick);
+        assert_eq!(next_sleep(&mut sleeps).await, second_tick + Duration::minutes(1));
+
+        let mut jobs: Vec<_> = db.get_jobs().await.into_iter()
+            .map(|job| (job.run_at, job.task_identifier))
+            .collect();
+        jobs.sort_unstable();
+        assert_eq!(jobs, [
+            (first_tick.with_timezone(&chrono::Utc), "first".into()),
+            (first_tick.with_timezone(&chrono::Utc), "last".into()),
+            (second_tick.with_timezone(&chrono::Utc), "first".into()),
+            (second_tick.with_timezone(&chrono::Utc), "last".into()),
+        ]);
         stop_runner(handle, notify).await;
-    })
-    .await;
+    }).await;
 }

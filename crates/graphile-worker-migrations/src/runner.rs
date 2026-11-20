@@ -1,4 +1,7 @@
-use graphile_worker_database::{Database, DbError, DbExecutor, DbValue, Schema};
+use std::time::{Duration, Instant};
+
+use graphile_worker_database::{Database, DbError, DbExecutor, DbParams, DbValue, Schema};
+use graphile_worker_runtime::timeout_at;
 use tracing::{info, warn};
 
 use crate::clash::is_clash_error;
@@ -108,7 +111,16 @@ pub async fn check_running_schema(
     database: &Database,
     schema: &Schema,
 ) -> Result<(), MigrateError> {
-    let last = read_last_migration(database, schema).await?;
+    let last = timeout_at(Instant::now() + Duration::from_secs(2), async {
+        let tx = database.begin().await?;
+        tx.execute("SET LOCAL statement_timeout = '1s'", DbParams::new())
+            .await?;
+        let last = read_last_migration(&tx, schema).await?;
+        tx.commit().await?;
+        Ok::<_, DbError>(last)
+    })
+    .await
+    .map_err(|error| DbError::new(format!("Running schema check: {error}")))??;
     let highest_migration = GRAPHILE_WORKER_MIGRATIONS
         .last()
         .map_or(0, |migration| migration.migration_number());

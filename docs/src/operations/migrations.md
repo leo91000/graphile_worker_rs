@@ -101,6 +101,10 @@ breaking revision beyond the worker's supported revision, the worker stops
 claiming jobs, drains or returns work using its configured shutdown policy,
 and returns `WorkerRuntimeError::IncompatibleSchema`.
 
+The live check bounds PostgreSQL statement execution to one second and the
+whole check, including pool acquisition, to two seconds. An unavailable status
+read logs a warning and job dispatch continues.
+
 Stop existing workers before applying a breaking migration. Detection happens
 after the migration commits, so an older worker's completion or return SQL may
 already be incompatible.

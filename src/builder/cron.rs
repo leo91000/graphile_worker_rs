@@ -109,6 +109,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn with_cron_matcher_preserves_entry_order_and_positions() {
+        let options = WorkerOptions::default()
+            .with_cron(Crontab::new(Default::default(), "timer"))
+            .with_cron_matcher(Crontab::new(Default::default(), "predicate"), |_| false)
+            .with_cron("* * * * * subsequent")
+            .unwrap();
+        let entries = options.crontabs.unwrap();
+        assert_eq!(
+            entries.iter().map(Crontab::identifier).collect::<Vec<_>>(),
+            ["timer", "predicate", "subsequent"]
+        );
+        assert_eq!(options.cron_matchers.len(), 1);
+        assert!(!options.cron_matchers[&1](&chrono::NaiveDateTime::default()));
+    }
+
+    #[test]
     fn with_crons_appends_multiple_crontabs() {
         let options = WorkerOptions::default().with_crons([
             Crontab::new(Default::default(), "send_digest"),

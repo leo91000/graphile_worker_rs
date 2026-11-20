@@ -46,22 +46,47 @@ async fn tokio_postgres_driver_satisfies_database_contract() {
 #[cfg(feature = "driver-tokio-postgres")]
 #[tokio::test]
 async fn tokio_postgres_listener_reconnects_after_connection_loss() {
+    exercise_listener_reconnect(false).await;
+}
+
+#[cfg(feature = "driver-tokio-postgres")]
+#[tokio::test]
+async fn tokio_postgres_listener_resubscribes_to_every_channel_after_connection_loss() {
+    exercise_listener_reconnect(true).await;
+}
+
+#[cfg(feature = "driver-tokio-postgres")]
+async fn exercise_listener_reconnect(multiple_channels: bool) {
     let channel = unique_channel("database_driver_tokio_reconnect");
+    let additional = unique_channel("database_driver_tokio_second");
+    let channels: &[&str] = if multiple_channels {
+        &[&additional]
+    } else {
+        &[]
+    };
     let application_name = unique_channel("database_driver_tokio_listener");
-    let listen_query = format!(
-        "LISTEN {}",
-        graphile_worker_database::escape_identifier(&channel)
-    );
+    let listen_query = std::iter::once(channel.as_str())
+        .chain(channels.iter().copied())
+        .map(|channel| {
+            format!(
+                "LISTEN {}",
+                graphile_worker_database::escape_identifier(channel)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(";");
     let mut config = database_url().parse::<tokio_postgres::Config>().unwrap();
     config.application_name(&application_name);
     let tokio_database = TokioPostgresDatabase::from_config(config, 4).unwrap();
     let database = Database::from(tokio_database);
 
-    let mut stream = database
-        .listen(&channel)
-        .await
-        .unwrap()
-        .expect("driver should support notifications");
+    let mut stream = if multiple_channels {
+        database.listen_with_channels(&channel, channels).await
+    } else {
+        database.listen(&channel).await
+    }
+    .unwrap()
+    .expect("driver should support notifications");
 
     let first_pid =
         wait_for_tokio_postgres_listener_pid(&database, &application_name, &listen_query, None)
@@ -89,6 +114,10 @@ async fn tokio_postgres_listener_reconnects_after_connection_loss() {
 
     notify(&database, &channel, "after-reconnect").await;
     expect_notification(&mut stream, &channel, "after-reconnect").await;
+    if multiple_channels {
+        notify(&database, &additional, "second-channel").await;
+        expect_notification(&mut stream, &additional, "second-channel").await;
+    }
 }
 
 /// Verifies the opt-out against server prepared statements in both query paths.

@@ -39,8 +39,9 @@ payload and lifecycle hook values still come from the `Crontab`. The predicate
 is stored with its entry position to preserve the existing public struct
 and getter. It receives the same UTC or opt-in local calendar minute on live
 scheduling, catch-up and backfill and should be deterministic and free of side
-effects. Unwinding panics enter the existing cron backoff and registration
-recovery path.
+effects. An unwinding predicate panic is logged and skips that entry for the
+affected minute. Other entries and subsequent ticks continue. The existing
+database recovery and per-entry backfill rules still apply to database errors.
 
 `CronBackfill` observes selected entries and their persisted history before
 scheduling. Retried or concurrent schedulers may emit observations for the

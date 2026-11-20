@@ -18,7 +18,7 @@ pub(super) async fn emit_tick_and_schedule_jobs(
 ) -> Result<(), ScheduleCronJobError> {
     emit_tick(hooks, entries.crontabs, ts).await;
 
-    let jobs = collect_jobs_to_schedule(hooks, entries, ts, use_local_time).await?;
+    let jobs = collect_jobs_to_schedule(hooks, entries, ts, use_local_time).await;
     if jobs.is_empty() {
         return Ok(());
     }
@@ -43,7 +43,7 @@ async fn collect_jobs_to_schedule(
     entries: CronEntries<'_>,
     ts: DateTime<Local>,
     use_local_time: bool,
-) -> Result<Vec<CrontabJob>, ScheduleCronJobError> {
+) -> Vec<CrontabJob> {
     let mut jobs = Vec::new();
     let calendar_time = if use_local_time {
         ts.naive_local()
@@ -52,7 +52,7 @@ async fn collect_jobs_to_schedule(
     };
 
     for (index, cron) in entries.crontabs.iter().enumerate() {
-        if entries.matches(index, &calendar_time)? {
+        if entries.matches(index, &calendar_time) {
             jobs.push(CrontabJob::for_cron(cron, &ts, false));
 
             let scheduled_ctx = CronJobScheduledContext {
@@ -63,5 +63,5 @@ async fn collect_jobs_to_schedule(
         }
     }
 
-    Ok(jobs)
+    jobs
 }

@@ -7,7 +7,7 @@ use std::{
 use chrono::NaiveDateTime;
 use graphile_worker_crontab_types::Crontab;
 
-use crate::sql::ScheduleCronJobError;
+use tracing::warn;
 
 /// A synchronous predicate evaluated on the cron calendar's minute boundaries.
 pub type CronMatcher = Arc<dyn Fn(&NaiveDateTime) -> bool + Send + Sync>;
@@ -19,21 +19,17 @@ pub(crate) struct CronEntries<'a> {
 }
 
 impl CronEntries<'_> {
-    pub(crate) fn matches(
-        &self,
-        index: usize,
-        calendar_time: &NaiveDateTime,
-    ) -> Result<bool, ScheduleCronJobError> {
+    pub(crate) fn matches(&self, index: usize, calendar_time: &NaiveDateTime) -> bool {
         let crontab = &self.crontabs[index];
-        match self.matchers.and_then(|matchers| matchers.get(&index)) {
-            Some(matcher) => {
-                catch_unwind(AssertUnwindSafe(|| matcher(calendar_time))).map_err(|_| {
-                    ScheduleCronJobError::MatcherPanicked {
-                        identifier: crontab.identifier().to_owned(),
-                    }
-                })
+        let Some(matcher) = self.matchers.and_then(|matchers| matchers.get(&index)) else {
+            return crontab.should_run_at(calendar_time);
+        };
+        match catch_unwind(AssertUnwindSafe(|| matcher(calendar_time))) {
+            Ok(matches) => matches,
+            Err(_) => {
+                warn!(identifier = crontab.identifier(), %calendar_time, "Cron matcher panicked");
+                false
             }
-            None => Ok(crontab.should_run_at(calendar_time)),
         }
     }
 }

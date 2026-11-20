@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use futures::FutureExt;
 use graphile_worker_lifecycle_hooks::JobFetchContext;
 use graphile_worker_runtime as runtime;
 
@@ -53,7 +54,7 @@ pub(in crate::runner) async fn process_local_queue_source(
     }
 
     let mut source = source;
-    loop {
+    while worker.shutdown_signal.clone().now_or_never().is_none() {
         let job = get_job_from_local_queues(local_queues, start_index).await;
 
         let Some(job) = job else {

@@ -18,9 +18,10 @@ pub(super) async fn listen(
         return Ok(None);
     };
 
-    let sql: String = channels
-        .map(|channel| format!("LISTEN {};", escape_identifier(channel)))
-        .collect();
+    let sql = channels
+        .map(|channel| format!("LISTEN {}", escape_identifier(channel)))
+        .collect::<Vec<_>>()
+        .join(";");
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let (client, closed_rx) = connect_listener(&config, &sql, &tx).await?;
 

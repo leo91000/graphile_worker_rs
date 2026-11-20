@@ -68,17 +68,31 @@ async fn success_and_failure_log_attempt_limits_as_structured_fields() {
             .await
             .unwrap();
         utils.add_job(Task { fail: true }, spec).await.unwrap();
+        utils
+            .add_job(
+                Task { fail: true },
+                JobSpec {
+                    max_attempts: Some(1),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
         worker.run_once().await.unwrap();
     })
     .await;
 
     let logs = log.0.lock().unwrap();
     let messages = std::str::from_utf8(&logs).unwrap();
-    for message in ["Completed task with success", "Failed task"] {
+    for (message, expected) in [
+        ("Completed task with success", "attempts=1 max_attempts=3"),
+        ("Failed task", "attempts=1 max_attempts=3"),
+        ("Job max attempts reached", "attempts=1 max_attempts=1"),
+    ] {
         let line = messages
             .lines()
             .find(|line| line.contains(message))
             .unwrap();
-        assert!(line.contains("attempts=1 max_attempts=3"), "{line}");
+        assert!(line.contains(expected), "{line}");
     }
 }

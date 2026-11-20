@@ -157,10 +157,10 @@ Examples:
 0 */4 * * * rollup
 
 # Mondays at 04:30 UTC.
-30 4 * * 1 send_weekly_email
+30 4 * * 1 send_weekly_email ?id=monday_digest
 
 # More than one value in a field.
-30 4,10-15 * * 1 send_weekly_email
+30 4,10-15 * * 1 send_weekly_email ?id=monday_reminder
 ```
 
 Task identifiers must start with a letter or underscore. After that they may
@@ -176,6 +176,8 @@ Blank lines, comment lines starting with `#`, and surrounding spaces are allowed
 Use `with_cron_matcher` to replace an entry's timer with a Rust predicate.
 The predicate receives each minute in the configured calendar, including during
 catch-up and backfill. Keep it fast, deterministic and free of side effects.
+If a matcher panics, the worker logs the affected entry and continues
+evaluating other entries for that minute.
 
 ```rust,ignore
 use chrono::{Datelike, Timelike, Weekday};

@@ -1,6 +1,7 @@
 use std::sync::atomic::Ordering;
 
 use chrono::Utc;
+use futures::FutureExt;
 use graphile_worker_job::Job;
 use graphile_worker_lifecycle_hooks::LocalQueueMode;
 use tracing::error;
@@ -67,6 +68,14 @@ impl LocalQueue {
         // A return may have held this lock while shutdown changed the mode.
         let mode = self.0.mode.read().await;
         if matches!(*mode, LocalQueueMode::Released | LocalQueueMode::TtlExpired) {
+            return None;
+        }
+        if self
+            .0
+            .shutdown_signal
+            .as_ref()
+            .is_some_and(|shutdown| shutdown.clone().now_or_never().is_some())
+        {
             return None;
         }
         if let Some(job) = job_queue.pop_front() {
