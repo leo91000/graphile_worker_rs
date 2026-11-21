@@ -318,3 +318,30 @@ async fn acknowledged_ttl_return_allows_polling() {
     assert!(queue.0.claims.try_fetch().is_some());
     assert_eq!(driver.calls.load(Ordering::SeqCst), 1);
 }
+
+#[tokio::test]
+async fn cache_waiter_observes_shutdown_before_removing_the_claim() {
+    use futures::{channel::oneshot, FutureExt};
+
+    let driver = Arc::new(ReturnDriver::default());
+    let (shutdown, receiver) = oneshot::channel::<()>();
+    let queue: LocalQueue = LocalQueueParams {
+        shutdown_signal: Some(receiver.map(|_| ()).boxed().shared()),
+        ..queue_params(driver.clone())
+    }
+    .into();
+    *queue.0.mode.write().await = LocalQueueMode::Waiting;
+    let mut cache = queue.0.job_queue.lock().await;
+    cache.push_back(Job::builder().id(1).build());
+
+    let claim = queue.get_job(&[]);
+    futures::pin_mut!(claim);
+    assert!(futures::poll!(claim.as_mut()).is_pending());
+    shutdown.send(()).unwrap();
+    drop(cache);
+
+    assert!(claim.await.is_none());
+    assert_eq!(queue.0.job_queue.lock().await.len(), 1);
+    queue.release().await.unwrap();
+    assert_eq!(driver.calls.load(Ordering::SeqCst), 1);
+}

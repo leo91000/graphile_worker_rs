@@ -23,6 +23,7 @@ pub(super) async fn run(
             worker.use_notification_delivery,
             worker.shutdown_signal.clone(),
         )
+        .with_schema(worker.schema.clone())
         .with_local_queue(job_signal_rx),
     )
     .await
@@ -31,7 +32,7 @@ pub(super) async fn run(
         Err(error) => {
             worker.request_shutdown();
             release_local_queues(&local_queues).await;
-            return Err(error.into());
+            return Err(error);
         }
     };
 

@@ -1,6 +1,10 @@
+mod entries;
 mod schedule;
 
-use std::{cmp::Ordering, convert::Infallible};
+pub(crate) use entries::CronEntries;
+pub use entries::CronMatcher;
+
+use std::{cmp::Ordering, collections::HashMap, convert::Infallible};
 
 use chrono::prelude::*;
 use graphile_worker_crontab_types::Crontab;
@@ -36,7 +40,7 @@ pub async fn cron_main(
 pub struct CronRunner<'a, E, C = SystemClock> {
     executor: E,
     schema: Schema,
-    crontabs: &'a [Crontab],
+    entries: CronEntries<'a>,
     use_local_time: bool,
     hooks: &'a HookRegistry,
     clock: C,
@@ -52,7 +56,10 @@ impl<'a, E: DbExecutorArg> CronRunner<'a, E, SystemClock> {
         Self {
             executor,
             schema: schema.into(),
-            crontabs,
+            entries: CronEntries {
+                crontabs,
+                matchers: None,
+            },
             use_local_time: false,
             hooks,
             clock: SystemClock,
@@ -66,11 +73,18 @@ impl<'a, E: DbExecutorArg, C: Clock> CronRunner<'a, E, C> {
         self
     }
 
+    /// Override the timer for selected entries, keyed by their index in the
+    /// crontab slice. The same predicate governs ticks, catch-up and backfill.
+    pub fn with_matchers(mut self, matchers: &'a HashMap<usize, CronMatcher>) -> Self {
+        self.entries.matchers = Some(matchers);
+        self
+    }
+
     pub fn with_clock<C2: Clock>(self, clock: C2) -> CronRunner<'a, E, C2> {
         CronRunner {
             executor: self.executor,
             schema: self.schema,
-            crontabs: self.crontabs,
+            entries: self.entries,
             use_local_time: self.use_local_time,
             hooks: self.hooks,
             clock,
@@ -111,9 +125,10 @@ impl<'a, E: DbExecutorArg, C: Clock> CronRunner<'a, E, C> {
         register_and_backfill_items(
             &mut self.executor,
             &self.schema,
-            self.crontabs,
+            self.entries,
             &start,
             self.use_local_time,
+            self.hooks,
         )
         .await?;
         debug!(start = ?start, "cron:started");
@@ -158,7 +173,7 @@ impl<'a, E: DbExecutorArg, C: Clock> CronRunner<'a, E, C> {
         emit_tick_and_schedule_jobs(
             &mut self.executor,
             &self.schema,
-            self.crontabs,
+            self.entries,
             self.use_local_time,
             self.hooks,
             ts,

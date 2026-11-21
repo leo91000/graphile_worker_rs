@@ -2,12 +2,12 @@ use futures::{future::BoxFuture, FutureExt};
 use std::panic::AssertUnwindSafe;
 
 use crate::context::{
-    CronJobScheduledContext, CronTickContext, JobCompleteContext, JobFailContext, JobFetchContext,
-    JobInterruptedContext, JobPermanentlyFailContext, JobStartContext,
-    LocalQueueGetJobsCompleteContext, LocalQueueInitContext, LocalQueueRefetchDelayAbortContext,
-    LocalQueueRefetchDelayExpiredContext, LocalQueueRefetchDelayStartContext,
-    LocalQueueReturnJobsContext, LocalQueueSetModeContext, WorkerInitContext,
-    WorkerRecoveredContext, WorkerShutdownContext, WorkerStartContext,
+    CronBackfillContext, CronJobScheduledContext, CronTickContext, JobCompleteContext,
+    JobFailContext, JobFetchContext, JobInterruptedContext, JobPermanentlyFailContext,
+    JobStartContext, LocalQueueGetJobsCompleteContext, LocalQueueInitContext,
+    LocalQueueRefetchDelayAbortContext, LocalQueueRefetchDelayExpiredContext,
+    LocalQueueRefetchDelayStartContext, LocalQueueReturnJobsContext, LocalQueueSetModeContext,
+    WorkerInitContext, WorkerRecoveredContext, WorkerShutdownContext, WorkerStartContext,
 };
 use crate::event::Event;
 use crate::events::Emittable;
@@ -83,6 +83,7 @@ define_observer_event!(JobPermanentlyFail, JobPermanentlyFailContext);
 define_observer_event!(JobInterrupted, JobInterruptedContext);
 define_observer_event!(WorkerRecovered, WorkerRecoveredContext);
 define_observer_event!(CronTick, CronTickContext);
+define_observer_event!(CronBackfill, CronBackfillContext);
 define_observer_event!(CronJobScheduled, CronJobScheduledContext);
 define_observer_event!(LocalQueueInit, LocalQueueInitContext);
 define_observer_event!(LocalQueueSetMode, LocalQueueSetModeContext);

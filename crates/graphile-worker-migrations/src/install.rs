@@ -1,4 +1,4 @@
-use graphile_worker_database::{Database, DbExecutor, DbParams, Schema};
+use graphile_worker_database::{Database, DbExecutor, DbParams, DbValue, Schema};
 use indoc::formatdoc;
 use tracing::info;
 
@@ -36,5 +36,32 @@ pub(super) async fn install_schema(
         .await?;
     tx.commit().await?;
 
+    Ok(())
+}
+
+/// Annotates the migration table from releases that recorded revision IDs only.
+pub(super) async fn add_breaking_migration_metadata(
+    database: &Database,
+    schema: &Schema,
+) -> Result<(), MigrateError> {
+    let migrations = schema.identifier("migrations");
+    let breaking_ids = crate::sql::GRAPHILE_WORKER_MIGRATIONS
+        .iter()
+        .filter(|migration| migration.is_breaking())
+        .map(|migration| migration.migration_number() as i32)
+        .collect();
+    let tx = database.begin().await?;
+    tx.execute(
+        &format!("alter table {migrations} add column if not exists breaking boolean not null default false"),
+        DbParams::new(),
+    ).await?;
+    tx.execute(
+        &format!(
+            "update {migrations} set breaking = true where id = any($1::int[]) and not breaking"
+        ),
+        vec![DbValue::I32Array(breaking_ids)].into(),
+    )
+    .await?;
+    tx.commit().await?;
     Ok(())
 }

@@ -2,6 +2,7 @@ use std::fmt::{self, Debug, Display};
 
 use crate::errors::GraphileWorkerError;
 use graphile_worker_crontab_runner::ScheduleCronJobError;
+use graphile_worker_migrations::MigrateError;
 use graphile_worker_runtime as runtime;
 use thiserror::Error;
 
@@ -19,6 +20,9 @@ pub enum WorkerRuntimeError {
     /// Failed to listen to PostgreSQL notifications for new jobs
     #[error("Failed to listen to postgres notifications : '{0}'")]
     PgListen(#[from] GraphileWorkerError),
+    /// The schema changed after worker initialization.
+    #[error("Worker detected an incompatible database schema: {0}")]
+    IncompatibleSchema(#[source] MigrateError),
     /// An error occurred while scheduling or executing a cron job
     #[error("Error occurred while trying to schedule cron job : {0}")]
     Crontab(#[from] ScheduleCronJobError),

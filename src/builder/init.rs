@@ -158,6 +158,7 @@ impl WorkerOptions {
             accepted_flags: self.accepted_flags,
             job_flag_filter,
             crontabs: self.crontabs.unwrap_or_default(),
+            cron_matchers: self.cron_matchers,
             use_local_time: self.use_local_time,
             shutdown_signal,
             queue_wakeup,

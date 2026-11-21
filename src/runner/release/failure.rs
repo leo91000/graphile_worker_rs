@@ -61,6 +61,8 @@ fn log_failed_job(error: &RunJobError, job: &Job, will_retry: bool) {
             task_id = job.task_id(),
             payload = ?job.payload(),
             job_id = job.id(),
+            attempts = job.attempts(),
+            max_attempts = job.max_attempts(),
             "Failed task"
         );
     } else {
@@ -69,6 +71,8 @@ fn log_failed_job(error: &RunJobError, job: &Job, will_retry: bool) {
             task_id = job.task_id(),
             payload = ?job.payload(),
             job_id = job.id(),
+            attempts = job.attempts(),
+            max_attempts = job.max_attempts(),
             "Job max attempts reached"
         );
     }

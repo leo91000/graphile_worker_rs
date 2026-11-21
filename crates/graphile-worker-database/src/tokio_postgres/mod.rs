@@ -107,10 +107,8 @@ impl DatabaseDriver for TokioPostgresDatabase {
     fn begin<'a>(&'a self) -> crate::BoxFuture<'a, Result<DbTransaction, DbError>> {
         Box::pin(async move {
             let client = self.pool.get().await?;
-            client.batch_execute("BEGIN").await?;
-            Ok(DbTransaction::new(Box::new(TokioPostgresTransaction::new(
-                client,
-            ))))
+            let transaction = TokioPostgresTransaction::begin(client).await?;
+            Ok(DbTransaction::new(Box::new(transaction)))
         })
     }
 
@@ -118,6 +116,17 @@ impl DatabaseDriver for TokioPostgresDatabase {
         &'a self,
         channel: &'a str,
     ) -> crate::BoxFuture<'a, Result<Option<NotificationStream>, DbError>> {
-        Box::pin(async move { listener::listen(self.listener_config.clone(), channel).await })
+        self.listen_with_channels(channel, &[])
+    }
+
+    fn listen_with_channels<'a>(
+        &'a self,
+        primary: &'a str,
+        additional: &'a [&'a str],
+    ) -> crate::BoxFuture<'a, Result<Option<NotificationStream>, DbError>> {
+        Box::pin(async move {
+            let channels = std::iter::once(primary).chain(additional.iter().copied());
+            listener::listen(self.listener_config.clone(), channels).await
+        })
     }
 }

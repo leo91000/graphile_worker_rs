@@ -1,4 +1,4 @@
-use graphile_worker_crontab_runner::cron_main;
+use graphile_worker_crontab_runner::CronRunner;
 
 use super::super::{Worker, WorkerRuntimeError};
 
@@ -7,14 +7,15 @@ pub(super) async fn run(worker: &Worker) -> Result<(), WorkerRuntimeError> {
         return Ok(());
     }
 
-    cron_main(
+    CronRunner::new(
         worker.database(),
         worker.schema(),
         worker.crontabs(),
-        *worker.use_local_time(),
-        worker.shutdown_signal.clone(),
         &worker.hooks,
     )
+    .with_matchers(&worker.cron_matchers)
+    .use_local_time(*worker.use_local_time())
+    .run(worker.shutdown_signal.clone())
     .await?;
 
     Ok(())

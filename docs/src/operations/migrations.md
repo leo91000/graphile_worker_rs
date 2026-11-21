@@ -38,9 +38,10 @@ create table if not exists graphile_worker.migrations (
 
 After that, it runs every packaged migration whose number is greater than the
 latest recorded migration id. Each migration runs in its own database
-transaction. When the SQL completes, the runner inserts a row into the
-`migrations` table with the migration id and whether that migration is marked as
-breaking, then commits the transaction.
+transaction. The runner inserts the revision and its breaking flag before
+executing the migration SQL in that transaction, allowing concurrent migrators
+to detect an already claimed revision. It queues a `worker:migrate` notification
+after executing the SQL. PostgreSQL delivers the notification on commit.
 
 Running `migrate` again after the schema is current is expected to be harmless:
 the runner sees the latest recorded revision and skips already-applied
@@ -62,6 +63,9 @@ breaking in the registry are:
 The runner supports taking over from an existing Graphile Worker schema as long
 as the `migrations` table accurately records the already-applied revision. For
 example, if revision `1` is already present, `migrate` starts at revision `2`.
+When an older migration table has only revision IDs and timestamps, the runner
+adds the breaking flag and backfills it for known revisions before applying
+pending SQL.
 
 ## Startup guidance
 
@@ -87,6 +91,23 @@ If the database records a future non-breaking revision, the runner logs a
 warning and continues. That warning means the database schema is newer than the
 current package knows about, so all running Graphile Worker RS versions should be
 checked for compatibility.
+
+## Breaking migrations while workers are running
+
+Continuous workers check their own schema after a breaking-migration
+notification. They also check on startup and periodically on normal polling
+ticks, including with notifications disabled. When the table confirms a
+breaking revision beyond the worker's supported revision, the worker stops
+claiming jobs, drains or returns work using its configured shutdown policy,
+and returns `WorkerRuntimeError::IncompatibleSchema`.
+
+The live check bounds PostgreSQL statement execution to one second and the
+whole check, including pool acquisition, to two seconds. An unavailable status
+read logs a warning and job dispatch continues.
+
+Stop existing workers before applying a breaking migration. Detection happens
+after the migration commits, so an older worker's completion or return SQL may
+already be incompatible.
 
 ## PostgreSQL version check
 

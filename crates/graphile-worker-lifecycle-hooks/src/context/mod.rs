@@ -3,7 +3,10 @@ mod job;
 mod local_queue;
 mod worker;
 
-pub use cron::{BeforeJobScheduleContext, CronJobScheduledContext, CronTickContext};
+pub use cron::{
+    BeforeJobScheduleContext, CronBackfillContext, CronBackfillEntry, CronJobScheduledContext,
+    CronTickContext,
+};
 pub use job::{
     AfterJobRunContext, BeforeJobRunContext, FailureReason, JobCompleteContext, JobFailContext,
     JobFetchContext, JobInterruptedContext, JobPermanentlyFailContext, JobRecoveryContext,

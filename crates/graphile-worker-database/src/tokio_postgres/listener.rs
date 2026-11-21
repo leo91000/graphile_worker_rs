@@ -12,13 +12,16 @@ const MAX_LISTENER_RECONNECT_DELAY: Duration = Duration::from_secs(5);
 
 pub(super) async fn listen(
     config: Option<ListenerConfig>,
-    channel: &str,
+    channels: impl Iterator<Item = &str>,
 ) -> Result<Option<NotificationStream>, DbError> {
     let Some(config) = config else {
         return Ok(None);
     };
 
-    let sql = format!("LISTEN {}", escape_identifier(channel));
+    let sql = channels
+        .map(|channel| format!("LISTEN {}", escape_identifier(channel)))
+        .collect::<Vec<_>>()
+        .join(";");
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let (client, closed_rx) = connect_listener(&config, &sql, &tx).await?;
 

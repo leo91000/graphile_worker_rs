@@ -80,6 +80,7 @@ impl Worker {
             accepted_flags: self.accepted_flags.clone(),
             job_flag_filter: self.job_flag_filter.clone(),
             crontabs: self.crontabs.clone(),
+            cron_matchers: self.cron_matchers.clone(),
             use_local_time: self.use_local_time,
             shutdown_signal: self.shutdown_signal.clone(),
             queue_wakeup: self.queue_wakeup.clone(),

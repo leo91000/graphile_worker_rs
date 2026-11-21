@@ -12,12 +12,15 @@ use crate::streams::job_signal::{job_signal_stream, JobSignalSource, JobSignalSt
 /// Runs direct slots until a fetch finds no ready work, then waits for another
 /// signal. A named release can wake slots even after initial signals are exhausted.
 pub(super) async fn run(worker: &Worker) -> Result<(), WorkerRuntimeError> {
-    let job_signal = job_signal_stream(JobSignalStreamConfig::new(
-        worker.database.clone(),
-        worker.poll_interval,
-        worker.use_notification_delivery,
-        worker.shutdown_signal.clone(),
-    ))
+    let job_signal = job_signal_stream(
+        JobSignalStreamConfig::new(
+            worker.database.clone(),
+            worker.poll_interval,
+            worker.use_notification_delivery,
+            worker.shutdown_signal.clone(),
+        )
+        .with_schema(worker.schema.clone()),
+    )
     .await?;
 
     let job_signal = sources::with_queue_wakeups(

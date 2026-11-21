@@ -133,6 +133,8 @@ pub(super) async fn run_job(
             payload,
             job_id = job.id(),
             duration = duration.as_millis(),
+            attempts = job.attempts(),
+            max_attempts = job.max_attempts(),
             "Completed task with success"
         );
     }

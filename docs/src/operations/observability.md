@@ -174,6 +174,7 @@ your metrics backend:
 | `JobStart` | job id and task identifier started executing |
 | `JobComplete` | job completed and exposes execution duration |
 | `JobFail` | job failed, exposes the error and whether it will retry |
+| `CronBackfill` | one historical minute selected for scheduling, with each entry's persisted known-since and last-execution timestamps |
 
 ## Logging
 

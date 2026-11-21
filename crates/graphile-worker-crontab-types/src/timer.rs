@@ -112,9 +112,11 @@ impl CrontabTimer {
             && self.hours().iter().any(|v| v.match_value(at.hour(), 0))
             && self.days().iter().any(|v| v.match_value(at.day(), 1))
             && self.months().iter().any(|v| v.match_value(at.month(), 1))
-            && self
-                .dows()
-                .iter()
-                .any(|v| v.match_value(at.weekday().number_from_monday(), 1))
+            && self.dows().iter().any(|value| {
+                let weekday = at.weekday();
+                value.match_value(weekday.number_from_monday(), 1)
+                    || (weekday == Weekday::Sun
+                        && matches!(value, CrontabValue::Number(0) | CrontabValue::Range(0, _)))
+            })
     }
 }

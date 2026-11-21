@@ -19,6 +19,8 @@ mod identity_upgrade;
 mod install_schema;
 #[path = "migrate/locked_jobs_migration_11.rs"]
 mod locked_jobs_migration_11;
+#[path = "migrate/notifications.rs"]
+mod notifications;
 #[path = "migrate/sqlx_transaction.rs"]
 mod sqlx_transaction;
 #[path = "migrate/take_over_existing.rs"]

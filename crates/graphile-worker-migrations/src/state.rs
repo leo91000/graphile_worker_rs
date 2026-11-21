@@ -7,7 +7,7 @@ use tracing::info;
 
 use crate::clash::is_clash_error;
 use crate::error::MigrateError;
-use crate::install::install_schema;
+use crate::install::{add_breaking_migration_metadata, install_schema};
 
 const INSTALL_RETRY_DELAYS: &[Duration] = &[
     Duration::from_millis(50),
@@ -45,29 +45,26 @@ pub(super) async fn get_last_migration(
     executor: &Database,
     schema: &Schema,
 ) -> Result<LastMigration, MigrateError> {
-    let migrations = schema.identifier("migrations");
-    let migrations_status_query = formatdoc!(
-        r#"
-            select current_setting('server_version_num') as server_version_num,
-            (select id from {migrations} order by id desc limit 1) as id,
-            (select id from {migrations} where breaking is true order by id desc limit 1) as biggest_breaking_id;
-        "#
-    );
     let mut retry_delays = INSTALL_RETRY_DELAYS
         .iter()
         .copied()
         .map(Some)
         .chain(std::iter::once(None));
 
+    let mut repaired_legacy_table = false;
     loop {
         let retry_delay = retry_delays.next().flatten();
-        let last_migration_query_result =
-            fetch_last_migration(executor, &migrations_status_query).await;
+        let last_migration_query_result = read_last_migration(executor, schema).await;
         let error = match last_migration_query_result {
             Ok(last_migration) => return Ok(last_migration),
             Err(error) => error,
         };
 
+        if error.code() == Some("42703") && !repaired_legacy_table {
+            add_breaking_migration_metadata(executor, schema).await?;
+            repaired_legacy_table = true;
+            continue;
+        }
         if error.code() != Some("42P01") {
             return Err(MigrateError::SqlError(error));
         }
@@ -92,8 +89,23 @@ pub(super) async fn get_last_migration(
     }
 }
 
+pub(super) async fn read_last_migration(
+    executor: &impl DbExecutor,
+    schema: &Schema,
+) -> Result<LastMigration, DbError> {
+    let migrations = schema.identifier("migrations");
+    let status_query = formatdoc!(
+        r#"
+            select current_setting('server_version_num') as server_version_num,
+            (select id from {migrations} order by id desc limit 1) as id,
+            (select id from {migrations} where breaking is true order by id desc limit 1) as biggest_breaking_id;
+        "#
+    );
+    fetch_last_migration(executor, &status_query).await
+}
+
 async fn fetch_last_migration(
-    executor: &Database,
+    executor: &impl DbExecutor,
     migrations_status_query: &str,
 ) -> Result<LastMigration, DbError> {
     executor

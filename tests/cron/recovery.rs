@@ -132,3 +132,118 @@ async fn cron_shutdown_interrupts_a_pending_database_operation() {
     })
     .await;
 }
+
+#[tokio::test]
+async fn programmatic_matcher_and_backfill_observer_use_the_same_calendar_as_live_ticks() {
+    use graphile_worker::{CronBackfill, CronBackfillContext};
+    use graphile_worker_crontab_runner::CronMatcher;
+
+    with_test_db(|db| async move {
+        db.worker_utils().migrate().await.unwrap();
+        let (clock, mut sleeps) = ObservedClock::new();
+        let known_since = clock.now();
+        let last_execution = known_since + Duration::seconds(30);
+        query("insert into graphile_worker._private_known_crontabs (identifier, known_since, last_execution) values ('even', $1, $2)")
+            .bind(known_since)
+            .bind(last_execution)
+            .execute(&db.test_pool).await.unwrap();
+        clock.clock.set_time(known_since + Duration::minutes(5));
+
+        let mut hooks = HookRegistry::default();
+        let (observed, mut observations) = tokio::sync::mpsc::unbounded_channel::<CronBackfillContext>();
+        hooks.on(CronBackfill, move |context| {
+            let observed = observed.clone();
+            async move { observed.send(context).unwrap(); }
+        });
+
+        // The predicate replaces a timer that could not match any minute under test.
+        let crontabs = parse_crontab("59 * * * * shared ?id=even&fill=10m {}\n7 * * * * shared ?id=plain {}").unwrap();
+        let even_minute: CronMatcher = Arc::new(|date| date.minute() % 2 == 0);
+        let matchers = [(0, even_minute)].into();
+        let (shutdown, notify) = create_shutdown_signal();
+        let handle = spawn_local({
+            let database = db.database.clone();
+            let clock = clock.clone();
+            async move {
+                CronRunner::new(&database, "graphile_worker", &crontabs, &hooks)
+                    .with_matchers(&matchers)
+                    .with_clock(clock)
+                    .use_local_time(true)
+                    .run(shutdown)
+                    .await
+            }
+        });
+        let first_live_tick = next_sleep(&mut sleeps).await;
+        assert_eq!(first_live_tick.minute(), 6);
+        for minute in [2, 4] {
+            let event = observations.try_recv().unwrap();
+            assert_eq!(event.scheduled_at.with_timezone(&Local).minute(), minute);
+            assert_eq!(event.entries.len(), 1);
+            let entry = &event.entries[0];
+            assert_eq!(entry.crontab.identifier(), "even");
+            assert_eq!(entry.known_since, known_since);
+            assert_eq!(entry.last_execution.unwrap(), last_execution);
+        }
+        assert!(observations.try_recv().is_err());
+
+        clock.clock.set_time(first_live_tick);
+        let second_live_tick = next_sleep(&mut sleeps).await;
+        clock.clock.set_time(second_live_tick);
+        next_sleep(&mut sleeps).await;
+
+        let mut outcomes: Vec<_> = db.get_jobs().await.into_iter().map(|job| (
+            job.run_at.with_timezone(&Local).minute(),
+            job.payload["_cron"]["backfilled"].as_bool().unwrap(),
+        )).collect();
+        outcomes.sort_unstable();
+        assert_eq!(outcomes, [(2, true), (4, true), (6, false), (7, false)]);
+        stop_runner(handle, notify).await;
+    }).await;
+}
+
+#[tokio::test]
+async fn a_panicking_matcher_does_not_block_healthy_entries_without_fill() {
+    use graphile_worker_crontab_runner::CronMatcher;
+
+    with_test_db(|db| async move {
+        db.worker_utils().migrate().await.unwrap();
+        let (clock, mut sleeps) = ObservedClock::new();
+        let crontabs = parse_crontab("* * * * * first\n* * * * * broken ?fill=2m\n* * * * * last").unwrap();
+        query("insert into graphile_worker._private_known_crontabs (identifier, known_since) values ('broken', $1)")
+            .bind(clock.now() - Duration::minutes(1))
+            .execute(&db.test_pool).await.unwrap();
+        let predicate: CronMatcher = Arc::new(|_| panic!("injected matcher panic"));
+        let matchers = [(1, predicate)].into();
+        let (shutdown, notify) = create_shutdown_signal();
+        let handle = spawn_local({
+            let database = db.database.clone();
+            let clock = clock.clone();
+            async move {
+                CronRunner::new(&database, "graphile_worker", &crontabs, &HookRegistry::default())
+                    .with_matchers(&matchers)
+                    .with_clock(clock)
+                    .run(shutdown)
+                    .await
+            }
+        });
+
+        let first_tick = next_sleep(&mut sleeps).await;
+        clock.clock.set_time(first_tick);
+        let second_tick = next_sleep(&mut sleeps).await;
+        assert_eq!(second_tick, first_tick + Duration::minutes(1));
+        clock.clock.set_time(second_tick);
+        assert_eq!(next_sleep(&mut sleeps).await, second_tick + Duration::minutes(1));
+
+        let mut jobs: Vec<_> = db.get_jobs().await.into_iter()
+            .map(|job| (job.run_at, job.task_identifier))
+            .collect();
+        jobs.sort_unstable();
+        assert_eq!(jobs, [
+            (first_tick.with_timezone(&chrono::Utc), "first".into()),
+            (first_tick.with_timezone(&chrono::Utc), "last".into()),
+            (second_tick.with_timezone(&chrono::Utc), "first".into()),
+            (second_tick.with_timezone(&chrono::Utc), "last".into()),
+        ]);
+        stop_runner(handle, notify).await;
+    }).await;
+}
