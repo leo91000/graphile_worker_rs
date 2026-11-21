@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.9](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_lifecycle_hooks-v0.3.8...graphile_worker_lifecycle_hooks-v0.3.9) - 2026-11-21
+
+### Added
+
+- port historical migration and cron behavior ([#585](https://github.com/leo91000/graphile_worker_rs/pull/585))
+
 ## [0.3.8](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_lifecycle_hooks-v0.3.7...graphile_worker_lifecycle_hooks-v0.3.8) - 2026-11-10
 
 ### Other
