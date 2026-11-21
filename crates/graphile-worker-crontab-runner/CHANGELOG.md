@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.15](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.7.14...graphile_worker_crontab_runner-v0.7.15) - 2026-11-21
+
+### Added
+
+- port historical migration and cron behavior ([#585](https://github.com/leo91000/graphile_worker_rs/pull/585))
+
 ## [0.7.14](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_runner-v0.7.13...graphile_worker_crontab_runner-v0.7.14) - 2026-11-10
 
 ### Other

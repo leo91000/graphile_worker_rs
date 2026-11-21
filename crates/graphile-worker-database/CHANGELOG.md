@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_database-v0.2.0...graphile_worker_database-v0.2.1) - 2026-11-21
+
+### Added
+
+- port historical migration and cron behavior ([#585](https://github.com/leo91000/graphile_worker_rs/pull/585))
+
 ## [0.2.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_database-v0.1.8...graphile_worker_database-v0.2.0) - 2026-11-10
 
 ### Added

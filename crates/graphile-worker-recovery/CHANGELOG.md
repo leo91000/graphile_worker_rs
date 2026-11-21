@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_recovery-v0.1.7...graphile_worker_recovery-v0.1.8) - 2026-11-21
+
+### Other
+
+- updated the following local packages: graphile_worker_database, graphile_worker_lifecycle_hooks, graphile_worker_queries
+
 ## [0.1.7](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_recovery-v0.1.6...graphile_worker_recovery-v0.1.7) - 2026-11-10
 
 ### Other
