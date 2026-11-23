@@ -159,9 +159,9 @@ mod tests {
 
     #[test]
     fn sunday_zero_matches_in_single_values_and_ranges() {
-        let sunday = "2026-11-22T00:00:00".parse().unwrap();
-        let monday = "2026-11-23T00:00:00".parse().unwrap();
-        let saturday = "2026-11-21T00:00:00".parse().unwrap();
+        let sunday = time::macros::datetime!(2026-11-22 00:00);
+        let monday = time::macros::datetime!(2026-11-23 00:00);
+        let saturday = time::macros::datetime!(2026-11-21 00:00);
         for (text, matches_monday) in [("0", false), ("7", false), ("0-2", true)] {
             let text = format!("0 0 * * {text} job");
             let cron = &parse_crontab(&text).unwrap()[0];

@@ -21,7 +21,7 @@ async fn orphan_lock_is_recovered_after_threshold() {
         .expect("failed to create orphan lock");
 
         let sweep_utils = WorkerUtils::new(test_db.database.clone(), graphile_worker::Schema::default());
-        let before_sweep = chrono::Utc::now();
+        let before_sweep = time::OffsetDateTime::now_utc();
         let result = sweep_utils
             .sweep_stale_workers(SweepStaleWorkersOptions {
                 sweep_threshold: Some(Duration::from_secs(60)),
@@ -42,7 +42,7 @@ async fn orphan_lock_is_recovered_after_threshold() {
         assert!(recovered.locked_by.is_none());
         assert_eq!(recovered.attempts, 0);
         assert!(
-            recovered.run_at >= before_sweep + chrono::Duration::milliseconds(500),
+            recovered.run_at >= before_sweep + time::Duration::milliseconds(500),
             "subsecond recovery delay should not be truncated"
         );
     })

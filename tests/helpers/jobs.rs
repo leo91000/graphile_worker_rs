@@ -1,5 +1,5 @@
-use chrono::Utc;
 use graphile_worker::{Job, JobSpec};
+use time::OffsetDateTime;
 
 use super::db::TestDatabase;
 use super::sql::db_job_from_sqlx_row;
@@ -17,7 +17,7 @@ impl TestDatabase {
     pub async fn make_selection_of_jobs(&self) -> SelectionOfJobs {
         let utils = self.worker_utils();
 
-        let in_one_hour = Utc::now() + chrono::Duration::hours(1);
+        let in_one_hour = OffsetDateTime::now_utc() + time::Duration::hours(1);
         let failed_job = utils
             .add_raw_job(
                 "job3",

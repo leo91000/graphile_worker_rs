@@ -1,11 +1,11 @@
 use std::str::FromStr;
 
-use chrono::{offset::Utc, Duration};
 use graphile_worker::{IntoTaskHandlerResult, JobSpecBuilder, WorkerContext, WorkerOptions};
 use graphile_worker_task_handler::TaskHandler;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgConnectOptions;
+use time::{Duration, OffsetDateTime};
 use tracing_subscriber::{
     filter::EnvFilter, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt,
 };
@@ -69,7 +69,7 @@ async fn main() {
                 message: "world".to_string(),
             },
             JobSpecBuilder::new()
-                .run_at(Utc::now() + Duration::seconds(10))
+                .run_at(OffsetDateTime::now_utc() + Duration::seconds(10))
                 .build(),
         )
         .await

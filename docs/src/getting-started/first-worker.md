@@ -124,7 +124,7 @@ helpers
 To schedule a job for later, build a `JobSpec` with `JobSpecBuilder`.
 
 ```rust,ignore
-use chrono::{Duration, Utc};
+use time::{Duration, OffsetDateTime};
 use graphile_worker::JobSpecBuilder;
 
 helpers
@@ -133,7 +133,7 @@ helpers
             message: "world".to_string(),
         },
         JobSpecBuilder::new()
-            .run_at(Utc::now() + Duration::seconds(10))
+            .run_at(OffsetDateTime::now_utc() + Duration::seconds(10))
             .build(),
     )
     .await?;

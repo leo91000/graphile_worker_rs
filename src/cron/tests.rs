@@ -1,9 +1,9 @@
-use chrono::Weekday;
 use graphile_worker_crontab_types::{Crontab, CrontabFill, CrontabTimer, CrontabValue, JobKeyMode};
 use graphile_worker_ctx::WorkerContext;
 use graphile_worker_task_handler::{IntoTaskHandlerResult, TaskHandler};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use time::Weekday;
 
 use super::Cron;
 
@@ -73,12 +73,12 @@ fn cron_convenience_constructors_build_expected_timers() {
     let daily = Cron::daily_at::<SendDigest>(8, 30).unwrap().build();
     assert_eq!(daily.timer(), &CrontabTimer::daily_at(8, 30).unwrap());
 
-    let weekly = Cron::weekly_on::<SendDigest>(Weekday::Mon, 8, 30)
+    let weekly = Cron::weekly_on::<SendDigest>(Weekday::Monday, 8, 30)
         .unwrap()
         .build();
     assert_eq!(
         weekly.timer(),
-        &CrontabTimer::weekly_on(Weekday::Mon, 8, 30).unwrap()
+        &CrontabTimer::weekly_on(Weekday::Monday, 8, 30).unwrap()
     );
 
     let monthly = Cron::monthly_on::<SendDigest>(1, 8, 30).unwrap().build();

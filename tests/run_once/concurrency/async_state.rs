@@ -33,7 +33,7 @@ async fn runs_jobs_asynchronously() {
             .await
             .expect("Failed to create worker");
 
-        let start = Utc::now();
+        let start = OffsetDateTime::now_utc();
         worker
             .create_utils()
             .add_job(
@@ -70,8 +70,8 @@ async fn runs_jobs_asynchronously() {
         let job = &jobs[0];
         assert_eq!(job.task_identifier, "job3");
         assert_eq!(job.payload, serde_json::json!({ "a": 1 }));
-        let now = Utc::now();
-        let start_diff_ms = (job.run_at.timestamp_millis() - start.timestamp_millis()).abs();
+        let now = OffsetDateTime::now_utc();
+        let start_diff_ms = (job.run_at - start).whole_milliseconds().abs();
         assert!(
             (job.run_at >= start || start_diff_ms <= 50) && job.run_at <= now,
             "Job run_at should be within expected range (>= start or within 50ms tolerance, and <= now). Diff from start: {}ms",
@@ -89,9 +89,9 @@ async fn runs_jobs_asynchronously() {
         assert_eq!(q.job_count, 1);
         assert!(q.locked_at.is_some(), "The job should be locked");
         let locked_at = q.locked_at.unwrap();
-        let lock_start_diff_ms = (locked_at.timestamp_millis() - start.timestamp_millis()).abs();
+        let lock_start_diff_ms = (locked_at - start).whole_milliseconds().abs();
         assert!(
-            (locked_at >= start || lock_start_diff_ms <= 50) && locked_at <= Utc::now(),
+            (locked_at >= start || lock_start_diff_ms <= 50) && locked_at <= OffsetDateTime::now_utc(),
             "The lock time should be within expected range (>= start or within 50ms tolerance, and <= now). Diff from start: {}ms",
             lock_start_diff_ms
         );

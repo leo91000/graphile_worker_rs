@@ -1,6 +1,6 @@
-use chrono::{DateTime, Utc};
 use graphile_worker_database::{DbExecutorArg, DbParams, DbValue, Schema};
 use indoc::formatdoc;
+use time::OffsetDateTime;
 
 use crate::errors::Result;
 use crate::flag_filter::JobFlagFilter;
@@ -19,7 +19,7 @@ pub async fn get_job(
     schema: impl Into<Schema>,
     worker_id: &str,
     flags_to_skip: &[String],
-    now: Option<DateTime<Utc>>,
+    now: Option<OffsetDateTime>,
 ) -> Result<Option<Job>> {
     get_job_with_filter(
         executor,
@@ -44,7 +44,7 @@ pub async fn get_job_with_filter(
     schema: impl Into<Schema>,
     worker_id: &str,
     filter: JobFlagFilter<'_>,
-    now: Option<DateTime<Utc>>,
+    now: Option<OffsetDateTime>,
 ) -> Result<Option<Job>> {
     let schema = schema.into();
     let has_now = now.is_some();

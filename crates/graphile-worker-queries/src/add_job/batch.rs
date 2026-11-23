@@ -1,8 +1,8 @@
-use chrono::{DateTime, Utc};
 use graphile_worker_database::{DbExecutorArg, DbValue, Schema};
 use graphile_worker_job::Job;
 use graphile_worker_job_spec::JobKeyMode;
 use indoc::formatdoc;
+use time::OffsetDateTime;
 use tracing::{info, Span};
 
 use crate::errors::GraphileWorkerError;
@@ -19,7 +19,8 @@ struct DbJobSpec {
     identifier: String,
     payload: serde_json::Value,
     queue_name: Option<String>,
-    run_at: Option<DateTime<Utc>>,
+    #[serde(with = "time::serde::rfc3339::option")]
+    run_at: Option<OffsetDateTime>,
     max_attempts: Option<i16>,
     job_key: Option<String>,
     priority: Option<i16>,
@@ -31,7 +32,8 @@ struct BorrowedDbJobSpec<'a> {
     identifier: &'a str,
     payload: &'a serde_json::Value,
     queue_name: Option<&'a str>,
-    run_at: Option<DateTime<Utc>>,
+    #[serde(with = "time::serde::rfc3339::option")]
+    run_at: Option<OffsetDateTime>,
     max_attempts: Option<i16>,
     job_key: Option<&'a str>,
     priority: Option<i16>,
@@ -73,7 +75,7 @@ pub async fn add_jobs<'a>(
     }
 
     let schema = schema.into();
-    let default_run_at = use_local_time.then(Utc::now);
+    let default_run_at = use_local_time.then(OffsetDateTime::now_utc);
     let sql = add_jobs_sql(&schema);
 
     let trace_info = telemetry::current_trace_info();
@@ -131,7 +133,7 @@ fn single_batch_identifier<'a>(jobs: &[JobToAdd<'a>]) -> Option<&'a str> {
 
 fn build_batch_specs_json<'a>(
     jobs: &[JobToAdd<'a>],
-    default_run_at: Option<DateTime<Utc>>,
+    default_run_at: Option<OffsetDateTime>,
     trace_info: Option<&TraceInfo>,
 ) -> serde_json::Result<serde_json::Value> {
     if trace_info.is_none() && jobs.len() >= BORROWED_BATCH_SERIALIZATION_THRESHOLD {
@@ -163,7 +165,7 @@ fn build_batch_specs_json<'a>(
 
 fn build_borrowed_batch_specs_json<'a>(
     jobs: &[JobToAdd<'a>],
-    default_run_at: Option<DateTime<Utc>>,
+    default_run_at: Option<OffsetDateTime>,
 ) -> serde_json::Result<serde_json::Value> {
     let db_specs: Vec<BorrowedDbJobSpec<'_>> = jobs
         .iter()

@@ -1,6 +1,5 @@
 #![cfg(feature = "driver-sqlx")]
 
-use chrono::Utc;
 use graphile_worker::sql::add_job::batch::add_jobs;
 use graphile_worker::sql::add_job::single::add_job;
 use graphile_worker::sql::add_job::types::JobToAdd;
@@ -10,6 +9,7 @@ use graphile_worker::sql::get_job::get_job;
 use graphile_worker::sql::task_identifiers::get_tasks_details;
 use graphile_worker::{DbExecutorArg, DbParams, DbValue, JobKeyMode, JobSpec, JobSpecBuilder};
 use serde_json::json;
+use time::OffsetDateTime;
 
 use helpers::sql::safe_query_scalar;
 use helpers::with_test_db;

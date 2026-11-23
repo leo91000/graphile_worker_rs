@@ -2,9 +2,9 @@ mod hooks;
 
 use std::sync::Arc;
 
-use chrono::Utc;
 use graphile_worker_job::Job;
 use graphile_worker_lifecycle_hooks::JobFetchContext;
+use time::OffsetDateTime;
 use tracing::{error, trace};
 
 use self::hooks::run_job_with_hooks;
@@ -35,7 +35,7 @@ pub(super) async fn process_one_job(
     worker: &WorkerRunner,
     source: JobSignalSource,
 ) -> Result<Option<Job>, ProcessJobError> {
-    let now = worker.use_local_time.then(Utc::now);
+    let now = worker.use_local_time.then(OffsetDateTime::now_utc);
     let task_details_guard = worker.task_details.read().await;
     let job = get_job_with_filter(
         &worker.database,

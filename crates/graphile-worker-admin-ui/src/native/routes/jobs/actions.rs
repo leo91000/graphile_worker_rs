@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use axum::extract::State;
 use axum::Json;
-use chrono::Utc;
 use graphile_worker::worker_utils::types::RescheduleJobOptions;
 use graphile_worker::DbJob;
 use graphile_worker_admin_api::queries::jobs::tasks::task_identifiers_by_id;
+use time::OffsetDateTime;
 
 use super::super::super::error::ApiError;
 use super::super::super::state::AppState;
@@ -52,7 +52,7 @@ pub(crate) async fn job_action(
                 .reschedule_jobs(
                     &request.ids,
                     RescheduleJobOptions {
-                        run_at: Some(Utc::now()),
+                        run_at: Some(OffsetDateTime::now_utc()),
                         priority: request.priority,
                         attempts: request.attempts,
                         max_attempts: request.max_attempts,

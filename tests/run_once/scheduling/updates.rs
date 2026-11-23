@@ -26,9 +26,9 @@ async fn it_shoud_allow_update_of_pending_jobs() {
             .expect("Failed to create worker");
 
         // Rust is more precise than postgres, so we need to remove the nanoseconds
-        let run_at = Utc::now()
-            .add(chrono::Duration::seconds(60))
-            .with_nanosecond(0)
+        let run_at = OffsetDateTime::now_utc()
+            .add(time::Duration::seconds(60))
+            .replace_nanosecond(0)
             .unwrap();
         let utils = worker.create_utils();
         // Schedule a future job - note incorrect payload
@@ -56,7 +56,7 @@ async fn it_shoud_allow_update_of_pending_jobs() {
         assert_eq!(JOB3_CALL_COUNT.get().await, 0);
 
         // update the job to run immediately with correct payload
-        let now = Utc::now().with_nanosecond(0).unwrap();
+        let now = OffsetDateTime::now_utc().replace_nanosecond(0).unwrap();
         utils
             .add_raw_job(
                 "job3",
@@ -108,9 +108,9 @@ async fn job_details_are_reset_if_not_specified_in_update() {
             .await
             .expect("Failed to create worker");
 
-        let run_at = Utc::now()
+        let run_at = OffsetDateTime::now_utc()
             .add(Duration::seconds(3))
-            .with_nanosecond(0)
+            .replace_nanosecond(0)
             .unwrap();
 
         // Schedule a future job
@@ -166,9 +166,9 @@ async fn job_details_are_reset_if_not_specified_in_update() {
         assert_ne!(updated_job.run_at, run_at); // `run_at` should revert to the default (current time)
 
         // Update job with new details
-        let run_at2 = Utc::now()
+        let run_at2 = OffsetDateTime::now_utc()
             .add(Duration::seconds(5))
-            .with_nanosecond(0)
+            .replace_nanosecond(0)
             .unwrap();
 
         worker

@@ -1,6 +1,6 @@
-use chrono::{TimeZone, Utc};
 use graphile_worker::{IntoTaskHandlerResult, JobKeyMode, JobSpec, TaskHandler, WorkerContext};
 use serde::{Deserialize, Serialize};
+use time::macros::datetime;
 
 use crate::helpers::{with_test_db, StaticCounter};
 
@@ -29,10 +29,10 @@ async fn supports_the_job_key_api_with_job_key_mode() {
             .await
             .expect("Failed to create worker");
 
-        let run_at1 = Utc.with_ymd_and_hms(2200, 1, 1, 0, 0, 0).unwrap();
-        let run_at2 = Utc.with_ymd_and_hms(2201, 1, 1, 0, 0, 0).unwrap();
-        let run_at3 = Utc.with_ymd_and_hms(2202, 1, 1, 0, 0, 0).unwrap();
-        let run_at4 = Utc.with_ymd_and_hms(2203, 1, 1, 0, 0, 0).unwrap();
+        let run_at1 = datetime!(2200-01-01 00:00 UTC);
+        let run_at2 = datetime!(2201-01-01 00:00 UTC);
+        let run_at3 = datetime!(2202-01-01 00:00 UTC);
+        let run_at4 = datetime!(2203-01-01 00:00 UTC);
 
         let j1 = worker
             .create_utils()

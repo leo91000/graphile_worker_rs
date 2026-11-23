@@ -9,11 +9,10 @@ async fn backfills_if_identifier_already_registered_5h_ago() {
             .await
             .expect("Failed to migrate");
 
-        let now = Local::now();
+        let now = OffsetDateTime::now_utc().unix_timestamp();
         let four_hours = Duration::hours(4);
-        let expected_time = now
-            .duration_trunc(four_hours)
-            .expect("Failed to truncate time");
+        let boundary = now - now.rem_euclid(four_hours.whole_seconds());
+        let expected_time = OffsetDateTime::from_unix_timestamp(boundary).unwrap();
 
         query(
             r#"
@@ -60,7 +59,7 @@ async fn backfills_if_identifier_already_registered_5h_ago() {
             assert_eq!(known_crontabs.len(), 1);
             let known_crontab = &known_crontabs[0];
             assert_eq!(known_crontab.identifier(), "do_it");
-            assert!(known_crontab.known_since() < &chrono::Utc::now());
+            assert!(known_crontab.known_since() < &time::OffsetDateTime::now_utc());
             assert!(known_crontab.last_execution().is_some());
 
             let last_execution = known_crontab.last_execution().unwrap();
@@ -108,11 +107,10 @@ async fn backfills_if_identifier_already_registered_25h_ago() {
             .await
             .expect("Failed to migrate");
 
-        let now = Local::now();
+        let now = OffsetDateTime::now_utc().unix_timestamp();
         let four_hours = Duration::hours(4);
-        let expected_time = now
-            .duration_trunc(four_hours)
-            .expect("Failed to truncate time");
+        let boundary = now - now.rem_euclid(four_hours.whole_seconds());
+        let expected_time = OffsetDateTime::from_unix_timestamp(boundary).unwrap();
 
         query(
             r#"
@@ -159,7 +157,7 @@ async fn backfills_if_identifier_already_registered_25h_ago() {
             assert_eq!(known_crontabs.len(), 1);
             let known_crontab = &known_crontabs[0];
             assert_eq!(known_crontab.identifier(), "do_it");
-            assert!(known_crontab.known_since() < &chrono::Utc::now());
+            assert!(known_crontab.known_since() < &time::OffsetDateTime::now_utc());
             assert!(known_crontab.last_execution().is_some());
 
             let last_execution = known_crontab.last_execution().unwrap();

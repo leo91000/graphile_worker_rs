@@ -1,4 +1,4 @@
-use chrono::Utc;
+use time::OffsetDateTime;
 
 use super::super::types::{JobState, ListedJob};
 
@@ -9,7 +9,7 @@ pub(super) fn job_state(job: &ListedJob) -> JobState {
     if job.attempts >= job.max_attempts {
         return JobState::Failed;
     }
-    if job.run_at > Utc::now() {
+    if job.run_at > OffsetDateTime::now_utc() {
         return JobState::Scheduled;
     }
     JobState::Ready

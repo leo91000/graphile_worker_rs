@@ -56,7 +56,7 @@ async fn runs_jobs_in_parallel() {
                 .expect("Failed to add job");
         }
 
-        let start = Utc::now();
+        let start = OffsetDateTime::now_utc();
 
         let mut handles = vec![];
         let worker_clone = worker.clone();
@@ -86,13 +86,16 @@ async fn runs_jobs_in_parallel() {
             assert_eq!(q.job_count, 1, "Each queue should have one job");
 
             let locked_at = q.locked_at.unwrap();
-            let start_diff_ms = (locked_at.timestamp_millis() - start.timestamp_millis()).abs();
+            let start_diff_ms = (locked_at - start).whole_milliseconds().abs();
             assert!(
                 locked_at >= start || start_diff_ms <= 50,
                 "locked_at should be >= start or within 50ms tolerance, diff: {}ms",
                 start_diff_ms
             );
-            assert!(locked_at <= Utc::now(), "locked_at should be <= now");
+            assert!(
+                locked_at <= OffsetDateTime::now_utc(),
+                "locked_at should be <= now"
+            );
         }
 
         for tx in txs {

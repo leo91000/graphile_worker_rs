@@ -96,11 +96,11 @@ helpers
 ```
 
 For scheduled jobs, set `run_at` on the job spec before building it. This
-example uses `chrono`; add it to your application if you schedule from Rust
+example uses `time`; add `time = "0.3"` to your dependencies if you schedule from Rust
 timestamps:
 
 ```rust,ignore
-use chrono::{Duration, offset::Utc};
+use time::{Duration, OffsetDateTime};
 use graphile_worker::JobSpecBuilder;
 
 helpers
@@ -111,7 +111,7 @@ helpers
             body: "Thanks for signing up.".to_string(),
         },
         JobSpecBuilder::new()
-            .run_at(Utc::now() + Duration::seconds(10))
+            .run_at(OffsetDateTime::now_utc() + Duration::seconds(10))
             .build(),
     )
     .await?;

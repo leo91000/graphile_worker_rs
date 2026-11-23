@@ -59,7 +59,7 @@ Cron::every_minute::<MyTask>()
 Cron::every_n_minutes::<MyTask>(5)?
 Cron::hourly_at::<MyTask>(15)?
 Cron::daily_at::<MyTask>(8, 0)?
-Cron::weekly_on::<MyTask>(chrono::Weekday::Mon, 8, 0)?
+Cron::weekly_on::<MyTask>(time::Weekday::Monday, 8, 0)?
 Cron::monthly_on::<MyTask>(1, 8, 0)?
 Cron::yearly_on::<MyTask>(1, 1, 8, 0)?
 ```
@@ -180,14 +180,14 @@ If a matcher panics, the worker logs the affected entry and continues
 evaluating other entries for that minute.
 
 ```rust,ignore
-use chrono::{Datelike, Timelike, Weekday};
+use time::Weekday;
 use graphile_worker::{Cron, WorkerOptions};
 
 let options = WorkerOptions::default()
     .define_job::<SendDigest>()
     .with_cron_matcher(Cron::every_minute::<SendDigest>().id("workdays"), |at| {
         at.hour() == 8 && at.minute() == 0
-            && !matches!(at.weekday(), Weekday::Sat | Weekday::Sun)
+            && !matches!(at.weekday(), Weekday::Saturday | Weekday::Sunday)
     });
 ```
 
@@ -226,7 +226,7 @@ Rust preserves non-object payloads so typed cron tasks can deserialize them.
 ```json
 {
   "_cron": {
-    "ts": "2026-06-16T08:00:00",
+    "ts": "2026-06-16T08:00:00Z",
     "backfilled": false
   }
 }

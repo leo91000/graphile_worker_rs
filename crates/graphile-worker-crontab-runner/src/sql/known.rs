@@ -1,22 +1,22 @@
-use chrono::prelude::*;
 use getset::Getters;
 use graphile_worker_database::{DbError, DbExecutorArg, DbParams, DbValue, Schema};
 use indoc::formatdoc;
+use time::OffsetDateTime;
 
 #[cfg_attr(feature = "driver-sqlx", derive(sqlx::FromRow))]
 #[derive(Debug, Getters)]
 #[getset(get = "pub")]
 pub struct KnownCrontab {
     identifier: String,
-    known_since: DateTime<Local>,
-    last_execution: Option<DateTime<Local>>,
+    known_since: OffsetDateTime,
+    last_execution: Option<OffsetDateTime>,
 }
 
 impl KnownCrontab {
     pub fn new(
         identifier: String,
-        known_since: DateTime<Local>,
-        last_execution: Option<DateTime<Local>>,
+        known_since: OffsetDateTime,
+        last_execution: Option<OffsetDateTime>,
     ) -> Self {
         Self {
             identifier,
@@ -52,15 +52,12 @@ pub(crate) async fn get_known_crontabs(
     Ok(known_crontabs)
 }
 
-pub(crate) async fn insert_unknown_crontabs<Tz: TimeZone, S: AsRef<str>>(
+pub(crate) async fn insert_unknown_crontabs<S: AsRef<str>>(
     mut executor: impl DbExecutorArg,
     schema: &Schema,
     unknown_identifiers: &[S],
-    start_time: &DateTime<Tz>,
-) -> Result<(), DbError>
-where
-    Tz::Offset: Send + Sync,
-{
+    start_time: OffsetDateTime,
+) -> Result<(), DbError> {
     let known_crontabs = schema.private_table("known_crontabs");
     let sql = formatdoc!(
         r#"
@@ -81,7 +78,7 @@ where
             &sql,
             vec![
                 DbValue::TextArray(unknown_identifiers),
-                DbValue::TimestampTz(start_time.with_timezone(&Utc)),
+                DbValue::TimestampTz(start_time),
             ]
             .into(),
         )

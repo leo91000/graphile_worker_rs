@@ -84,12 +84,14 @@ task. `SendWs` represents an initial operation, then schedules a `CheckWs`
 follow-up job from inside `run`:
 
 ```rust,ignore
+use time::{Duration, OffsetDateTime};
+
 ctx.add_job(
     CheckWs {
         request_id: self.request_id.clone(),
     },
     JobSpecBuilder::new()
-        .run_at(Utc::now() + Duration::seconds(10))
+        .run_at(OffsetDateTime::now_utc() + Duration::seconds(10))
         .build(),
 )
 .await?;
@@ -304,8 +306,8 @@ This file schedules jobs from HTTP routes.
 ```rust,ignore
 let job_spec = JobSpecBuilder::new()
     .priority(-10)
-    .run_at(chrono::Utc::now() + chrono::Duration::seconds(10))
-    .job_key(format!("db_task_{}", chrono::Utc::now().timestamp()))
+    .run_at(time::OffsetDateTime::now_utc() + time::Duration::seconds(10))
+    .job_key(format!("db_task_{}", time::OffsetDateTime::now_utc().unix_timestamp()))
     .build();
 ```
 

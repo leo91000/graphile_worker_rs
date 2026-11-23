@@ -1,5 +1,5 @@
-use chrono::Utc;
 use graphile_worker_database::{DbExecutorArg, Schema};
+use time::OffsetDateTime;
 
 use graphile_worker_queries::errors::GraphileWorkerError;
 use graphile_worker_queries::worker_heartbeat::stale::{
@@ -60,9 +60,7 @@ async fn should_recover_worker(
     };
 
     let threshold = config.effective_sweep_threshold(true);
-    let elapsed = Utc::now()
-        .signed_duration_since(last_heartbeat)
-        .to_std()
+    let elapsed = std::time::Duration::try_from(OffsetDateTime::now_utc() - last_heartbeat)
         .unwrap_or_default();
 
     Ok(elapsed >= threshold)

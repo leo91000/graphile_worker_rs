@@ -6,11 +6,11 @@ pub use entries::CronMatcher;
 
 use std::{cmp::Ordering, collections::HashMap, convert::Infallible};
 
-use chrono::prelude::*;
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_database::{DbExecutorArg, Schema};
 use graphile_worker_lifecycle_hooks::HookRegistry;
 use graphile_worker_shutdown_signal::ShutdownSignal;
+use time::{Duration, OffsetDateTime};
 use tracing::{debug, error, warn};
 
 use crate::backfill::register_and_backfill_items;
@@ -20,8 +20,8 @@ use crate::utils::{round_date_minute, yield_now, ONE_MINUTE};
 
 use self::schedule::emit_tick_and_schedule_jobs;
 
-const MIN_RETRY_DELAY: chrono::Duration = chrono::Duration::milliseconds(200);
-const MAX_RETRY_DELAY: chrono::Duration = chrono::Duration::seconds(60);
+const MIN_RETRY_DELAY: Duration = Duration::milliseconds(200);
+const MAX_RETRY_DELAY: Duration = Duration::seconds(60);
 
 pub async fn cron_main(
     executor: impl DbExecutorArg,
@@ -107,17 +107,17 @@ impl<'a, E: DbExecutorArg, C: Clock> CronRunner<'a, E, C> {
             let error = self.run_until_error(&mut retry_delay).await.unwrap_err();
             error!(
                 error = %error,
-                retry_delay_ms = retry_delay.num_milliseconds(),
+                retry_delay_ms = retry_delay.whole_milliseconds(),
                 "Cron failed; retrying registration and backfill"
             );
             self.clock.sleep_until(self.clock.now() + retry_delay).await;
-            retry_delay = (retry_delay + retry_delay / 2).min(MAX_RETRY_DELAY);
+            retry_delay = (retry_delay + retry_delay / 2i32).min(MAX_RETRY_DELAY);
         }
     }
 
     async fn run_until_error(
         &mut self,
-        retry_delay: &mut chrono::Duration,
+        retry_delay: &mut Duration,
     ) -> Result<Infallible, ScheduleCronJobError> {
         let start = self.clock.now();
         debug!(start = ?start, "cron:starting");
@@ -126,7 +126,8 @@ impl<'a, E: DbExecutorArg, C: Clock> CronRunner<'a, E, C> {
             &mut self.executor,
             &self.schema,
             self.entries,
-            &start,
+            start,
+            &self.clock,
             self.use_local_time,
             self.hooks,
         )
@@ -142,19 +143,19 @@ impl<'a, E: DbExecutorArg, C: Clock> CronRunner<'a, E, C> {
             let current_ts = round_date_minute(self.clock.now(), false);
             let ts_delta = current_ts - ts;
 
-            match ts_delta.num_minutes().cmp(&0) {
+            match ts_delta.whole_minutes().cmp(&0) {
                 Ordering::Less => {
                     warn!(
                         "Cron fired {}s too early (clock skew?); rescheduling",
-                        -ts_delta.num_seconds()
+                        -ts_delta.whole_seconds()
                     );
                     continue;
                 }
                 Ordering::Greater => {
                     warn!(
                         "Cron fired too late; catching up {}m{}s behind",
-                        ts_delta.num_minutes(),
-                        ts_delta.num_seconds() % 60
+                        ts_delta.whole_minutes(),
+                        ts_delta.whole_seconds() % 60
                     );
                 }
                 _ => {}
@@ -162,13 +163,13 @@ impl<'a, E: DbExecutorArg, C: Clock> CronRunner<'a, E, C> {
 
             self.emit_tick_and_schedule_jobs(ts).await?;
             *retry_delay = MIN_RETRY_DELAY;
-            ts += *ONE_MINUTE;
+            ts += ONE_MINUTE;
         }
     }
 
     async fn emit_tick_and_schedule_jobs(
         &mut self,
-        ts: DateTime<Local>,
+        ts: OffsetDateTime,
     ) -> Result<(), ScheduleCronJobError> {
         emit_tick_and_schedule_jobs(
             &mut self.executor,
@@ -176,7 +177,7 @@ impl<'a, E: DbExecutorArg, C: Clock> CronRunner<'a, E, C> {
             self.entries,
             self.use_local_time,
             self.hooks,
-            ts,
+            self.clock.local_time(ts),
         )
         .await
     }

@@ -1,5 +1,5 @@
-use chrono::{DateTime, Utc};
 use serde_json::Value;
+use time::OffsetDateTime;
 
 #[derive(Clone, Debug)]
 pub enum DbValue {
@@ -19,6 +19,6 @@ pub enum DbValue {
     TextArrayOpt(Option<Vec<String>>),
     I32Array(Vec<i32>),
     I64Array(Vec<i64>),
-    TimestampTz(DateTime<Utc>),
-    TimestampTzOpt(Option<DateTime<Utc>>),
+    TimestampTz(OffsetDateTime),
+    TimestampTzOpt(Option<OffsetDateTime>),
 }

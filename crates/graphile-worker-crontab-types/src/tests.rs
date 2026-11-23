@@ -1,9 +1,9 @@
 use super::*;
 use anyhow::Result;
-use chrono::Weekday;
+use time::{macros::datetime, Weekday};
 
 #[test]
-fn crontab_timer_should_run_at() -> Result<()> {
+fn crontab_timer_should_run_at() {
     let crontab_timer = CrontabTimer {
         minutes: vec![CrontabValue::Number(30)],
         hours: vec![CrontabValue::Range(8, 10)],
@@ -11,16 +11,14 @@ fn crontab_timer_should_run_at() -> Result<()> {
         ..Default::default()
     };
 
-    assert!(crontab_timer.should_run_at(&"2012-12-17T08:30:12".parse()?));
-    assert!(crontab_timer.should_run_at(&"2015-02-05T09:30:00".parse()?));
-    assert!(crontab_timer.should_run_at(&"1998-10-13T10:30:59".parse()?));
+    assert!(crontab_timer.should_run_at(&datetime!(2012-12-17 08:30:12)));
+    assert!(crontab_timer.should_run_at(&datetime!(2015-02-05 09:30:00)));
+    assert!(crontab_timer.should_run_at(&datetime!(1998-10-13 10:30:59)));
 
-    assert!(!crontab_timer.should_run_at(&"2012-12-17T11:30:59".parse()?));
-    assert!(!crontab_timer.should_run_at(&"2015-02-05T09:31:00".parse()?));
-    assert!(!crontab_timer.should_run_at(&"2012-12-13T08:29:12".parse()?));
-    assert!(!crontab_timer.should_run_at(&"1998-10-04T10:30:59".parse()?));
-
-    Ok(())
+    assert!(!crontab_timer.should_run_at(&datetime!(2012-12-17 11:30:59)));
+    assert!(!crontab_timer.should_run_at(&datetime!(2015-02-05 09:31:00)));
+    assert!(!crontab_timer.should_run_at(&datetime!(2012-12-13 08:29:12)));
+    assert!(!crontab_timer.should_run_at(&datetime!(1998-10-04 10:30:59)));
 }
 
 #[test]
@@ -70,7 +68,7 @@ fn crontab_timer_constructors_build_expected_values() -> Result<()> {
     assert_eq!(daily.hours, vec![CrontabValue::Number(8)]);
     assert_eq!(daily.minutes, vec![CrontabValue::Number(30)]);
 
-    let weekly = CrontabTimer::weekly_on(Weekday::Mon, 8, 30)?;
+    let weekly = CrontabTimer::weekly_on(Weekday::Monday, 8, 30)?;
     assert_eq!(weekly.dows, vec![CrontabValue::Number(1)]);
 
     let monthly = CrontabTimer::monthly_on(15, 8, 30)?;
@@ -146,7 +144,7 @@ fn crontab_value_match_value() {
 }
 
 #[test]
-fn crontab_should_run_at() -> Result<()> {
+fn crontab_should_run_at() {
     let crontab = Crontab {
         timer: CrontabTimer {
             minutes: vec![CrontabValue::Number(30)],
@@ -157,14 +155,12 @@ fn crontab_should_run_at() -> Result<()> {
         task_identifier: "test".to_string(),
         ..Default::default()
     };
-    assert!(crontab.should_run_at(&"2012-12-17T08:30:12".parse()?));
-    assert!(crontab.should_run_at(&"2015-02-05T09:30:00".parse()?));
-    assert!(crontab.should_run_at(&"1998-10-13T10:30:59".parse()?));
+    assert!(crontab.should_run_at(&datetime!(2012-12-17 08:30:12)));
+    assert!(crontab.should_run_at(&datetime!(2015-02-05 09:30:00)));
+    assert!(crontab.should_run_at(&datetime!(1998-10-13 10:30:59)));
 
-    assert!(!crontab.should_run_at(&"2012-12-17T11:30:59".parse()?));
-    assert!(!crontab.should_run_at(&"2015-02-05T09:31:00".parse()?));
-    assert!(!crontab.should_run_at(&"2012-12-13T08:29:12".parse()?));
-    assert!(!crontab.should_run_at(&"1998-10-04T10:30:59".parse()?));
-
-    Ok(())
+    assert!(!crontab.should_run_at(&datetime!(2012-12-17 11:30:59)));
+    assert!(!crontab.should_run_at(&datetime!(2015-02-05 09:31:00)));
+    assert!(!crontab.should_run_at(&datetime!(2012-12-13 08:29:12)));
+    assert!(!crontab.should_run_at(&datetime!(1998-10-04 10:30:59)));
 }

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
 
 pub(crate) fn parse_duration(value: &str) -> std::result::Result<Duration, String> {
     let value = value.trim();
@@ -31,13 +31,13 @@ pub(crate) fn parse_duration(value: &str) -> std::result::Result<Duration, Strin
     Ok(Duration::from_secs(seconds))
 }
 
-pub(crate) fn parse_utc_datetime(value: &str) -> std::result::Result<DateTime<Utc>, String> {
+pub(crate) fn parse_utc_datetime(value: &str) -> std::result::Result<OffsetDateTime, String> {
     if value.eq_ignore_ascii_case("now") {
-        return Ok(Utc::now());
+        return Ok(OffsetDateTime::now_utc());
     }
 
-    DateTime::parse_from_rfc3339(value)
-        .map(|datetime| datetime.with_timezone(&Utc))
+    OffsetDateTime::parse(value, &Rfc3339)
+        .map(|datetime| datetime.to_offset(UtcOffset::UTC))
         .map_err(|error| error.to_string())
 }
 
@@ -50,14 +50,15 @@ mod tests {
         let parsed =
             parse_utc_datetime("2026-01-02T03:04:05+02:00").expect("datetime should parse");
 
-        assert_eq!(parsed.to_rfc3339(), "2026-01-02T01:04:05+00:00");
+        assert_eq!(parsed.offset(), UtcOffset::UTC);
+        assert_eq!(parsed.format(&Rfc3339).unwrap(), "2026-01-02T01:04:05Z");
     }
 
     #[test]
     fn parses_now_datetime() {
-        let before = Utc::now();
+        let before = OffsetDateTime::now_utc();
         let parsed = parse_utc_datetime("now").expect("now should parse");
-        let after = Utc::now();
+        let after = OffsetDateTime::now_utc();
 
         assert!(parsed >= before);
         assert!(parsed <= after);

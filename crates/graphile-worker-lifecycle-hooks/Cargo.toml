@@ -17,7 +17,7 @@ graphile_worker_extensions.workspace = true
 graphile_worker_crontab_types.workspace = true
 graphile_worker_job_spec.workspace = true
 graphile_worker_database.workspace = true
-chrono.workspace = true
+time.workspace = true
 serde_json.workspace = true
 sqlx = { workspace = true, optional = true }
 futures.workspace = true

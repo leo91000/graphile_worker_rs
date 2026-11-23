@@ -224,14 +224,14 @@ to `max_attempts`.
 Use `RescheduleJobOptions` to update only the fields you need:
 
 ```rust,ignore
-use chrono::Utc;
+use time::OffsetDateTime;
 use graphile_worker::worker_utils::types::RescheduleJobOptions;
 
 let rescheduled = utils
     .reschedule_jobs(
         &[104, 105],
         RescheduleJobOptions {
-            run_at: Some(Utc::now() + chrono::Duration::minutes(5)),
+            run_at: Some(OffsetDateTime::now_utc() + time::Duration::minutes(5)),
             priority: Some(10),
             attempts: Some(0),
             max_attempts: Some(25),

@@ -3,9 +3,9 @@ use std::sync::{
     Arc,
 };
 
-use chrono::Utc;
 use futures::StreamExt;
 use graphile_worker_runtime::Mutex;
+use time::OffsetDateTime;
 use tracing::{error, info};
 
 use super::errors::{ProcessJobError, ReleaseJobError};
@@ -103,7 +103,7 @@ impl Worker {
                                 break;
                             }
                             info!(job_id, "Job has queue, fetching another job");
-                            let now = runner.use_local_time.then(Utc::now);
+                            let now = runner.use_local_time.then(OffsetDateTime::now_utc);
                             let task_details_guard = runner.task_details.read().await;
                             if fetch_failed.load(Ordering::Acquire) {
                                 break;

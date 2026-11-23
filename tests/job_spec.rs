@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
-use chrono::Utc;
 use graphile_worker::{JobKeyMode, JobSpec, JobSpecBuilder};
+use time::OffsetDateTime;
 
 mod helpers;
 
@@ -10,7 +10,7 @@ async fn test_job_spec_builder() {
     // Test the JobSpecBuilder
     let job_spec = JobSpecBuilder::new()
         .queue_name("test_queue")
-        .run_at(Utc::now())
+        .run_at(OffsetDateTime::now_utc())
         .max_attempts(5)
         .job_key("test_key")
         .job_key_mode(JobKeyMode::PreserveRunAt)

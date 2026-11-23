@@ -4,10 +4,8 @@ pub(crate) fn database_url() -> String {
     std::env::var("DATABASE_URL").expect("DATABASE_URL must be set")
 }
 
-pub(crate) fn timestamp() -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 5, 9, 10, 11, 12)
-        .single()
-        .expect("valid timestamp")
+pub(crate) fn timestamp() -> OffsetDateTime {
+    datetime!(2026-05-09 10:11:12.123456 -04:00)
 }
 
 pub(crate) fn unique_channel(prefix: &str) -> String {

@@ -74,7 +74,7 @@ impl WorkerOptions {
 
     /// Sets whether to use local application time or database time for timestamps.
     ///
-    /// When `use_local_time` is true, the application's `Utc::now()` is used for timestamps,
+    /// When `use_local_time` is true, the application's `OffsetDateTime::now_utc()` is used for timestamps,
     /// which can help handle clock drift between the application server and database server.
     /// When false (default), PostgreSQL's `now()` is used instead.
     ///

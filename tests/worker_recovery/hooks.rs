@@ -21,7 +21,7 @@ async fn recovery_hook_is_applied_to_dead_worker_sweep() {
         .expect("failed to create orphan lock");
 
         let calls = Arc::new(AtomicU32::new(0));
-        let target_run_at = chrono::Utc::now() + chrono::Duration::seconds(5);
+        let target_run_at = time::OffsetDateTime::now_utc() + time::Duration::seconds(5);
         let mut hooks = HookRegistry::new();
         let hook_calls = Arc::clone(&calls);
         hooks.on(JobRecovery, move |ctx| {
@@ -60,7 +60,7 @@ async fn recovery_hook_is_applied_to_dead_worker_sweep() {
 
         assert!(recovered.locked_by.is_none());
         assert_eq!(recovered.attempts, 3);
-        let run_at_delta_ms = (recovered.run_at - target_run_at).num_milliseconds().abs();
+        let run_at_delta_ms = (recovered.run_at - target_run_at).whole_milliseconds().abs();
         assert!(
             run_at_delta_ms <= 1,
             "hook reschedule run_at should be preserved"
@@ -139,7 +139,7 @@ async fn recovery_hook_fail_with_backoff_unlocks_with_retry_delay() {
         .await
         .expect("failed to create fail-with-backoff recovery lock");
 
-        let before_sweep = chrono::Utc::now();
+        let before_sweep = time::OffsetDateTime::now_utc();
         let mut hooks = HookRegistry::new();
         hooks.on(JobRecovery, |_ctx| async {
             JobRecoveryResult::FailWithBackoff
@@ -170,7 +170,7 @@ async fn recovery_hook_fail_with_backoff_unlocks_with_retry_delay() {
         assert_eq!(failed.attempts, 1);
         assert_eq!(failed.last_error.as_deref(), Some("WorkerCrashed"));
         assert!(
-            failed.run_at >= before_sweep + chrono::Duration::seconds(1),
+            failed.run_at >= before_sweep + time::Duration::seconds(1),
             "fail-with-backoff should apply normal retry delay"
         );
     })

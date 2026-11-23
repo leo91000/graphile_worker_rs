@@ -18,7 +18,7 @@ pub enum JobRecoveryResult {
     #[default]
     Default,
     Reschedule {
-        run_at: chrono::DateTime<chrono::Utc>,
+        run_at: time::OffsetDateTime,
         attempts: Option<i16>,
     },
     FailWithBackoff,

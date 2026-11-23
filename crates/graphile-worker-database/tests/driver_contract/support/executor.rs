@@ -77,9 +77,12 @@ pub(crate) async fn exercise_executor(executor: &impl DbExecutor) {
     );
     assert_eq!(row.try_get::<i32>("i32_array_len").unwrap(), 3);
     assert_eq!(row.try_get::<i32>("i64_array_len").unwrap(), 2);
-    assert_eq!(row.try_get::<DateTime<Utc>>("timestamp_value").unwrap(), ts);
     assert_eq!(
-        row.try_get::<Option<DateTime<Utc>>>("timestamp_null")
+        row.try_get::<OffsetDateTime>("timestamp_value").unwrap(),
+        ts
+    );
+    assert_eq!(
+        row.try_get::<Option<OffsetDateTime>>("timestamp_null")
             .unwrap(),
         None
     );

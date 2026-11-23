@@ -3,12 +3,12 @@ use std::sync::{
     Arc, Mutex,
 };
 
-use chrono::{DateTime, Duration, Local, TimeZone, Utc};
 use futures::FutureExt;
 use graphile_worker_crontab_types::{Crontab, CrontabFill, CrontabTimer};
 use graphile_worker_database::{BoxFuture, DbCell, DbError, DbExecutor, DbParams, DbRow};
 use graphile_worker_lifecycle_hooks::HookRegistry;
 use graphile_worker_shutdown_signal::ShutdownSignal;
+use time::{macros::datetime, Duration, OffsetDateTime};
 use tokio::sync::Notify;
 
 use crate::{Clock, CronRunner};
@@ -48,17 +48,17 @@ impl DbExecutor for ReadyExecutor {
 }
 
 struct CatchupClock {
-    now: Mutex<DateTime<Local>>,
+    now: Mutex<OffsetDateTime>,
     sleeps: Arc<AtomicUsize>,
     shutdown: Arc<Notify>,
 }
 
 impl Clock for CatchupClock {
-    fn now(&self) -> DateTime<Local> {
+    fn now(&self) -> OffsetDateTime {
         *self.now.lock().unwrap()
     }
 
-    async fn sleep_until(&self, _datetime: DateTime<Local>) {
+    async fn sleep_until(&self, _datetime: OffsetDateTime) {
         assert!(
             self.sleeps.fetch_add(1, Ordering::SeqCst) < 32,
             "Catch-up did not yield"
@@ -78,7 +78,7 @@ async fn shutdown_interrupts_catchup_with_immediately_ready_work() {
     let sleeps = Arc::new(AtomicUsize::new(0));
     let queries = Arc::new(AtomicUsize::new(0));
     let clock = CatchupClock {
-        now: Mutex::new(Local.with_ymd_and_hms(2026, 1, 15, 10, 0, 30).unwrap()),
+        now: Mutex::new(datetime!(2026-01-15 10:00:30 UTC)),
         sleeps: sleeps.clone(),
         shutdown: shutdown.clone(),
     };
@@ -110,7 +110,7 @@ async fn shutdown_interrupts_catchup_with_immediately_ready_work() {
 
 #[tokio::test]
 async fn shutdown_interrupts_backfill_with_immediately_ready_database() {
-    let now = Local.with_ymd_and_hms(2026, 1, 15, 10, 0, 30).unwrap();
+    let now = datetime!(2026-01-15 10:00:30 UTC);
     let shutdown = Arc::new(Notify::new());
     let queries = Arc::new(AtomicUsize::new(0));
     let executor = ReadyExecutor {
@@ -119,7 +119,7 @@ async fn shutdown_interrupts_backfill_with_immediately_ready_database() {
                 ("identifier".into(), DbCell::Text("backfill".into())),
                 (
                     "known_since".into(),
-                    DbCell::TimestampTz((now - Duration::days(2)).with_timezone(&Utc)),
+                    DbCell::TimestampTz(now - Duration::days(2)),
                 ),
                 ("last_execution".into(), DbCell::Null),
             ]

@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
 use graphile_worker_database::{DbExecutorArg, DbParams, Schema};
 use indoc::formatdoc;
+use time::OffsetDateTime;
 
 use crate::errors::Result;
 
@@ -12,8 +12,10 @@ use crate::schema_names::PrivateTable;
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ActiveWorkerRow {
     pub worker_id: String,
-    pub last_heartbeat_at: DateTime<Utc>,
-    pub started_at: DateTime<Utc>,
+    #[serde(with = "time::serde::rfc3339")]
+    pub last_heartbeat_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    pub started_at: OffsetDateTime,
     pub metadata: Option<serde_json::Value>,
     pub is_stale: bool,
 }
@@ -38,14 +40,12 @@ pub async fn list_active_workers(
     );
 
     let rows = executor.fetch_all(&sql, DbParams::new()).await?;
-    let now = Utc::now();
+    let now = OffsetDateTime::now_utc();
 
     rows.iter()
         .map(|row| {
             let last_heartbeat_at = get_required(row, "last_heartbeat_at")?;
-            let is_stale = now
-                .signed_duration_since(last_heartbeat_at)
-                .to_std()
+            let is_stale = Duration::try_from(now - last_heartbeat_at)
                 .ok()
                 .is_some_and(|elapsed| elapsed >= sweep_threshold);
             Ok(ActiveWorkerRow {

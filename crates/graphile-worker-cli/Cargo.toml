@@ -17,7 +17,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
-chrono.workspace = true
+time = { workspace = true, features = ["formatting", "parsing"] }
 clap = { workspace = true, features = ["derive", "env"] }
 graphile_worker = { workspace = true, features = [
   "driver-sqlx",

@@ -20,7 +20,7 @@ async fn sqlx_pool_exercises_get_and_fail_helpers() {
         .await
         .expect("Failed to get task details");
 
-        let now = Utc::now();
+        let now = OffsetDateTime::now_utc();
         let no_queue_spec = JobSpecBuilder::new().priority(1).run_at(now).build();
         add_job(
             &test_db.test_pool,
@@ -57,7 +57,7 @@ async fn sqlx_pool_exercises_get_and_fail_helpers() {
             &graphile_worker::Schema::default(),
             "sqlx-worker-one",
             &skip_flags,
-            Some(now + chrono::Duration::seconds(1)),
+            Some(now + time::Duration::seconds(1)),
         )
         .await
         .expect("SQLx get_job should succeed")
@@ -83,7 +83,7 @@ async fn sqlx_pool_exercises_get_and_fail_helpers() {
             "sqlx-worker-two",
             &skip_flags,
             10,
-            Some(now + chrono::Duration::seconds(1)),
+            Some(now + time::Duration::seconds(1)),
         )
         .await
         .expect("SQLx batch_get_jobs should succeed");

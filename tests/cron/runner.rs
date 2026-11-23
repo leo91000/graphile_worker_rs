@@ -9,7 +9,7 @@ async fn cron_runner_schedules_job_on_tick() {
             .await
             .expect("Failed to migrate");
 
-        let initial_time = Local::now();
+        let initial_time = OffsetDateTime::now_utc();
         let clock = Arc::new(MockClock::new(initial_time));
         let (shutdown_signal, shutdown_notify) = create_shutdown_signal();
 
@@ -56,7 +56,7 @@ async fn cron_runner_catches_up_after_clock_jump() {
             .await
             .expect("Failed to migrate");
 
-        let initial_time = Local::now();
+        let initial_time = OffsetDateTime::now_utc();
         let clock = Arc::new(MockClock::new(initial_time));
         let (shutdown_signal, shutdown_notify) = create_shutdown_signal();
 
@@ -127,7 +127,7 @@ async fn cron_runner_calls_hooks() {
             .await
             .expect("Failed to migrate");
 
-        let initial_time = Local::now();
+        let initial_time = OffsetDateTime::now_utc();
         let clock = Arc::new(MockClock::new(initial_time));
         let (shutdown_signal, shutdown_notify) = create_shutdown_signal();
 
@@ -178,7 +178,7 @@ async fn cron_runner_shutdown_cleanly() {
             .await
             .expect("Failed to migrate");
 
-        let initial_time = Local::now();
+        let initial_time = OffsetDateTime::now_utc();
         let clock = Arc::new(MockClock::new(initial_time));
         let (shutdown_signal, shutdown_notify) = create_shutdown_signal();
 

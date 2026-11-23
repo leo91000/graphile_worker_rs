@@ -37,12 +37,12 @@ utils.add_raw_job(
 `JobSpec` contains the scheduling metadata sent to the database:
 
 ```rust,ignore
-use chrono::Utc;
+use time::OffsetDateTime;
 use graphile_worker::{JobKeyMode, JobSpecBuilder};
 
 let spec = JobSpecBuilder::new()
     .queue_name("user:123")
-    .run_at(Utc::now() + chrono::Duration::minutes(5))
+    .run_at(OffsetDateTime::now_utc() + time::Duration::minutes(5))
     .max_attempts(5)
     .job_key("welcome-email:123")
     .job_key_mode(JobKeyMode::Replace)
@@ -72,11 +72,11 @@ database uses PostgreSQL `now()`.
 `JobSpec::default()` schedules a job immediately. To delay a job, set `run_at`:
 
 ```rust,ignore
-use chrono::Utc;
+use time::OffsetDateTime;
 use graphile_worker::JobSpecBuilder;
 
 let spec = JobSpecBuilder::new()
-    .run_at(Utc::now() + chrono::Duration::hours(1))
+    .run_at(OffsetDateTime::now_utc() + time::Duration::hours(1))
     .build();
 
 utils.add_job(SendEmail { /* ... */ }, spec).await?;

@@ -1,8 +1,8 @@
 use std::fmt::{Display, Formatter};
 
-use chrono::Utc;
 use derive_builder::Builder;
 use getset::{Getters, MutGetters, Setters};
+use time::OffsetDateTime;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub enum JobKeyMode {
@@ -36,7 +36,7 @@ pub struct JobSpec {
     pub queue_name: Option<String>,
 
     #[builder(setter(into))]
-    pub run_at: Option<chrono::DateTime<Utc>>,
+    pub run_at: Option<OffsetDateTime>,
 
     pub max_attempts: Option<i16>,
 
@@ -85,7 +85,7 @@ mod tests {
 
     #[test]
     fn test_job_spec() {
-        let now = Utc::now();
+        let now = OffsetDateTime::now_utc();
         let job_spec = JobSpecBuilder::new()
             .queue_name("default")
             .run_at(now)

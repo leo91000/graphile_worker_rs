@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use chrono::NaiveDateTime;
 use graphile_worker_crontab_parser::CrontabParseError;
 use graphile_worker_crontab_types::Crontab;
+use time::PrimitiveDateTime;
 
 use super::{CronInput, WorkerOptions};
 
@@ -69,7 +69,7 @@ impl WorkerOptions {
     pub fn with_cron_matcher(
         mut self,
         crontab: impl Into<Crontab>,
-        matcher: impl Fn(&NaiveDateTime) -> bool + Send + Sync + 'static,
+        matcher: impl Fn(&PrimitiveDateTime) -> bool + Send + Sync + 'static,
     ) -> Self {
         let index = self.crontabs.as_ref().map_or(0, Vec::len);
         self.append_crontabs(vec![crontab.into()]);
@@ -121,7 +121,9 @@ mod tests {
             ["timer", "predicate", "subsequent"]
         );
         assert_eq!(options.cron_matchers.len(), 1);
-        assert!(!options.cron_matchers[&1](&chrono::NaiveDateTime::default()));
+        assert!(!options.cron_matchers[&1](
+            &time::macros::datetime!(1970-01-01 00:00)
+        ));
     }
 
     #[test]

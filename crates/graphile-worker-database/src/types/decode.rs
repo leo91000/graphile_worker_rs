@@ -1,5 +1,5 @@
-use chrono::{DateTime, Local, Utc};
 use serde_json::Value;
+use time::OffsetDateTime;
 
 use crate::DbError;
 
@@ -69,19 +69,12 @@ impl FromDbCell for Value {
     }
 }
 
-impl FromDbCell for DateTime<Utc> {
+impl FromDbCell for OffsetDateTime {
     fn from_cell(name: &str, cell: &DbCell) -> Result<Self, DbError> {
         match cell {
             DbCell::TimestampTz(value) => Ok(*value),
-            _ => Err(type_error(name, "DateTime<Utc>", cell)),
+            _ => Err(type_error(name, "OffsetDateTime", cell)),
         }
-    }
-}
-
-impl FromDbCell for DateTime<Local> {
-    fn from_cell(name: &str, cell: &DbCell) -> Result<Self, DbError> {
-        let value = DateTime::<Utc>::from_cell(name, cell)?;
-        Ok(value.with_timezone(&Local))
     }
 }
 

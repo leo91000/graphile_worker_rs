@@ -70,7 +70,7 @@ fn validate_add_job_request(request: &AddJobRequest) -> Result<(), ApiError> {
 
 fn add_job_spec(
     queue: Option<String>,
-    run_at: Option<chrono::DateTime<chrono::Utc>>,
+    run_at: Option<time::OffsetDateTime>,
     max_attempts: Option<i16>,
     key: Option<String>,
     job_key_mode: Option<super::super::super::types::JobKeyModeRequest>,

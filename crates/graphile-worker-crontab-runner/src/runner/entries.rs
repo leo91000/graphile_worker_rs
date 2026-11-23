@@ -4,13 +4,13 @@ use std::{
     sync::Arc,
 };
 
-use chrono::NaiveDateTime;
 use graphile_worker_crontab_types::Crontab;
+use time::PrimitiveDateTime;
 
 use tracing::warn;
 
 /// A synchronous predicate evaluated on the cron calendar's minute boundaries.
-pub type CronMatcher = Arc<dyn Fn(&NaiveDateTime) -> bool + Send + Sync>;
+pub type CronMatcher = Arc<dyn Fn(&PrimitiveDateTime) -> bool + Send + Sync>;
 
 #[derive(Clone, Copy)]
 pub(crate) struct CronEntries<'a> {
@@ -19,7 +19,7 @@ pub(crate) struct CronEntries<'a> {
 }
 
 impl CronEntries<'_> {
-    pub(crate) fn matches(&self, index: usize, calendar_time: &NaiveDateTime) -> bool {
+    pub(crate) fn matches(&self, index: usize, calendar_time: &PrimitiveDateTime) -> bool {
         let crontab = &self.crontabs[index];
         let Some(matcher) = self.matchers.and_then(|matchers| matchers.get(&index)) else {
             return crontab.should_run_at(calendar_time);

@@ -32,7 +32,7 @@ pub(crate) async fn queues(cli: &Cli, pool: &PgPool, schema: &Schema) -> Result<
     if cli.json {
         print_json(&queues)?;
     } else {
-        print_queues_table(&queues);
+        print_queues_table(&queues)?;
     }
 
     Ok(())

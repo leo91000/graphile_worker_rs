@@ -24,7 +24,7 @@ async fn context_ext_exposes_utils_for_worker_management_methods() {
                 ctx.add_job(
                     UtilityChildJob { value: 1 },
                     JobSpecBuilder::new()
-                        .run_at(chrono::Utc::now() + chrono::Duration::hours(1))
+                        .run_at(time::OffsetDateTime::now_utc() + time::Duration::hours(1))
                         .build(),
                 )
                 .await
@@ -63,7 +63,7 @@ async fn context_ext_exposes_utils_for_worker_management_methods() {
                         "ctx_ext_utility_child_job",
                         serde_json::json!({ "value": 4 }),
                         JobSpecBuilder::new()
-                            .run_at(chrono::Utc::now() + chrono::Duration::hours(1))
+                            .run_at(time::OffsetDateTime::now_utc() + time::Duration::hours(1))
                             .max_attempts(1)
                             .build(),
                     )
@@ -79,7 +79,7 @@ async fn context_ext_exposes_utils_for_worker_management_methods() {
                         "ctx_ext_utility_child_job",
                         serde_json::json!({ "value": 5 }),
                         JobSpecBuilder::new()
-                            .run_at(chrono::Utc::now() + chrono::Duration::hours(1))
+                            .run_at(time::OffsetDateTime::now_utc() + time::Duration::hours(1))
                             .build(),
                     )
                     .await

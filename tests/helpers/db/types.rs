@@ -1,7 +1,7 @@
-use chrono::{DateTime, Utc};
 use graphile_worker::Database;
 use serde_json::Value;
 use sqlx::{FromRow, PgPool};
+use time::OffsetDateTime;
 
 #[derive(FromRow, Debug, PartialEq, Eq)]
 pub struct JobWithQueueName {
@@ -11,15 +11,15 @@ pub struct JobWithQueueName {
     pub queue_name: Option<String>,
     pub payload: serde_json::Value,
     pub priority: i16,
-    pub run_at: DateTime<Utc>,
+    pub run_at: OffsetDateTime,
     pub attempts: i16,
     pub max_attempts: i16,
     pub last_error: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: OffsetDateTime,
+    pub updated_at: OffsetDateTime,
     pub key: Option<String>,
     pub revision: i32,
-    pub locked_at: Option<DateTime<Utc>>,
+    pub locked_at: Option<OffsetDateTime>,
     pub locked_by: Option<String>,
     pub flags: Option<Value>,
     pub task_id: i32,
@@ -31,14 +31,14 @@ pub struct JobQueue {
     pub id: i32,
     pub queue_name: String,
     pub job_count: i32,
-    pub locked_at: Option<DateTime<Utc>>,
+    pub locked_at: Option<OffsetDateTime>,
     pub locked_by: Option<String>,
 }
 
 #[derive(FromRow, Debug)]
 pub struct Migration {
     pub id: i32,
-    pub ts: DateTime<Utc>,
+    pub ts: OffsetDateTime,
     pub breaking: bool,
 }
 

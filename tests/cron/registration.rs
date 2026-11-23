@@ -57,7 +57,7 @@ async fn register_identifiers() {
 
         let known_crontab = &known_crontabs[0];
         assert_eq!(known_crontab.identifier(), "do_it");
-        assert!(known_crontab.known_since() < &chrono::Utc::now());
+        assert!(known_crontab.known_since() < &time::OffsetDateTime::now_utc());
         assert!(known_crontab.last_execution().is_none());
 
         let jobs = test_db.get_jobs().await;

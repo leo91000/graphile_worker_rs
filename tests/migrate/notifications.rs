@@ -92,7 +92,7 @@ async fn committed_breaking_migration_drains_direct_and_local_workers() {
             let queued = jobs.iter().find(|job| job.id == *second.id()).unwrap();
             assert_eq!(queued.locked_by.as_deref(), use_local_queue.then_some(worker.worker_id().as_str()));
             assert_eq!(queued.attempts, if use_local_queue { 1 } else { 0 });
-            assert!(queued.run_at <= chrono::Utc::now(), "second job must be due");
+            assert!(queued.run_at <= time::OffsetDateTime::now_utc(), "second job must be due");
             let shutdown = worker.shutdown_signal().clone();
             assert!(timeout(Duration::from_millis(150), shutdown.clone()).await.is_err());
 

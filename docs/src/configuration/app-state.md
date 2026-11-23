@@ -116,7 +116,7 @@ Some handlers need to enqueue follow-up work. Import `WorkerContextExt` to use
 the helper methods implemented for `WorkerContext`.
 
 ```rust,ignore
-use chrono::{offset::Utc, Duration};
+use time::{Duration, OffsetDateTime};
 use graphile_worker::{
     IntoTaskHandlerResult, JobSpecBuilder, WorkerContext, WorkerContextExt,
 };
@@ -139,7 +139,7 @@ impl TaskHandler for SendWs {
                 request_id: self.request_id,
             },
             JobSpecBuilder::new()
-                .run_at(Utc::now() + Duration::seconds(10))
+                .run_at(OffsetDateTime::now_utc() + Duration::seconds(10))
                 .build(),
         )
         .await

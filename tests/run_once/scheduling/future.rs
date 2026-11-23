@@ -33,7 +33,7 @@ async fn it_should_supports_future_scheduled_jobs() {
                     "job3",
                     json!({ "a": 1 }),
                     JobSpec {
-                        run_at: Some(Utc::now() + chrono::Duration::seconds(3)),
+                        run_at: Some(OffsetDateTime::now_utc() + time::Duration::seconds(3)),
                         ..Default::default()
                     },
                 )

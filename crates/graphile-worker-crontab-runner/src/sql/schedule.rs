@@ -1,7 +1,7 @@
-use chrono::prelude::*;
 use graphile_worker_database::{DbError, DbExecutorArg, DbValue, Schema};
 use indoc::formatdoc;
 use thiserror::Error;
+use time::OffsetDateTime;
 
 use super::job::CrontabJob;
 
@@ -13,16 +13,13 @@ pub enum ScheduleCronJobError {
     SerializationError(#[from] serde_json::Error),
 }
 
-pub(crate) async fn schedule_cron_jobs<Tz: TimeZone>(
+pub(crate) async fn schedule_cron_jobs(
     mut executor: impl DbExecutorArg,
     crontab_jobs: &[CrontabJob],
-    last_execution: &DateTime<Tz>,
+    last_execution: OffsetDateTime,
     schema: &Schema,
     use_local_time: bool,
-) -> Result<(), ScheduleCronJobError>
-where
-    Tz::Offset: Send + Sync,
-{
+) -> Result<(), ScheduleCronJobError> {
     let known_crontabs = schema.private_table("known_crontabs");
     let add_job = schema.function("add_job");
     let statement = formatdoc!(
@@ -71,14 +68,14 @@ where
         "#
     );
 
-    let app_time = use_local_time.then(Utc::now);
+    let app_time = use_local_time.then(OffsetDateTime::now_utc);
 
     executor
         .execute(
             &statement,
             vec![
                 DbValue::Json(serde_json::to_value(crontab_jobs)?),
-                DbValue::TimestampTz(last_execution.with_timezone(&Utc)),
+                DbValue::TimestampTz(last_execution),
                 DbValue::TimestampTzOpt(app_time),
             ]
             .into(),

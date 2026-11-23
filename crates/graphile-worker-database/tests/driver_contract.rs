@@ -4,13 +4,13 @@ use std::any::Any;
 use std::fmt;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use chrono::{DateTime, Local, TimeZone, Utc};
 use futures::StreamExt;
 use graphile_worker_database::{
     row_mapping, Database, DatabaseDriver, DbCell, DbError, DbExecutor, DbParams, DbRow,
     DbTransaction, DbValue, NotificationStream, TransactionDriver,
 };
 use serde_json::json;
+use time::{macros::datetime, OffsetDateTime};
 
 #[cfg(feature = "driver-sqlx")]
 use graphile_worker_database::sqlx::SqlxDatabase;

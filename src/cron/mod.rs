@@ -1,8 +1,8 @@
 mod builder;
 
-use chrono::Weekday;
 use graphile_worker_crontab_types::{CrontabTimer, CrontabTimerError};
 use graphile_worker_task_handler::TaskHandler;
+use time::Weekday;
 
 pub use builder::CronBuilder;
 

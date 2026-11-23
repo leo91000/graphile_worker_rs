@@ -1,7 +1,6 @@
-use chrono::{prelude::*, Duration};
-use once_cell::sync::Lazy;
+use time::{Duration, OffsetDateTime, PrimitiveDateTime, UtcOffset};
 
-pub(crate) static ONE_MINUTE: Lazy<Duration> = Lazy::new(|| Duration::minutes(1));
+pub(crate) const ONE_MINUTE: Duration = Duration::minutes(1);
 
 /// Give the enclosing shutdown future a chance to run even when all work is ready.
 pub(crate) async fn yield_now() {
@@ -17,13 +16,23 @@ pub(crate) async fn yield_now() {
     .await;
 }
 
-pub(crate) fn round_date_minute<Tz: TimeZone>(
-    mut datetime: DateTime<Tz>,
-    round_up: bool,
-) -> DateTime<Tz> {
-    datetime = datetime.with_second(0).unwrap().with_nanosecond(0).unwrap();
+pub(crate) fn round_date_minute(mut datetime: OffsetDateTime, round_up: bool) -> OffsetDateTime {
+    datetime = datetime
+        .replace_second(0)
+        .unwrap()
+        .replace_nanosecond(0)
+        .unwrap();
     if round_up {
-        datetime += Duration::minutes(1);
+        datetime += ONE_MINUTE;
     }
     datetime
+}
+
+pub(crate) fn calendar_time(local_time: OffsetDateTime, use_local_time: bool) -> PrimitiveDateTime {
+    let datetime = if use_local_time {
+        local_time
+    } else {
+        local_time.to_offset(UtcOffset::UTC)
+    };
+    PrimitiveDateTime::new(datetime.date(), datetime.time())
 }

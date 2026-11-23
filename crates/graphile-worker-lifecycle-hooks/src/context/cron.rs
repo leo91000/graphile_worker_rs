@@ -1,24 +1,24 @@
-use chrono::{DateTime, Utc};
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_job_spec::JobSpec;
+use time::OffsetDateTime;
 
 #[derive(Clone)]
 pub struct CronTickContext {
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: OffsetDateTime,
     pub crontabs: Vec<Crontab>,
 }
 
 #[derive(Clone)]
 pub struct CronJobScheduledContext {
     pub crontab: Crontab,
-    pub scheduled_at: DateTime<Utc>,
+    pub scheduled_at: OffsetDateTime,
 }
 
 /// A batch of cron occurrences selected for one historical minute, before SQL
 /// attempts to schedule them. Another scheduler may have already claimed them.
 #[derive(Clone)]
 pub struct CronBackfillContext {
-    pub scheduled_at: DateTime<Utc>,
+    pub scheduled_at: OffsetDateTime,
     pub entries: Vec<CronBackfillEntry>,
 }
 
@@ -26,8 +26,8 @@ pub struct CronBackfillContext {
 #[derive(Clone)]
 pub struct CronBackfillEntry {
     pub crontab: Crontab,
-    pub known_since: DateTime<Utc>,
-    pub last_execution: Option<DateTime<Utc>>,
+    pub known_since: OffsetDateTime,
+    pub last_execution: Option<OffsetDateTime>,
 }
 
 #[derive(Clone)]

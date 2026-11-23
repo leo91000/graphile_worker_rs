@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use chrono::{DateTime, Utc};
 use clap::{Args, ValueEnum};
 use graphile_worker::JobKeyMode;
+use time::OffsetDateTime;
 
 use crate::parsers::parse_utc_datetime;
 
@@ -25,7 +25,7 @@ pub(crate) struct AddArgs {
 
     /// RFC 3339 run time, or "now".
     #[arg(long, value_parser = parse_utc_datetime)]
-    pub(crate) run_at: Option<DateTime<Utc>>,
+    pub(crate) run_at: Option<OffsetDateTime>,
 
     /// Maximum retry attempts.
     #[arg(long)]
@@ -107,7 +107,7 @@ pub(crate) struct RescheduleArgs {
 
     /// RFC 3339 run time.
     #[arg(long, value_parser = parse_utc_datetime)]
-    pub(crate) run_at: Option<DateTime<Utc>>,
+    pub(crate) run_at: Option<OffsetDateTime>,
 
     /// New priority.
     #[arg(long)]

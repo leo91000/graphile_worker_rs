@@ -1,5 +1,5 @@
-use chrono::{prelude::*, Weekday};
 use getset::Getters;
+use time::{PrimitiveDateTime, Weekday};
 
 use crate::{CrontabField, CrontabValue, Result};
 
@@ -63,7 +63,7 @@ impl CrontabTimer {
         Ok(Self {
             minutes: vec![CrontabValue::number(CrontabField::Minute, minute)?],
             hours: vec![CrontabValue::number(CrontabField::Hour, hour)?],
-            dows: vec![CrontabValue::Number(weekday.number_from_monday())],
+            dows: vec![CrontabValue::Number(weekday.number_from_monday().into())],
             ..Default::default()
         })
     }
@@ -93,6 +93,7 @@ impl CrontabTimer {
     ///
     /// ```rust
     /// use graphile_worker_crontab_types::{CrontabValue, CrontabTimer};
+    /// use time::macros::datetime;
     ///
     /// let crontab_timer = CrontabTimer {
     ///     minutes: vec![CrontabValue::Number(30)],
@@ -100,22 +101,33 @@ impl CrontabTimer {
     ///     days: vec![CrontabValue::Step(4)],
     ///     ..Default::default()
     /// };
-    /// assert!(crontab_timer.should_run_at(&"2012-12-17T08:30:12".parse().unwrap()));
-    /// assert!(crontab_timer.should_run_at(&"2015-02-05T09:30:00".parse().unwrap()));
-    /// assert!(crontab_timer.should_run_at(&"1998-10-13T10:30:59".parse().unwrap()));
+    /// assert!(crontab_timer.should_run_at(&datetime!(2012-12-17 08:30:12)));
+    /// assert!(crontab_timer.should_run_at(&datetime!(2015-02-05 09:30:00)));
+    /// assert!(crontab_timer.should_run_at(&datetime!(1998-10-13 10:30:59)));
     ///
-    /// assert!(!crontab_timer.should_run_at(&"2012-12-17T11:30:59".parse().unwrap()));
-    /// assert!(!crontab_timer.should_run_at(&"2015-02-05T09:31:00".parse().unwrap()));
+    /// assert!(!crontab_timer.should_run_at(&datetime!(2012-12-17 11:30:59)));
+    /// assert!(!crontab_timer.should_run_at(&datetime!(2015-02-05 09:31:00)));
     /// ```
-    pub fn should_run_at(&self, at: &NaiveDateTime) -> bool {
-        self.minutes().iter().any(|v| v.match_value(at.minute(), 0))
-            && self.hours().iter().any(|v| v.match_value(at.hour(), 0))
-            && self.days().iter().any(|v| v.match_value(at.day(), 1))
-            && self.months().iter().any(|v| v.match_value(at.month(), 1))
+    pub fn should_run_at(&self, at: &PrimitiveDateTime) -> bool {
+        self.minutes()
+            .iter()
+            .any(|v| v.match_value(at.minute().into(), 0))
+            && self
+                .hours()
+                .iter()
+                .any(|v| v.match_value(at.hour().into(), 0))
+            && self
+                .days()
+                .iter()
+                .any(|v| v.match_value(at.day().into(), 1))
+            && self
+                .months()
+                .iter()
+                .any(|v| v.match_value(u8::from(at.month()).into(), 1))
             && self.dows().iter().any(|value| {
                 let weekday = at.weekday();
-                value.match_value(weekday.number_from_monday(), 1)
-                    || (weekday == Weekday::Sun
+                value.match_value(weekday.number_from_monday().into(), 1)
+                    || (weekday == Weekday::Sunday
                         && matches!(value, CrontabValue::Number(0) | CrontabValue::Range(0, _)))
             })
     }

@@ -1,7 +1,7 @@
 use std::process::Command;
 
-use chrono::{DateTime, TimeZone, Utc};
-use graphile_worker_crontab_runner::Clock;
+use graphile_worker_crontab_runner::{clock::SystemClock, Clock};
+use time::{format_description::well_known::Rfc3339, macros::datetime};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 use super::*;
@@ -9,29 +9,33 @@ use super::*;
 #[derive(Clone)]
 struct ObservedClock {
     clock: Arc<MockClock>,
-    sleeps: UnboundedSender<DateTime<Local>>,
+    sleeps: UnboundedSender<OffsetDateTime>,
 }
 
 impl Clock for ObservedClock {
-    fn now(&self) -> DateTime<Local> {
+    fn now(&self) -> OffsetDateTime {
         self.clock.now()
     }
 
-    async fn sleep_until(&self, datetime: DateTime<Local>) {
+    async fn sleep_until(&self, datetime: OffsetDateTime) {
         self.sleeps.send(datetime).unwrap();
         self.clock.sleep_until(datetime).await;
     }
+
+    fn local_time(&self, datetime: OffsetDateTime) -> OffsetDateTime {
+        SystemClock.local_time(datetime)
+    }
 }
 
-async fn next_sleep(receiver: &mut UnboundedReceiver<DateTime<Local>>) -> DateTime<Local> {
+async fn next_sleep(receiver: &mut UnboundedReceiver<OffsetDateTime>) -> OffsetDateTime {
     tokio::time::timeout(std::time::Duration::from_secs(5), receiver.recv())
         .await
         .expect("Cron did not reach its next sleep")
         .expect("Cron stopped unexpectedly")
 }
 
-async fn check_timezone(test_name: &str, use_local_time: bool, backfill: bool) {
-    // Local uses the process timezone. Isolate the regression from other tests.
+fn in_toronto_timezone(test_name: &str) -> bool {
+    // SystemClock uses the process timezone. Isolate the regression from other tests.
     if std::env::var("TZ").as_deref() != Ok("America/Toronto") {
         let output = Command::new(std::env::current_exe().unwrap())
             .arg(format!("timezone::{test_name}"))
@@ -45,19 +49,29 @@ async fn check_timezone(test_name: &str, use_local_time: bool, backfill: bool) {
             "Timezone regression failed in America/Toronto.\nstdout:\n{stdout}\nstderr:\n{}",
             String::from_utf8_lossy(&output.stderr)
         );
+        return false;
+    }
+    true
+}
+
+async fn check_timezone(test_name: &str, use_local_time: bool, backfill: bool) {
+    if !in_toronto_timezone(test_name) {
         return;
     }
 
-    let utc_midnight = Utc.with_ymd_and_hms(2026, 10, 1, 0, 0, 0).unwrap();
-    let local_midnight = Local.with_ymd_and_hms(2026, 10, 1, 0, 0, 0).unwrap();
-    assert_ne!(utc_midnight, local_midnight.with_timezone(&Utc));
+    let utc_midnight = datetime!(2026-10-01 00:00 UTC);
+    let local_midnight = datetime!(2026-10-01 00:00 -04:00);
+    assert_eq!(
+        SystemClock.local_time(local_midnight).offset(),
+        local_midnight.offset()
+    );
     let expected_midnight = if use_local_time {
-        local_midnight.with_timezone(&Utc)
+        local_midnight
     } else {
         utc_midnight
     };
 
-    for scheduled_at in [utc_midnight, local_midnight.with_timezone(&Utc)] {
+    for scheduled_at in [utc_midnight, local_midnight] {
         with_test_db(move |test_db| async move {
             test_db.worker_utils().migrate().await.unwrap();
 
@@ -77,7 +91,7 @@ async fn check_timezone(test_name: &str, use_local_time: bool, backfill: bool) {
             } else {
                 scheduled_at - Duration::seconds(30)
             };
-            let clock = Arc::new(MockClock::new(start.with_timezone(&Local)));
+            let clock = Arc::new(MockClock::new(SystemClock.local_time(start)));
             let (sleeps, mut receiver) = unbounded_channel();
             let observed_clock = ObservedClock {
                 clock: clock.clone(),
@@ -101,13 +115,10 @@ async fn check_timezone(test_name: &str, use_local_time: bool, backfill: bool) {
 
             let first_tick = next_sleep(&mut receiver).await;
             if backfill {
-                assert_eq!(
-                    first_tick.with_timezone(&Utc),
-                    scheduled_at + Duration::minutes(1)
-                );
+                assert_eq!(first_tick, scheduled_at + Duration::minutes(1));
             } else {
-                assert_eq!(first_tick.with_timezone(&Utc), scheduled_at);
-                clock.set_time((scheduled_at + Duration::seconds(1)).with_timezone(&Local));
+                assert_eq!(first_tick, scheduled_at);
+                clock.set_time(SystemClock.local_time(scheduled_at + Duration::seconds(1)));
                 let following_tick = next_sleep(&mut receiver).await;
                 assert_eq!(following_tick - first_tick, Duration::minutes(1));
             }
@@ -128,16 +139,14 @@ async fn check_timezone(test_name: &str, use_local_time: bool, backfill: bool) {
                 assert_eq!(jobs[0].task_identifier, "midnight");
                 assert_eq!(jobs[0].run_at, scheduled_at);
                 assert_eq!(jobs[0].payload["_cron"]["backfilled"], backfill);
-                let payload_time: DateTime<chrono::FixedOffset> = jobs[0].payload["_cron"]["ts"]
-                    .as_str()
-                    .unwrap()
-                    .parse()
-                    .unwrap();
-                assert_eq!(payload_time.with_timezone(&Utc), scheduled_at);
-                assert_eq!(
-                    known_crontabs[0].last_execution(),
-                    &Some(scheduled_at.with_timezone(&Local))
-                );
+                let payload_time = OffsetDateTime::parse(
+                    jobs[0].payload["_cron"]["ts"].as_str().unwrap(),
+                    &Rfc3339,
+                )
+                .unwrap();
+                assert_eq!(payload_time, scheduled_at);
+                assert_eq!(payload_time.offset(), local_midnight.offset());
+                assert_eq!(known_crontabs[0].last_execution(), &Some(scheduled_at));
             } else {
                 assert!(known_crontabs[0].last_execution().is_none());
             }
@@ -178,5 +187,65 @@ async fn local_backfill_matching_uses_local_calendar_fields() {
         true,
         true,
     )
+    .await;
+}
+
+#[tokio::test]
+async fn local_cron_uses_the_offset_at_each_tick_across_daylight_saving_time() {
+    if !in_toronto_timezone("local_cron_uses_the_offset_at_each_tick_across_daylight_saving_time") {
+        return;
+    }
+
+    with_test_db(|test_db| async move {
+        test_db.worker_utils().migrate().await.unwrap();
+
+        let start = datetime!(2026-03-08 01:59:30 -05:00);
+        let first_tick = datetime!(2026-03-08 03:00 -04:00);
+        let clock = Arc::new(MockClock::new(start));
+        let (sleeps, mut receiver) = unbounded_channel();
+        let observed_clock = ObservedClock {
+            clock: clock.clone(),
+            sleeps,
+        };
+        let (shutdown_signal, shutdown_notify) = create_shutdown_signal();
+        let database = test_db.database.clone();
+        let runner_handle = spawn_local(async move {
+            let crontabs = parse_crontab("0 2 * * * skipped {}\n0 3 * * * scheduled {}").unwrap();
+            CronRunner::new(
+                &database,
+                "graphile_worker",
+                &crontabs,
+                &HookRegistry::default(),
+            )
+            .use_local_time(true)
+            .with_clock(observed_clock)
+            .run(shutdown_signal)
+            .await
+        });
+
+        assert_eq!(next_sleep(&mut receiver).await, first_tick);
+        clock.set_time(first_tick + Duration::minutes(1));
+        assert_eq!(
+            next_sleep(&mut receiver).await,
+            first_tick + Duration::minutes(1)
+        );
+        assert_eq!(
+            next_sleep(&mut receiver).await,
+            first_tick + Duration::minutes(2)
+        );
+
+        shutdown_notify.notify_one();
+        tokio::time::timeout(std::time::Duration::from_secs(5), runner_handle)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+
+        let jobs = test_db.get_jobs().await;
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].task_identifier, "scheduled");
+        assert_eq!(jobs[0].run_at, first_tick);
+        assert_eq!(jobs[0].payload["_cron"]["ts"], "2026-03-08T03:00:00-04:00");
+    })
     .await;
 }

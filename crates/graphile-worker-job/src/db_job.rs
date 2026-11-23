@@ -1,6 +1,6 @@
-use chrono::{DateTime, Utc};
 use getset::Getters;
 use serde_json::Value;
+use time::OffsetDateTime;
 
 /// Named field carrier for constructing a `DbJob`.
 ///
@@ -12,15 +12,15 @@ pub struct DbJobData {
     pub job_queue_id: Option<i32>,
     pub payload: Value,
     pub priority: i16,
-    pub run_at: DateTime<Utc>,
+    pub run_at: OffsetDateTime,
     pub attempts: i16,
     pub max_attempts: i16,
     pub last_error: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: OffsetDateTime,
+    pub updated_at: OffsetDateTime,
     pub key: Option<String>,
     pub revision: i32,
-    pub locked_at: Option<DateTime<Utc>>,
+    pub locked_at: Option<OffsetDateTime>,
     pub locked_by: Option<String>,
     pub flags: Option<Value>,
     pub task_id: i32,
@@ -45,7 +45,7 @@ pub struct DbJob {
     /// Priority level (lower number means higher priority)
     pub(crate) priority: i16,
     /// When the job is scheduled to run
-    pub(crate) run_at: DateTime<Utc>,
+    pub(crate) run_at: OffsetDateTime,
     /// How many times this job has been attempted
     /// Attempts started, including the current execution (1 on its first run).
     pub(crate) attempts: i16,
@@ -54,15 +54,15 @@ pub struct DbJob {
     /// Error message from the last failed attempt
     pub(crate) last_error: Option<String>,
     /// When the job was created
-    pub(crate) created_at: DateTime<Utc>,
+    pub(crate) created_at: OffsetDateTime,
     /// When the job was last updated
-    pub(crate) updated_at: DateTime<Utc>,
+    pub(crate) updated_at: OffsetDateTime,
     /// Optional unique key for identifying/updating this job from user code
     pub(crate) key: Option<String>,
     /// Counter tracking the number of revisions/updates to this job
     pub(crate) revision: i32,
     /// When the job was locked for processing
-    pub(crate) locked_at: Option<DateTime<Utc>>,
+    pub(crate) locked_at: Option<OffsetDateTime>,
     /// Worker ID that has locked this job
     pub(crate) locked_by: Option<String>,
     /// Optional JSON flags to control job processing behavior
@@ -120,15 +120,15 @@ impl DbJob {
         job_queue_id: Option<i32>,
         payload: serde_json::Value,
         priority: i16,
-        run_at: DateTime<Utc>,
+        run_at: OffsetDateTime,
         attempts: i16,
         max_attempts: i16,
         last_error: Option<String>,
-        created_at: DateTime<Utc>,
-        updated_at: DateTime<Utc>,
+        created_at: OffsetDateTime,
+        updated_at: OffsetDateTime,
         key: Option<String>,
         revision: i32,
-        locked_at: Option<DateTime<Utc>>,
+        locked_at: Option<OffsetDateTime>,
         locked_by: Option<String>,
         flags: Option<Value>,
         task_id: i32,

@@ -1,9 +1,9 @@
 use std::sync::atomic::Ordering;
 
-use chrono::Utc;
 use futures::FutureExt;
 use graphile_worker_job::Job;
 use graphile_worker_lifecycle_hooks::LocalQueueMode;
+use time::OffsetDateTime;
 use tracing::error;
 
 use graphile_worker_queries::get_job::get_job;
@@ -31,7 +31,7 @@ impl LocalQueue {
             return None;
         }
         let task_details = self.0.task_details.read().await;
-        let now = self.0.use_local_time.then(Utc::now);
+        let now = self.0.use_local_time.then(OffsetDateTime::now_utc);
         match get_job(
             &self.0.database,
             &task_details,

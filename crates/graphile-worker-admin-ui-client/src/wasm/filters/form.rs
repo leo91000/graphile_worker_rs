@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, NaiveDateTime, Utc};
+use time::{macros::format_description, Duration, OffsetDateTime, PrimitiveDateTime};
 use wasm_bindgen::prelude::JsValue;
 use wasm_bindgen::JsCast;
 use web_sys::{Event, HtmlTextAreaElement};
@@ -38,30 +38,31 @@ pub(super) fn optional_csv(value: String) -> Option<Vec<String>> {
     }
 }
 
-pub(super) fn datetime_local_to_utc(value: &str) -> Option<DateTime<Utc>> {
+pub(super) fn datetime_local_to_utc(value: &str) -> Option<OffsetDateTime> {
     let value = value.trim();
     if value.is_empty() {
         return None;
     }
 
     let format = if value.matches(':').count() >= 2 {
-        "%Y-%m-%dT%H:%M:%S"
+        format_description!("[year]-[month]-[day]T[hour]:[minute]:[second]")
     } else {
-        "%Y-%m-%dT%H:%M"
+        format_description!("[year]-[month]-[day]T[hour]:[minute]")
     };
-    NaiveDateTime::parse_from_str(value, format)
+    PrimitiveDateTime::parse(value, format)
         .ok()
         .and_then(|datetime| {
             let js_local = js_sys::Date::new(&JsValue::from_str(
-                &datetime.format("%Y-%m-%dT%H:%M:%S").to_string(),
+                &datetime
+                    .format(format_description!(
+                        "[year]-[month]-[day]T[hour]:[minute]:[second]"
+                    ))
+                    .ok()?,
             ));
             let offset_minutes = js_local.get_timezone_offset();
             if !offset_minutes.is_finite() {
                 return None;
             }
-            Some(DateTime::<Utc>::from_naive_utc_and_offset(
-                datetime + Duration::minutes(offset_minutes as i64),
-                Utc,
-            ))
+            Some((datetime + Duration::minutes(offset_minutes as i64)).assume_utc())
         })
 }
