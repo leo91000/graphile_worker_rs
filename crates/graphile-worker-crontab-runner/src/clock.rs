@@ -48,23 +48,36 @@ fn host_offset_at(datetime: OffsetDateTime) -> Option<UtcOffset> {
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
 
-    // Keep the platform resolver's behavior for explicit TZ settings.
-    if std::env::var_os("TZ").is_some() {
-        return None;
+    struct CachedTimezone {
+        setting: Option<String>,
+        loaded: Instant,
+        timezone: Option<tz::TimeZone>,
     }
 
-    // Reload the host TZif file because libc can retain a stale /etc/localtime cache.
-    static HOST_ZONE: Mutex<Option<(Instant, Option<tz::TimeZone>)>> = Mutex::new(None);
+    // Reload Unix timezone rules because libc can retain stale timezone state.
+    static HOST_ZONE: Mutex<Option<CachedTimezone>> = Mutex::new(None);
+    let setting = std::env::var("TZ").ok();
     let mut cached = HOST_ZONE.lock().unwrap_or_else(|error| error.into_inner());
-    if cached
-        .as_ref()
-        .is_none_or(|(loaded, _)| loaded.elapsed() >= Duration::from_secs(1))
-    {
-        *cached = Some((Instant::now(), tz::TimeZone::local().ok()));
+    if cached.as_ref().is_none_or(|zone| {
+        zone.setting != setting || zone.loaded.elapsed() >= Duration::from_secs(1)
+    }) {
+        let timezone = setting
+            .as_deref()
+            .and_then(|setting| match setting {
+                "" => Some(tz::TimeZone::utc()),
+                setting => tz::TimeZone::from_posix_tz(setting).ok(),
+            })
+            .or_else(|| tz::TimeZone::local().ok());
+        *cached = Some(CachedTimezone {
+            setting,
+            loaded: Instant::now(),
+            timezone,
+        });
     }
 
-    let (_, timezone) = cached.as_ref()?;
-    let offset = timezone
+    let offset = cached
+        .as_ref()?
+        .timezone
         .as_ref()?
         .find_local_time_type(datetime.unix_timestamp())
         .ok()?
