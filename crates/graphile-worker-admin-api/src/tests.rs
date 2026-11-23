@@ -78,6 +78,8 @@ fn preserves_legacy_admin_timestamp_inputs() {
         ("2026-01-02T03:04:05−00:15", "2026-01-02T03:19:05Z"),
         ("2026-01-02T03:04:05 UTC", "2026-01-02T03:04:05Z"),
         ("2026-1-2T3:4:5Z", "2026-01-02T03:04:05Z"),
+        ("2026-01-02   03:04:05Z", "2026-01-02T03:04:05Z"),
+        ("2026-01-02T 03:04:05Z", "2026-01-02T03:04:05Z"),
         ("2016-12-31T23:59:60.125+0000", "2017-01-01T00:00:00.125Z"),
     ] {
         let request: AddJobRequest = serde_json::from_value(serde_json::json!({
@@ -110,5 +112,16 @@ fn preserves_timestamp_fractional_precision_and_utc_suffixes() {
             crate::format_utc_timestamp_with_offset(parsed).unwrap(),
             format!("2026-01-02T03:04:05{fraction}+00:00")
         );
+    }
+}
+
+#[test]
+fn admin_rejects_offsets_of_at_least_24_hours() {
+    for timestamp in ["2026-01-02T03:04:05+24:00", "2026-01-02T03:04:05 -25:00"] {
+        assert!(serde_json::from_value::<AddJobRequest>(serde_json::json!({
+            "identifier": "send_email",
+            "run_at": timestamp,
+        }))
+        .is_err());
     }
 }

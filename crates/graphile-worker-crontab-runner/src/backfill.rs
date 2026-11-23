@@ -11,7 +11,7 @@ use crate::{
         get_known_crontabs, insert_unknown_crontabs, schedule_cron_jobs, CrontabJob, KnownCrontab,
         ScheduleCronJobError,
     },
-    utils::{round_date_minute, yield_now, ONE_MINUTE},
+    utils::{calendar_time, next_cron_minute, yield_now},
 };
 
 pub(crate) struct BackfillItemAndDate<'a, 'b> {
@@ -81,16 +81,17 @@ pub(crate) async fn register_and_backfill_items(
         .max();
 
     if let Some(largest_backfill) = largest_backfill {
-        let mut ts = round_date_minute(
+        let mut ts = next_cron_minute(
+            clock,
             start_time - Duration::seconds(largest_backfill as i64),
-            true,
+            use_local_time,
         );
 
         while ts < start_time {
             yield_now().await;
             let time_ago = (start_time - ts).whole_seconds();
             let local_ts = clock.local_time(ts);
-            let calendar_time = crate::utils::calendar_time(local_ts, use_local_time);
+            let calendar_time = calendar_time(local_ts, use_local_time);
 
             let mut candidates = Vec::new();
             for candidate in &backfill_items_and_date {
@@ -138,7 +139,7 @@ pub(crate) async fn register_and_backfill_items(
                 schedule_cron_jobs(&mut executor, &to_backfill, ts, schema, use_local_time).await?;
             }
 
-            ts += ONE_MINUTE;
+            ts = next_cron_minute(clock, ts, use_local_time);
         }
     }
 

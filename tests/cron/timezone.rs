@@ -1,6 +1,6 @@
-use std::process::Command;
+use std::{collections::HashMap, process::Command};
 
-use graphile_worker_crontab_runner::{clock::SystemClock, Clock};
+use graphile_worker_crontab_runner::{clock::SystemClock, Clock, CronMatcher};
 use time::{format_description::well_known::Rfc3339, macros::datetime};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
@@ -34,19 +34,19 @@ async fn next_sleep(receiver: &mut UnboundedReceiver<OffsetDateTime>) -> OffsetD
         .expect("Cron stopped unexpectedly")
 }
 
-fn in_toronto_timezone(test_name: &str) -> bool {
+fn in_timezone(test_name: &str, timezone: &str) -> bool {
     // SystemClock uses the process timezone. Isolate the regression from other tests.
-    if std::env::var("TZ").as_deref() != Ok("America/Toronto") {
+    if std::env::var("TZ").as_deref() != Ok(timezone) {
         let output = Command::new(std::env::current_exe().unwrap())
             .arg(format!("timezone::{test_name}"))
             .args(["--exact", "--nocapture", "--test-threads=1"])
-            .env("TZ", "America/Toronto")
+            .env("TZ", timezone)
             .output()
             .expect("Could not start the timezone regression test");
         let stdout = String::from_utf8_lossy(&output.stdout);
         assert!(
             output.status.success() && stdout.contains("1 passed;"),
-            "Timezone regression failed in America/Toronto.\nstdout:\n{stdout}\nstderr:\n{}",
+            "Timezone regression failed in {timezone}.\nstdout:\n{stdout}\nstderr:\n{}",
             String::from_utf8_lossy(&output.stderr)
         );
         return false;
@@ -55,7 +55,7 @@ fn in_toronto_timezone(test_name: &str) -> bool {
 }
 
 async fn check_timezone(test_name: &str, use_local_time: bool, backfill: bool) {
-    if !in_toronto_timezone(test_name) {
+    if !in_timezone(test_name, "America/Toronto") {
         return;
     }
 
@@ -192,7 +192,10 @@ async fn local_backfill_matching_uses_local_calendar_fields() {
 
 #[tokio::test]
 async fn local_cron_uses_the_offset_at_each_tick_across_daylight_saving_time() {
-    if !in_toronto_timezone("local_cron_uses_the_offset_at_each_tick_across_daylight_saving_time") {
+    if !in_timezone(
+        "local_cron_uses_the_offset_at_each_tick_across_daylight_saving_time",
+        "America/Toronto",
+    ) {
         return;
     }
 
@@ -246,6 +249,83 @@ async fn local_cron_uses_the_offset_at_each_tick_across_daylight_saving_time() {
         assert_eq!(jobs[0].task_identifier, "scheduled");
         assert_eq!(jobs[0].run_at, first_tick);
         assert_eq!(jobs[0].payload["_cron"]["ts"], "2026-03-08T03:00:00-04:00");
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn local_backfill_preserves_minutes_across_subminute_offset_changes() {
+    if !in_timezone(
+        "local_backfill_preserves_minutes_across_subminute_offset_changes",
+        "Europe/Paris",
+    ) {
+        return;
+    }
+
+    with_test_db(|test_db| async move {
+        test_db.worker_utils().migrate().await.unwrap();
+        query(
+            "insert into graphile_worker._private_known_crontabs \
+             (identifier, known_since) values ('historical', $1)",
+        )
+        .bind(datetime!(1911-03-10 23:00 UTC))
+        .execute(&test_db.test_pool)
+        .await
+        .unwrap();
+
+        let start = datetime!(1911-03-11 00:05 UTC);
+        let (sleeps, mut receiver) = unbounded_channel();
+        let observed_clock = ObservedClock {
+            clock: Arc::new(MockClock::new(SystemClock.local_time(start))),
+            sleeps,
+        };
+        let (shutdown_signal, shutdown_notify) = create_shutdown_signal();
+        let database = test_db.database.clone();
+        let runner_handle = spawn_local(async move {
+            let crontabs = parse_crontab("* * * * * historical ?fill=30m {}").unwrap();
+            let matcher: CronMatcher = Arc::new(|at| {
+                at.hour() == 23 && matches!(at.minute(), 45 | 51) && at.second() == 0
+            });
+            let matchers = HashMap::from([(0, matcher)]);
+            CronRunner::new(
+                &database,
+                "graphile_worker",
+                &crontabs,
+                &HookRegistry::default(),
+            )
+            .use_local_time(true)
+            .with_matchers(&matchers)
+            .with_clock(observed_clock)
+            .run(shutdown_signal)
+            .await
+        });
+
+        assert_eq!(
+            next_sleep(&mut receiver).await,
+            start + Duration::minutes(1)
+        );
+        shutdown_notify.notify_one();
+        tokio::time::timeout(std::time::Duration::from_secs(5), runner_handle)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+
+        let mut run_at = test_db
+            .get_jobs()
+            .await
+            .into_iter()
+            .map(|job| job.run_at)
+            .collect::<Vec<_>>();
+        run_at.sort_unstable();
+        assert_eq!(
+            run_at,
+            [
+                datetime!(1911-03-10 23:45 +00:09:21),
+                datetime!(1911-03-10 23:51 +00:09:21),
+                datetime!(1911-03-10 23:51 UTC),
+            ],
+        );
     })
     .await;
 }

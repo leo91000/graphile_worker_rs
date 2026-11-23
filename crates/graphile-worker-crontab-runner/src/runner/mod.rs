@@ -10,13 +10,13 @@ use graphile_worker_crontab_types::Crontab;
 use graphile_worker_database::{DbExecutorArg, Schema};
 use graphile_worker_lifecycle_hooks::HookRegistry;
 use graphile_worker_shutdown_signal::ShutdownSignal;
-use time::{Duration, OffsetDateTime};
+use time::{Duration, OffsetDateTime, UtcOffset};
 use tracing::{debug, error, warn};
 
 use crate::backfill::register_and_backfill_items;
 use crate::clock::{Clock, SystemClock};
 use crate::sql::ScheduleCronJobError;
-use crate::utils::{round_date_minute, yield_now, ONE_MINUTE};
+use crate::utils::{next_cron_minute, round_date_minute, yield_now};
 
 use self::schedule::emit_tick_and_schedule_jobs;
 
@@ -134,16 +134,21 @@ impl<'a, E: DbExecutorArg, C: Clock> CronRunner<'a, E, C> {
         .await?;
         debug!(start = ?start, "cron:started");
 
-        let mut ts = round_date_minute(start, true);
+        let mut ts = next_cron_minute(&self.clock, start, self.use_local_time);
 
         loop {
             yield_now().await;
             self.clock.sleep_until(ts).await;
 
-            let current_ts = round_date_minute(self.clock.now(), false);
-            let ts_delta = current_ts - ts;
+            let now = self.clock.now();
+            let now = if self.use_local_time {
+                now
+            } else {
+                now.to_offset(UtcOffset::UTC)
+            };
+            let ts_delta = round_date_minute(now, false) - ts;
 
-            match ts_delta.whole_minutes().cmp(&0) {
+            match ts_delta.cmp(&Duration::ZERO) {
                 Ordering::Less => {
                     warn!(
                         "Cron fired {}s too early (clock skew?); rescheduling",
@@ -163,7 +168,7 @@ impl<'a, E: DbExecutorArg, C: Clock> CronRunner<'a, E, C> {
 
             self.emit_tick_and_schedule_jobs(ts).await?;
             *retry_delay = MIN_RETRY_DELAY;
-            ts += ONE_MINUTE;
+            ts = next_cron_minute(&self.clock, ts, self.use_local_time);
         }
     }
 

@@ -51,6 +51,9 @@ fn parse_with_leap_second(
 }
 
 fn to_utc(timestamp: OffsetDateTime) -> Result<OffsetDateTime, String> {
+    if timestamp.offset().whole_seconds().unsigned_abs() >= 24 * 60 * 60 {
+        return Err("timestamp offset must be less than 24 hours".into());
+    }
     timestamp
         .checked_to_offset(UtcOffset::UTC)
         .ok_or_else(|| "timestamp is outside the supported UTC range".into())
@@ -62,6 +65,7 @@ fn parse_timestamp(value: &str) -> Result<OffsetDateTime, String> {
         return to_utc(timestamp);
     }
 
+    let value = normalize_legacy_whitespace(value)?;
     let without_zone = value.strip_suffix(['Z', 'z']).or_else(|| {
         let suffix_start = value.len().checked_sub(3)?;
         let (date_time, zone) = value.split_at_checked(suffix_start)?;
@@ -69,11 +73,42 @@ fn parse_timestamp(value: &str) -> Result<OffsetDateTime, String> {
     });
     let value = match without_zone {
         Some(date_time) => Cow::Owned(format!("{}+00:00", date_time.trim_end())),
-        None => normalize_legacy_offset(value)?,
+        None => normalize_legacy_offset(&value)?,
     };
     to_utc(parse_with_leap_second(&value, |value| {
         OffsetDateTime::parse(value, LEGACY_DATE_TIME)
     })?)
+}
+
+fn normalize_legacy_whitespace(value: &str) -> Result<Cow<'_, str>, String> {
+    if !value.chars().any(char::is_whitespace) {
+        return Ok(Cow::Borrowed(value));
+    }
+
+    let normalized = (|| {
+        let unsigned = value.strip_prefix(['+', '-']).unwrap_or(value);
+        let sign = &value[..value.len() - unsigned.len()];
+        let (year, rest) = unsigned.split_once('-')?;
+        let (month, day_and_clock) = rest.split_once('-')?;
+        let day_and_clock = day_and_clock.trim_start();
+        let end_of_day = day_and_clock.find(|ch: char| !ch.is_ascii_digit())?;
+        let (day, clock) = day_and_clock.split_at(end_of_day);
+        let clock = clock.strip_prefix(['T', 't', ' '])?;
+        let (hour, rest) = clock.split_once(':')?;
+        let (minute, rest) = rest.split_once(':')?;
+        Some(format!(
+            "{sign}{}-{}-{day}T{}:{}:{}",
+            year.trim_end(),
+            month.trim(),
+            hour.trim(),
+            minute.trim(),
+            rest.trim_start(),
+        ))
+    })();
+
+    normalized
+        .map(Cow::Owned)
+        .ok_or_else(|| "expected a timestamp date and time".into())
 }
 
 fn normalize_legacy_offset(value: &str) -> Result<Cow<'_, str>, String> {
