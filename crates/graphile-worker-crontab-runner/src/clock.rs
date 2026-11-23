@@ -2,6 +2,9 @@ use graphile_worker_runtime as runtime;
 use std::future::Future;
 use time::{Duration, OffsetDateTime, UtcOffset};
 
+#[cfg(windows)]
+mod windows;
+
 pub trait Clock: Send + Sync {
     fn now(&self) -> OffsetDateTime;
 
@@ -40,7 +43,11 @@ fn local_offset_at(datetime: OffsetDateTime) -> UtcOffset {
         return offset;
     }
 
-    UtcOffset::local_offset_at(datetime).unwrap_or(UtcOffset::UTC)
+    #[cfg(windows)]
+    let offset = windows::offset_at(datetime);
+    #[cfg(not(windows))]
+    let offset = UtcOffset::local_offset_at(datetime).ok();
+    offset.unwrap_or(UtcOffset::UTC)
 }
 
 #[cfg(unix)]
