@@ -5,7 +5,7 @@ use std::process::Command;
 
 use super::commands::{clear_clippy_env, run_with_hint};
 
-const ADMIN_UI_BUILD_HINT: &str = "Admin UI asset builds require npm, wasm-bindgen, and the wasm32-unknown-unknown Rust target. Install the Rust tooling with `rustup target add wasm32-unknown-unknown` and `cargo install wasm-bindgen-cli --version 0.2.121 --locked`.";
+const ADMIN_UI_BUILD_HINT: &str = "Admin UI asset builds require npm, wasm-bindgen, and the wasm32-unknown-unknown Rust target. Install the Rust tooling with `rustup target add wasm32-unknown-unknown` and `cargo install wasm-bindgen-cli --version 0.2.129 --locked`.";
 
 pub(super) fn build_wasm_client(client_dir: &Path, out_dir: &Path) {
     let cargo = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
@@ -38,6 +38,7 @@ pub(super) fn build_wasm_client(client_dir: &Path, out_dir: &Path) {
             .arg(&wasm)
             .arg("--target")
             .arg("web")
+            .arg("--remove-name-section")
             .arg("--out-dir")
             .arg(out_dir)
             .arg("--out-name")

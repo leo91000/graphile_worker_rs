@@ -148,6 +148,14 @@ async fn cli_manages_job_lifecycle_with_database_url_flag() {
         .as_i64()
         .expect("job id should be an integer");
 
+    sqlx::query(
+        "UPDATE graphile_worker._private_jobs SET run_at = '10000-01-01 00:00:00+00' WHERE id = $1",
+    )
+    .bind(file_job_id)
+    .execute(&test_pool)
+    .await
+    .unwrap();
+
     let listed = assert_success(command_output(&[
         "--database-url",
         &database_url,
@@ -156,7 +164,9 @@ async fn cli_manages_job_lifecycle_with_database_url_flag() {
     ]));
     let jobs: Vec<Value> = serde_json::from_str(&listed).expect("list output should be JSON");
     assert!(jobs.len() >= 2);
-    assert!(jobs.iter().any(|job| job["id"] == file_job_id));
+    assert!(jobs
+        .iter()
+        .any(|job| { job["id"] == file_job_id && job["run_at"] == "+10000-01-01T00:00:00Z" }));
     let queued_job = jobs
         .iter()
         .find(|job| job["queue_name"] == "emails")
@@ -186,6 +196,7 @@ async fn cli_manages_job_lifecycle_with_database_url_flag() {
     ]));
     assert!(shown.contains("payload:"));
     assert!(shown.contains("file@example.com"));
+    assert!(shown.contains("+10000-01-01T00:00:00+00:00"));
 
     let stats = assert_success(command_output(&["--database-url", &database_url, "stats"]));
     assert!(stats.contains("total\tready\tscheduled\tlocked\tfailed"));

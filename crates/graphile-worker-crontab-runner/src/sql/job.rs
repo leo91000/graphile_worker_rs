@@ -1,6 +1,6 @@
 use graphile_worker_crontab_types::{Crontab, JobKeyMode};
 use serde::Serialize;
-use time::OffsetDateTime;
+use time::{OffsetDateTime, UtcOffset};
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -22,7 +22,7 @@ impl CrontabJobInner {
             task: crontab.task_identifier.to_owned(),
             payload: crontab.payload.to_owned(),
             queue_name: crontab.options.queue.to_owned(),
-            run_at,
+            run_at: run_at.to_offset(UtcOffset::UTC),
             max_attempts: crontab.options.max.to_owned(),
             priority: crontab.options.priority.to_owned(),
             job_key: crontab.options.job_key.to_owned(),
@@ -54,6 +54,11 @@ impl CrontabJob {
         let mut job = CrontabJobInner::from_crontab_and_run_at(crontab, ts);
 
         if let Some(payload) = job.payload.as_mut().and_then(|p| p.as_object_mut()) {
+            let ts = if ts.offset().seconds_past_minute() == 0 {
+                ts
+            } else {
+                ts.to_offset(UtcOffset::UTC)
+            };
             payload.insert(
                 "_cron".into(),
                 serde_json::to_value(CronMetadata { ts, backfilled })?,
@@ -64,5 +69,25 @@ impl CrontabJob {
             identifier: crontab.identifier().to_owned(),
             job,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use time::macros::datetime;
+
+    #[test]
+    fn serializes_cron_tick_with_subminute_offset() {
+        let crontab = Crontab {
+            payload: Some(serde_json::json!({})),
+            ..Crontab::default()
+        };
+        let local_tick = datetime!(2026-01-01 07:00:00 +05:30:20);
+        let job = CrontabJob::for_cron(&crontab, local_tick, false).unwrap();
+        let job = serde_json::to_value(job).unwrap();
+
+        assert_eq!(job["job"]["runAt"], "2026-01-01T01:29:40Z");
+        assert_eq!(job["job"]["payload"]["_cron"]["ts"], "2026-01-01T01:29:40Z");
     }
 }

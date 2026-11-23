@@ -12,11 +12,11 @@ categories = ["web-programming", "database"]
 
 [features]
 default = []
-sqlx = ["dep:sqlx"]
+sqlx = ["dep:graphile_worker_database", "dep:sqlx"]
 
 [dependencies]
-time = { workspace = true, features = ["serde-well-known"] }
-graphile_worker_database.workspace = true
+time = { workspace = true, features = ["formatting", "macros", "parsing"] }
+graphile_worker_database = { workspace = true, optional = true, features = ["driver-sqlx"] }
 indoc.workspace = true
 serde.workspace = true
 serde_json.workspace = true

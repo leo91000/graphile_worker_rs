@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use time::{macros::datetime, Duration, OffsetDateTime};
 
 use crate::clock::mock::MockClock;
-use crate::clock::Clock;
+use crate::clock::{Clock, SystemClock};
 use crate::utils::round_date_minute;
 
 #[path = "tests/shutdown.rs"]
@@ -167,4 +167,14 @@ async fn test_mock_clock_sleep_until_wakes_on_time_advance() {
         *woke_up.lock().await,
         "Should have woken up after time advance"
     );
+}
+
+#[tokio::test]
+async fn system_clock_returns_for_a_past_deadline() {
+    tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        SystemClock.sleep_until(OffsetDateTime::now_utc() - Duration::seconds(1)),
+    )
+    .await
+    .unwrap();
 }

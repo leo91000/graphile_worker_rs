@@ -1,4 +1,6 @@
 use getset::Getters;
+#[cfg(feature = "driver-sqlx")]
+use graphile_worker_database::sqlx::SqlxTimestamp;
 use graphile_worker_database::{DbError, DbExecutorArg, DbParams, DbValue, Schema};
 use indoc::formatdoc;
 use time::OffsetDateTime;
@@ -8,7 +10,15 @@ use time::OffsetDateTime;
 #[getset(get = "pub")]
 pub struct KnownCrontab {
     identifier: String,
+    #[cfg_attr(
+        feature = "driver-sqlx",
+        sqlx(try_from = "SqlxTimestamp<OffsetDateTime>")
+    )]
     known_since: OffsetDateTime,
+    #[cfg_attr(
+        feature = "driver-sqlx",
+        sqlx(try_from = "SqlxTimestamp<Option<OffsetDateTime>>")
+    )]
     last_execution: Option<OffsetDateTime>,
 }
 

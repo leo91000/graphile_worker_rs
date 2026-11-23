@@ -3,7 +3,7 @@ use wasm_bindgen::prelude::JsValue;
 use wasm_bindgen::JsCast;
 use web_sys::{Event, HtmlTextAreaElement};
 
-pub(super) fn textarea_value(event: &Event) -> String {
+pub(in crate::wasm) fn textarea_value(event: &Event) -> String {
     event
         .target()
         .and_then(|target| target.dyn_into::<HtmlTextAreaElement>().ok())
@@ -11,7 +11,7 @@ pub(super) fn textarea_value(event: &Event) -> String {
         .unwrap_or_default()
 }
 
-pub(super) fn optional_string(value: String) -> Option<String> {
+pub(in crate::wasm) fn optional_string(value: String) -> Option<String> {
     let value = value.trim().to_string();
     if value.is_empty() {
         None
@@ -20,11 +20,11 @@ pub(super) fn optional_string(value: String) -> Option<String> {
     }
 }
 
-pub(super) fn optional_i16(value: String) -> Option<i16> {
+pub(in crate::wasm) fn optional_i16(value: String) -> Option<i16> {
     value.trim().parse().ok()
 }
 
-pub(super) fn optional_csv(value: String) -> Option<Vec<String>> {
+pub(in crate::wasm) fn optional_csv(value: String) -> Option<Vec<String>> {
     let values = value
         .split(',')
         .map(str::trim)
@@ -38,7 +38,7 @@ pub(super) fn optional_csv(value: String) -> Option<Vec<String>> {
     }
 }
 
-pub(super) fn datetime_local_to_utc(value: &str) -> Option<OffsetDateTime> {
+pub(in crate::wasm) fn datetime_local_to_utc(value: &str) -> Option<OffsetDateTime> {
     let value = value.trim();
     if value.is_empty() {
         return None;

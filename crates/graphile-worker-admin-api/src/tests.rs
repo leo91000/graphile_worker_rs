@@ -35,6 +35,48 @@ fn add_job_request_accepts_existing_rfc3339_timestamps() {
     );
     assert_eq!(
         serde_json::to_value(request).unwrap()["run_at"],
-        "2026-01-02T03:04:05.123456+02:00",
+        "2026-01-02T01:04:05.123456Z",
+    );
+}
+
+#[test]
+fn add_job_request_round_trips_signed_years() {
+    for timestamp in ["+10000-01-01T00:00:00Z", "-0001-01-01T00:00:00.123456Z"] {
+        let request: AddJobRequest = serde_json::from_value(serde_json::json!({
+            "identifier": "send_email",
+            "run_at": timestamp,
+        }))
+        .unwrap();
+
+        assert_eq!(serde_json::to_value(request).unwrap()["run_at"], timestamp);
+    }
+}
+
+#[test]
+fn rejects_timestamps_outside_the_utc_range() {
+    for timestamp in [
+        "+999999-12-31T23:59:59-01:00",
+        "-999999-01-01T00:00:00+01:00",
+    ] {
+        let result = serde_json::from_value::<AddJobRequest>(serde_json::json!({
+            "identifier": "send_email",
+            "run_at": timestamp,
+        }));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("supported UTC range"));
+    }
+}
+
+#[test]
+fn accepts_legacy_offsets_without_colons() {
+    let request: AddJobRequest =
+        serde_json::from_str(r#"{"identifier":"send_email","run_at":"2026-01-02T03:04:05+0200"}"#)
+            .unwrap();
+
+    assert_eq!(
+        serde_json::to_value(request).unwrap()["run_at"],
+        "2026-01-02T01:04:05Z"
     );
 }

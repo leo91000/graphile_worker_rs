@@ -12,7 +12,7 @@ categories = ["asynchronous", "database"]
 readme = "README.md"
 
 [dependencies]
-time.workspace = true
+time = { workspace = true, features = ["macros", "parsing"] }
 graphile_worker_runtime = { workspace = true, optional = true }
 deadpool-postgres = { workspace = true, optional = true }
 futures.workspace = true
@@ -50,6 +50,5 @@ tls-native-tls = ["sqlx?/tls-native-tls", "graphile_worker_postgres_tls?/tls-nat
 tls-rustls = ["sqlx?/tls-rustls", "graphile_worker_postgres_tls?/tls-rustls"]
 
 [dev-dependencies]
-time = { workspace = true, features = ["macros"] }
 async-std.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time", "test-util"] }

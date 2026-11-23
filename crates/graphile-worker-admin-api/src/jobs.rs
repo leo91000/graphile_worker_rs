@@ -1,3 +1,5 @@
+#[cfg(feature = "sqlx")]
+use graphile_worker_database::sqlx::SqlxTimestamp;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
@@ -37,17 +39,24 @@ pub struct ListedJob {
     pub queue_name: Option<String>,
     pub payload: Value,
     pub priority: i16,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::timestamp")]
+    #[cfg_attr(feature = "sqlx", sqlx(try_from = "SqlxTimestamp<OffsetDateTime>"))]
     pub run_at: OffsetDateTime,
     pub attempts: i16,
     pub max_attempts: i16,
     pub last_error: Option<String>,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::timestamp")]
+    #[cfg_attr(feature = "sqlx", sqlx(try_from = "SqlxTimestamp<OffsetDateTime>"))]
     pub created_at: OffsetDateTime,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::timestamp")]
+    #[cfg_attr(feature = "sqlx", sqlx(try_from = "SqlxTimestamp<OffsetDateTime>"))]
     pub updated_at: OffsetDateTime,
     pub key: Option<String>,
-    #[serde(default, with = "time::serde::rfc3339::option")]
+    #[serde(default, with = "crate::timestamp::option")]
+    #[cfg_attr(
+        feature = "sqlx",
+        sqlx(try_from = "SqlxTimestamp<Option<OffsetDateTime>>")
+    )]
     pub locked_at: Option<OffsetDateTime>,
     pub locked_by: Option<String>,
     pub revision: i32,
@@ -63,18 +72,18 @@ pub struct DbJobOutput {
     pub job_queue_id: Option<i32>,
     pub payload: Value,
     pub priority: i16,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::timestamp")]
     pub run_at: OffsetDateTime,
     pub attempts: i16,
     pub max_attempts: i16,
     pub last_error: Option<String>,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::timestamp")]
     pub created_at: OffsetDateTime,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::timestamp")]
     pub updated_at: OffsetDateTime,
     pub key: Option<String>,
     pub revision: i32,
-    #[serde(default, with = "time::serde::rfc3339::option")]
+    #[serde(default, with = "crate::timestamp::option")]
     pub locked_at: Option<OffsetDateTime>,
     pub locked_by: Option<String>,
     pub flags: Option<Value>,
@@ -86,7 +95,7 @@ pub struct AddJobRequest {
     #[serde(default = "default_payload")]
     pub payload: Value,
     pub queue: Option<String>,
-    #[serde(default, with = "time::serde::rfc3339::option")]
+    #[serde(default, with = "crate::timestamp::option")]
     pub run_at: Option<OffsetDateTime>,
     pub max_attempts: Option<i16>,
     pub key: Option<String>,
@@ -108,7 +117,7 @@ pub struct JobActionRequest {
     pub action: JobAction,
     pub ids: Vec<i64>,
     pub reason: Option<String>,
-    #[serde(default, with = "time::serde::rfc3339::option")]
+    #[serde(default, with = "crate::timestamp::option")]
     pub run_at: Option<OffsetDateTime>,
     pub priority: Option<i16>,
     pub attempts: Option<i16>,

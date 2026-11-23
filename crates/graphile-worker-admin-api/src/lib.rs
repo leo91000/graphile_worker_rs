@@ -10,6 +10,9 @@ pub mod jobs;
 pub mod maintenance;
 pub mod overview;
 pub mod responses;
+mod timestamp;
+
+pub use timestamp::{format_utc_timestamp, parse_rfc3339_utc_timestamp};
 
 #[cfg(feature = "sqlx")]
 pub mod queries;

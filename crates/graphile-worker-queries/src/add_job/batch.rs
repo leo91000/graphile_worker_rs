@@ -2,7 +2,7 @@ use graphile_worker_database::{DbExecutorArg, DbValue, Schema};
 use graphile_worker_job::Job;
 use graphile_worker_job_spec::JobKeyMode;
 use indoc::formatdoc;
-use time::OffsetDateTime;
+use time::{OffsetDateTime, UtcOffset};
 use tracing::{info, Span};
 
 use crate::errors::GraphileWorkerError;
@@ -19,7 +19,7 @@ struct DbJobSpec {
     identifier: String,
     payload: serde_json::Value,
     queue_name: Option<String>,
-    #[serde(with = "time::serde::rfc3339::option")]
+    #[serde(serialize_with = "serialize_run_at")]
     run_at: Option<OffsetDateTime>,
     max_attempts: Option<i16>,
     job_key: Option<String>,
@@ -32,12 +32,22 @@ struct BorrowedDbJobSpec<'a> {
     identifier: &'a str,
     payload: &'a serde_json::Value,
     queue_name: Option<&'a str>,
-    #[serde(with = "time::serde::rfc3339::option")]
+    #[serde(serialize_with = "serialize_run_at")]
     run_at: Option<OffsetDateTime>,
     max_attempts: Option<i16>,
     job_key: Option<&'a str>,
     priority: Option<i16>,
     flags: Option<&'a [String]>,
+}
+
+fn serialize_run_at<S: serde::Serializer>(
+    run_at: &Option<OffsetDateTime>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    time::serde::rfc3339::option::serialize(
+        &run_at.map(|datetime| datetime.to_offset(UtcOffset::UTC)),
+        serializer,
+    )
 }
 
 #[tracing::instrument(

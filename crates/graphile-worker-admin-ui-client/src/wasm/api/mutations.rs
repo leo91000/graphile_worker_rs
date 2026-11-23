@@ -9,7 +9,7 @@ use super::super::types::{
 use super::http::api_post;
 use super::refresh::{refresh_data, RefreshSignals};
 
-pub(super) fn post_add_job(
+pub(in crate::wasm) fn post_add_job(
     config: AdminClientConfig,
     request: AddJobRequest,
     signals: RefreshSignals,
@@ -34,7 +34,7 @@ pub(super) fn post_add_job(
     });
 }
 
-pub(super) fn post_job_action(
+pub(in crate::wasm) fn post_job_action(
     config: AdminClientConfig,
     request: JobActionRequest,
     signals: RefreshSignals,
@@ -61,7 +61,7 @@ pub(super) fn post_job_action(
     });
 }
 
-pub(super) fn post_remove_key(
+pub(in crate::wasm) fn post_remove_key(
     config: AdminClientConfig,
     request: RemoveJobByKeyRequest,
     signals: RefreshSignals,
@@ -86,7 +86,7 @@ pub(super) fn post_remove_key(
     });
 }
 
-pub(super) fn post_maintenance(
+pub(in crate::wasm) fn post_maintenance(
     config: AdminClientConfig,
     request: MaintenanceRequest,
     signals: RefreshSignals,

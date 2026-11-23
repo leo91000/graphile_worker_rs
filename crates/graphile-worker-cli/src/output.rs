@@ -1,9 +1,10 @@
 use anyhow::Result;
 use graphile_worker::{DbJob, Job};
+use graphile_worker_admin_api::format_utc_timestamp;
 use graphile_worker_admin_api::jobs::{DbJobOutput, ListedJob};
 use graphile_worker_admin_api::overview::{LockedWorkerRow, QueueRow};
 use serde::Serialize;
-use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+use time::OffsetDateTime;
 
 pub(crate) fn print_db_job_result(json: bool, action: &str, jobs: &[DbJob]) -> Result<()> {
     if json {
@@ -77,7 +78,7 @@ pub(crate) fn print_queues_table(queues: &[QueueRow]) -> Result<()> {
 }
 
 fn format_datetime(value: OffsetDateTime) -> Result<String> {
-    let mut formatted = value.format(&Rfc3339)?;
+    let mut formatted = format_utc_timestamp(value)?;
     if formatted.ends_with('Z') {
         formatted.pop();
         formatted.push_str("+00:00");

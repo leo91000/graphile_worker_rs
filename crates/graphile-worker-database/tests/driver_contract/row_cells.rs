@@ -38,6 +38,11 @@ fn db_row_decodes_supported_cells_and_errors() {
         .to_string()
         .contains("could not be decoded as i32"));
 
+    let wrong_timestamp_type = row.try_get::<OffsetDateTime>("text").unwrap_err();
+    assert!(wrong_timestamp_type
+        .to_string()
+        .contains("could not be decoded as OffsetDateTime"));
+
     let coded = DbError::with_code("duplicate key", "23505");
     assert_eq!(coded.code(), Some("23505"));
 }

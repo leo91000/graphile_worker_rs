@@ -1,4 +1,6 @@
 use getset::Getters;
+#[cfg(feature = "driver-sqlx")]
+use graphile_worker_database::sqlx::SqlxTimestamp;
 use serde_json::Value;
 use time::OffsetDateTime;
 
@@ -45,6 +47,10 @@ pub struct DbJob {
     /// Priority level (lower number means higher priority)
     pub(crate) priority: i16,
     /// When the job is scheduled to run
+    #[cfg_attr(
+        feature = "driver-sqlx",
+        sqlx(try_from = "SqlxTimestamp<OffsetDateTime>")
+    )]
     pub(crate) run_at: OffsetDateTime,
     /// How many times this job has been attempted
     /// Attempts started, including the current execution (1 on its first run).
@@ -54,14 +60,26 @@ pub struct DbJob {
     /// Error message from the last failed attempt
     pub(crate) last_error: Option<String>,
     /// When the job was created
+    #[cfg_attr(
+        feature = "driver-sqlx",
+        sqlx(try_from = "SqlxTimestamp<OffsetDateTime>")
+    )]
     pub(crate) created_at: OffsetDateTime,
     /// When the job was last updated
+    #[cfg_attr(
+        feature = "driver-sqlx",
+        sqlx(try_from = "SqlxTimestamp<OffsetDateTime>")
+    )]
     pub(crate) updated_at: OffsetDateTime,
     /// Optional unique key for identifying/updating this job from user code
     pub(crate) key: Option<String>,
     /// Counter tracking the number of revisions/updates to this job
     pub(crate) revision: i32,
     /// When the job was locked for processing
+    #[cfg_attr(
+        feature = "driver-sqlx",
+        sqlx(try_from = "SqlxTimestamp<Option<OffsetDateTime>>")
+    )]
     pub(crate) locked_at: Option<OffsetDateTime>,
     /// Worker ID that has locked this job
     pub(crate) locked_by: Option<String>,

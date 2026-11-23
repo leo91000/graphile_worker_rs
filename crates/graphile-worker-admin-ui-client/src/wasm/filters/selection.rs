@@ -1,10 +1,10 @@
+use graphile_worker_admin_api::format_utc_timestamp;
 use leptos::prelude::*;
-use time::format_description::well_known::Rfc3339;
 
 use super::super::types::ListedJob;
 use super::state::{job_state, state_label};
 
-pub(super) fn selected_rows(
+pub(in crate::wasm) fn selected_rows(
     jobs: RwSignal<Vec<ListedJob>>,
     selected: RwSignal<Vec<i64>>,
 ) -> Vec<ListedJob> {
@@ -15,7 +15,7 @@ pub(super) fn selected_rows(
         .collect()
 }
 
-pub(super) fn selected_csv(rows: &[ListedJob]) -> String {
+pub(in crate::wasm) fn selected_csv(rows: &[ListedJob]) -> String {
     let columns = [
         "id",
         "task_identifier",
@@ -35,9 +35,7 @@ pub(super) fn selected_csv(rows: &[ListedJob]) -> String {
                 job.task_identifier.clone(),
                 job.queue_name.clone().unwrap_or_default(),
                 state_label(job_state(job)).to_string(),
-                job.run_at
-                    .format(&Rfc3339)
-                    .unwrap_or_else(|_| job.run_at.to_string()),
+                format_utc_timestamp(job.run_at).unwrap_or_else(|_| job.run_at.to_string()),
                 job.attempts.to_string(),
                 job.max_attempts.to_string(),
                 job.priority.to_string(),

@@ -1,6 +1,7 @@
 use std::time::Duration;
 
-use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
+use graphile_worker_admin_api::parse_rfc3339_utc_timestamp;
+use time::OffsetDateTime;
 
 pub(crate) fn parse_duration(value: &str) -> std::result::Result<Duration, String> {
     let value = value.trim();
@@ -36,14 +37,14 @@ pub(crate) fn parse_utc_datetime(value: &str) -> std::result::Result<OffsetDateT
         return Ok(OffsetDateTime::now_utc());
     }
 
-    OffsetDateTime::parse(value, &Rfc3339)
-        .map(|datetime| datetime.to_offset(UtcOffset::UTC))
-        .map_err(|error| error.to_string())
+    parse_rfc3339_utc_timestamp(value)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use graphile_worker_admin_api::format_utc_timestamp;
+    use time::UtcOffset;
 
     #[test]
     fn parses_rfc3339_datetime_as_utc() {
@@ -51,7 +52,19 @@ mod tests {
             parse_utc_datetime("2026-01-02T03:04:05+02:00").expect("datetime should parse");
 
         assert_eq!(parsed.offset(), UtcOffset::UTC);
-        assert_eq!(parsed.format(&Rfc3339).unwrap(), "2026-01-02T01:04:05Z");
+        assert_eq!(
+            format_utc_timestamp(parsed).unwrap(),
+            "2026-01-02T01:04:05Z"
+        );
+    }
+
+    #[test]
+    fn converts_rfc3339_leap_second_to_postgres_instant() {
+        let parsed = parse_utc_datetime("2016-12-31T23:59:60.125Z").unwrap();
+        assert_eq!(
+            format_utc_timestamp(parsed).unwrap(),
+            "2017-01-01T00:00:00.125Z"
+        );
     }
 
     #[test]

@@ -47,13 +47,14 @@ impl DbExecutor for ReadyExecutor {
     }
 }
 
-struct CatchupClock {
+struct WakingClock {
+    advance: Duration,
     now: Mutex<OffsetDateTime>,
     sleeps: Arc<AtomicUsize>,
     shutdown: Arc<Notify>,
 }
 
-impl Clock for CatchupClock {
+impl Clock for WakingClock {
     fn now(&self) -> OffsetDateTime {
         *self.now.lock().unwrap()
     }
@@ -63,7 +64,7 @@ impl Clock for CatchupClock {
             self.sleeps.fetch_add(1, Ordering::SeqCst) < 32,
             "Catch-up did not yield"
         );
-        *self.now.lock().unwrap() += Duration::days(1);
+        *self.now.lock().unwrap() += self.advance;
         self.shutdown.notify_one();
     }
 }
@@ -73,39 +74,39 @@ fn shutdown_signal(notify: Arc<Notify>) -> ShutdownSignal {
 }
 
 #[tokio::test]
-async fn shutdown_interrupts_catchup_with_immediately_ready_work() {
-    let shutdown = Arc::new(Notify::new());
-    let sleeps = Arc::new(AtomicUsize::new(0));
-    let queries = Arc::new(AtomicUsize::new(0));
-    let clock = CatchupClock {
-        now: Mutex::new(datetime!(2026-01-15 10:00:30 UTC)),
-        sleeps: sleeps.clone(),
-        shutdown: shutdown.clone(),
-    };
-    let executor = ReadyExecutor {
-        known: vec![],
-        queries: queries.clone(),
-        shutdown_on_execute: None,
-    };
-    let crontabs = [Crontab::new(CrontabTimer::every_minute(), "catchup")];
-    let hooks = HookRegistry::default();
+async fn shutdown_interrupts_immediate_clock_wakes() {
+    // An early wake should perform registration only. A late wake can also schedule its first tick.
+    for (advance, expected_queries) in [(Duration::ZERO, 1), (Duration::days(1), 2)] {
+        let shutdown = Arc::new(Notify::new());
+        let sleeps = Arc::new(AtomicUsize::new(0));
+        let queries = Arc::new(AtomicUsize::new(0));
+        let clock = WakingClock {
+            advance,
+            now: Mutex::new(datetime!(2026-01-15 10:00:30 UTC)),
+            sleeps: sleeps.clone(),
+            shutdown: shutdown.clone(),
+        };
+        let executor = ReadyExecutor {
+            known: vec![],
+            queries: queries.clone(),
+            shutdown_on_execute: None,
+        };
+        let crontabs = [Crontab::new(CrontabTimer::every_minute(), "tick")];
+        let hooks = HookRegistry::default();
 
-    tokio::time::timeout(
-        std::time::Duration::from_secs(1),
-        CronRunner::new(&executor, "graphile_worker", &crontabs, &hooks)
-            .with_clock(clock)
-            .run(shutdown_signal(shutdown)),
-    )
-    .await
-    .expect("Shutdown timed out")
-    .unwrap();
+        tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            CronRunner::new(&executor, "graphile_worker", &crontabs, &hooks)
+                .with_clock(clock)
+                .run(shutdown_signal(shutdown)),
+        )
+        .await
+        .expect("Shutdown timed out")
+        .unwrap();
 
-    assert_eq!(sleeps.load(Ordering::SeqCst), 1);
-    assert_eq!(
-        queries.load(Ordering::SeqCst),
-        2,
-        "Only registration and the first tick should execute"
-    );
+        assert_eq!(sleeps.load(Ordering::SeqCst), 1);
+        assert_eq!(queries.load(Ordering::SeqCst), expected_queries);
+    }
 }
 
 #[tokio::test]

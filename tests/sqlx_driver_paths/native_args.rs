@@ -111,3 +111,38 @@ async fn sqlx_native_executor_args_support_direct_queries() {
     })
     .await;
 }
+
+#[tokio::test]
+async fn sqlx_db_job_decodes_text_protocol_timestamps() {
+    use graphile_worker::DbJob;
+    use sqlx::FromRow;
+    use time::macros::datetime;
+
+    with_test_db(|test_db| async move {
+        test_db.worker_utils().migrate().await.unwrap();
+
+        let run_at = datetime!(2026-01-02 03:04:05 UTC);
+        let spec = JobSpec::builder().run_at(run_at).build();
+        let job = test_db
+            .worker_utils()
+            .add_raw_job("text_row", json!({}), spec)
+            .await
+            .unwrap();
+
+        let mut tx = test_db.test_pool.begin().await.unwrap();
+        sqlx::query("SET LOCAL TIME ZONE 'Etc/GMT-2'")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        let row = sqlx::raw_sql("SELECT * FROM graphile_worker._private_jobs")
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+        let decoded = DbJob::from_row(&row).unwrap();
+        assert_eq!(decoded.run_at(), &run_at);
+        assert_eq!(decoded.created_at(), job.created_at());
+        assert_eq!(decoded.locked_at(), &None);
+        tx.rollback().await.unwrap();
+    })
+    .await;
+}
