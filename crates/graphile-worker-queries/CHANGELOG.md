@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_queries-v0.2.2...graphile_worker_queries-v0.3.0) - 2026-11-23
+
+### Other
+
+- [**breaking**] Replace Chrono with time ([#587](https://github.com/leo91000/graphile_worker_rs/pull/587))
+
 ## [0.2.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_queries-v0.2.1...graphile_worker_queries-v0.2.2) - 2026-11-10
 
 ### Added

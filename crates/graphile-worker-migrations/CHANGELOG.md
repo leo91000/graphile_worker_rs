@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.1](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.5.0...graphile_worker_migrations-v0.5.1) - 2026-11-23
+
+### Added
+
+- port historical migration and cron behavior ([#585](https://github.com/leo91000/graphile_worker_rs/pull/585))
+
 ## [0.5.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_migrations-v0.4.24...graphile_worker_migrations-v0.5.0) - 2026-11-10
 
 ### Other

@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.15.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.14.2...graphile_worker-v0.15.0) - 2026-11-23
+
+### Added
+
+- port historical migration and cron behavior ([#585](https://github.com/leo91000/graphile_worker_rs/pull/585))
+
+### Other
+
+- [**breaking**] Replace Chrono with time ([#587](https://github.com/leo91000/graphile_worker_rs/pull/587))
+- record upstream synchronization audit for 2026-11-12 ([#583](https://github.com/leo91000/graphile_worker_rs/pull/583))
+
 ## [0.14.2](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker-v0.14.1...graphile_worker-v0.14.2) - 2026-11-10
 
 ### Added
