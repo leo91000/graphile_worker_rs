@@ -21,10 +21,6 @@ impl Clock for ObservedClock {
         self.sleeps.send(datetime).unwrap();
         self.clock.sleep_until(datetime).await;
     }
-
-    fn local_time(&self, datetime: OffsetDateTime) -> OffsetDateTime {
-        SystemClock.local_time(datetime)
-    }
 }
 
 async fn next_sleep(receiver: &mut UnboundedReceiver<OffsetDateTime>) -> OffsetDateTime {

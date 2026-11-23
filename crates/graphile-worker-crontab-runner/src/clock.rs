@@ -9,10 +9,11 @@ pub trait Clock: Send + Sync {
 
     /// Express a scheduled instant in this clock's local time.
     ///
-    /// By default, the instant retains its existing offset. Clocks that observe
-    /// timezone transitions can resolve the offset at the supplied instant.
+    /// The default uses the host timezone, including transitions. Clocks with
+    /// their own timezone or a fixed offset can override this method.
     fn local_time(&self, datetime: OffsetDateTime) -> OffsetDateTime {
-        datetime
+        let offset = local_offset_at(datetime);
+        datetime.checked_to_offset(offset).unwrap_or(datetime)
     }
 }
 
@@ -31,37 +32,44 @@ impl Clock for SystemClock {
         };
         runtime::sleep(std_dur).await;
     }
-
-    fn local_time(&self, datetime: OffsetDateTime) -> OffsetDateTime {
-        #[cfg(all(target_os = "linux", target_env = "gnu"))]
-        refresh_timezone();
-
-        let offset = UtcOffset::local_offset_at(datetime).unwrap_or(UtcOffset::UTC);
-        datetime.to_offset(offset)
-    }
 }
 
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-fn refresh_timezone() {
+fn local_offset_at(datetime: OffsetDateTime) -> UtcOffset {
+    #[cfg(unix)]
+    if let Some(offset) = host_offset_at(datetime) {
+        return offset;
+    }
+
+    UtcOffset::local_offset_at(datetime).unwrap_or(UtcOffset::UTC)
+}
+
+#[cfg(unix)]
+fn host_offset_at(datetime: OffsetDateTime) -> Option<UtcOffset> {
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
 
-    unsafe extern "C" {
-        fn tzset();
+    // Keep the platform resolver's behavior for explicit TZ settings.
+    if std::env::var_os("TZ").is_some() {
+        return None;
     }
 
-    static LAST_REFRESH: Mutex<Option<Instant>> = Mutex::new(None);
-    let mut last = LAST_REFRESH
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
-    if last.is_some_and(|last| last.elapsed() < Duration::from_secs(1)) {
-        return;
+    // Reload the host TZif file because libc can retain a stale /etc/localtime cache.
+    static HOST_ZONE: Mutex<Option<(Instant, Option<tz::TimeZone>)>> = Mutex::new(None);
+    let mut cached = HOST_ZONE.lock().unwrap_or_else(|error| error.into_inner());
+    if cached
+        .as_ref()
+        .is_none_or(|(loaded, _)| loaded.elapsed() >= Duration::from_secs(1))
+    {
+        *cached = Some((Instant::now(), tz::TimeZone::local().ok()));
     }
 
-    // glibc's localtime_r can retain its cache after /etc/localtime changes.
-    // SAFETY: tzset takes no arguments, is thread-safe on glibc, and we do not read its globals.
-    unsafe { tzset() };
-    *last = Some(Instant::now());
+    let (_, timezone) = cached.as_ref()?;
+    let offset = timezone
+        .as_ref()?
+        .find_local_time_type(datetime.unix_timestamp())
+        .ok()?
+        .ut_offset();
+    UtcOffset::from_whole_seconds(offset).ok()
 }
 
 pub mod mock {

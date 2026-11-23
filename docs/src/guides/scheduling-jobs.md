@@ -184,8 +184,12 @@ let spec = JobSpecBuilder::new().run_at(run_at).build();
 ```
 
 Cron matchers receive `&time::PrimitiveDateTime`, and weekly schedules use
-`time::Weekday` values such as `Weekday::Monday`. If your own job payload has
-timestamp fields, use `#[serde(with = "time::serde::rfc3339")]` with the
+`time::Weekday` values such as `Weekday::Monday`. Custom cron clocks use
+`OffsetDateTime` for `now` and `sleep_until`. They follow the host timezone by
+default and can override `Clock::local_time` to use a different timezone or
+keep a fixed offset.
+
+If your own job payload has timestamp fields, use `#[serde(with = "time::serde::rfc3339")]` with the
 `time` feature `serde-well-known` to keep reading RFC 3339 strings from
 jobs already in the queue.
 
