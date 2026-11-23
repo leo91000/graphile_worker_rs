@@ -32,7 +32,7 @@ impl DbExecutor for SqlxTransaction {
                 .as_mut()
                 .ok_or_else(|| DbError::new("transaction has already been committed"))?;
 
-            bind_params(sql, &params)
+            bind_params(sql, &params)?
                 .persistent(self.prepared_statements)
                 .execute(tx.as_mut())
                 .await
@@ -52,7 +52,7 @@ impl DbExecutor for SqlxTransaction {
                 .as_mut()
                 .ok_or_else(|| DbError::new("transaction has already been committed"))?;
 
-            let rows = bind_params(sql, &params)
+            let rows = bind_params(sql, &params)?
                 .persistent(self.prepared_statements)
                 .fetch_all(tx.as_mut())
                 .await?;

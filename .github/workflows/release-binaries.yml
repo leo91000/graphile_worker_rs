@@ -69,7 +69,7 @@ jobs:
         with:
           key: release-binaries-${{ matrix.target }}
       - name: Install wasm-bindgen CLI
-        run: cargo install wasm-bindgen-cli --version 0.2.121 --locked
+        run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
       - name: Build binary
         env:
           GRAPHILE_WORKER_ADMIN_UI_REBUILD: "1"

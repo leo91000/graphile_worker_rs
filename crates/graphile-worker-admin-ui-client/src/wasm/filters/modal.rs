@@ -1,6 +1,6 @@
 use super::super::types::Modal;
 
-pub(super) fn modal_title(modal: &Option<Modal>) -> &'static str {
+pub(in crate::wasm) fn modal_title(modal: &Option<Modal>) -> &'static str {
     match modal {
         Some(Modal::AddJob) => "Add job",
         Some(Modal::FailJobs) => "Fail selected jobs",

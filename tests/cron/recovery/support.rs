@@ -1,8 +1,8 @@
 use std::sync::atomic::{AtomicU8, Ordering};
 
-use chrono::{DateTime, Local, TimeZone};
 use graphile_worker_crontab_runner::{Clock, MockClock};
 use graphile_worker_database::{BoxFuture, Database, DbError, DbExecutor, DbParams, DbRow};
+use time::macros::datetime;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 use super::super::*;
@@ -87,13 +87,13 @@ impl DbExecutor for FaultyExecutor {
 #[derive(Clone)]
 pub(super) struct ObservedClock {
     pub clock: Arc<MockClock>,
-    sleeps: UnboundedSender<DateTime<Local>>,
+    sleeps: UnboundedSender<OffsetDateTime>,
 }
 
 impl ObservedClock {
-    pub fn new() -> (Self, UnboundedReceiver<DateTime<Local>>) {
+    pub fn new() -> (Self, UnboundedReceiver<OffsetDateTime>) {
         let (sleeps, receiver) = unbounded_channel();
-        let start = Local.with_ymd_and_hms(2026, 1, 15, 10, 0, 30).unwrap();
+        let start = datetime!(2026-01-15 10:00:30 UTC);
         (
             Self {
                 clock: Arc::new(MockClock::new(start)),
@@ -105,19 +105,17 @@ impl ObservedClock {
 }
 
 impl Clock for ObservedClock {
-    fn now(&self) -> DateTime<Local> {
+    fn now(&self) -> OffsetDateTime {
         self.clock.now()
     }
 
-    async fn sleep_until(&self, datetime: DateTime<Local>) {
+    async fn sleep_until(&self, datetime: OffsetDateTime) {
         self.sleeps.send(datetime).unwrap();
         self.clock.sleep_until(datetime).await;
     }
 }
 
-pub(super) async fn next_sleep(
-    receiver: &mut UnboundedReceiver<DateTime<Local>>,
-) -> DateTime<Local> {
+pub(super) async fn next_sleep(receiver: &mut UnboundedReceiver<OffsetDateTime>) -> OffsetDateTime {
     tokio::time::timeout(std::time::Duration::from_secs(5), receiver.recv())
         .await
         .expect("Cron did not reach its next sleep")

@@ -81,8 +81,11 @@ pub(super) async fn schedule_database_task(
     };
     let job_spec = JobSpecBuilder::new()
         .priority(-10)
-        .run_at(chrono::Utc::now() + chrono::Duration::seconds(10))
-        .job_key(format!("db_task_{}", chrono::Utc::now().timestamp()))
+        .run_at(time::OffsetDateTime::now_utc() + time::Duration::seconds(10))
+        .job_key(format!(
+            "db_task_{}",
+            time::OffsetDateTime::now_utc().unix_timestamp()
+        ))
         .build();
 
     match utils.add_job(task, job_spec).await {

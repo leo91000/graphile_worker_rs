@@ -13,8 +13,10 @@ readme = "README.md"
 
 [dependencies]
 getset.workspace = true
+graphile_worker_database = { workspace = true, optional = true, features = ["driver-sqlx"] }
 derive_builder.workspace = true
-chrono.workspace = true
+time = { workspace = true, features = ["formatting", "macros"] }
+serde.workspace = true
 serde_json.workspace = true
 sqlx = { workspace = true, optional = true }
 
@@ -22,4 +24,4 @@ sqlx = { workspace = true, optional = true }
 default = ["runtime-tokio", "driver-sqlx"]
 runtime-tokio = ["sqlx?/runtime-tokio"]
 runtime-async-std = ["sqlx?/runtime-async-std"]
-driver-sqlx = ["sqlx"]
+driver-sqlx = ["dep:graphile_worker_database", "sqlx"]

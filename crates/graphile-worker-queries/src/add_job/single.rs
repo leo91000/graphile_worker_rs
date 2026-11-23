@@ -1,8 +1,8 @@
-use chrono::Utc;
 use graphile_worker_database::{DbExecutorArg, DbValue, Schema};
 use graphile_worker_job::Job;
 use graphile_worker_job_spec::JobSpec;
 use indoc::formatdoc;
+use time::OffsetDateTime;
 use tracing::{info, Span};
 
 use crate::errors::GraphileWorkerError;
@@ -50,7 +50,9 @@ pub async fn add_job(
     );
 
     let job_key_mode = spec.job_key_mode().clone().map(|jkm| jkm.to_string());
-    let run_at = spec.run_at().or_else(|| use_local_time.then(Utc::now));
+    let run_at = spec
+        .run_at()
+        .or_else(|| use_local_time.then(OffsetDateTime::now_utc));
     let span = Span::current();
     span.record("otel.name", identifier);
     span.record("messaging.destination.name", identifier);

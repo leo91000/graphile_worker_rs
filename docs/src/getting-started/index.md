@@ -77,7 +77,7 @@ After initialization, create utilities from the worker and add jobs with a
 payload and `JobSpecBuilder`. The simple example schedules a job for later:
 
 ```rust,ignore
-use chrono::{offset::Utc, Duration};
+use time::{Duration, OffsetDateTime};
 use graphile_worker::JobSpecBuilder;
 
 let helpers = worker.create_utils();
@@ -88,7 +88,7 @@ helpers
             message: "world".to_string(),
         },
         JobSpecBuilder::new()
-            .run_at(Utc::now() + Duration::seconds(10))
+            .run_at(OffsetDateTime::now_utc() + Duration::seconds(10))
             .build(),
     )
     .await?;

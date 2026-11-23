@@ -1,9 +1,10 @@
 use anyhow::Result;
-use chrono::Utc;
 use graphile_worker::{DbJob, Job};
+use graphile_worker_admin_api::format_utc_timestamp_with_offset;
 use graphile_worker_admin_api::jobs::{DbJobOutput, ListedJob};
 use graphile_worker_admin_api::overview::{LockedWorkerRow, QueueRow};
 use serde::Serialize;
+use time::OffsetDateTime;
 
 pub(crate) fn print_db_job_result(json: bool, action: &str, jobs: &[DbJob]) -> Result<()> {
     if json {
@@ -21,7 +22,7 @@ pub(crate) fn print_db_job_result(json: bool, action: &str, jobs: &[DbJob]) -> R
     Ok(())
 }
 
-pub(crate) fn print_jobs_table(jobs: &[ListedJob]) {
+pub(crate) fn print_jobs_table(jobs: &[ListedJob]) -> Result<()> {
     println!("id\ttask\tqueue\tstate\trun_at\tattempts\tpriority\tkey\tlocked_by");
     for job in jobs {
         println!(
@@ -30,7 +31,7 @@ pub(crate) fn print_jobs_table(jobs: &[ListedJob]) {
             job.task_identifier,
             job.queue_name.as_deref().unwrap_or("-"),
             state_for(job),
-            job.run_at.to_rfc3339(),
+            format_utc_timestamp_with_offset(job.run_at)?,
             job.attempts,
             job.max_attempts,
             job.priority,
@@ -38,6 +39,7 @@ pub(crate) fn print_jobs_table(jobs: &[ListedJob]) {
             job.locked_by.as_deref().unwrap_or("-")
         );
     }
+    Ok(())
 }
 
 pub(crate) fn print_job_details(job: &ListedJob) -> Result<()> {
@@ -45,7 +47,7 @@ pub(crate) fn print_job_details(job: &ListedJob) -> Result<()> {
     println!("task: {}", job.task_identifier);
     println!("queue: {}", job.queue_name.as_deref().unwrap_or("-"));
     println!("state: {}", state_for(job));
-    println!("run_at: {}", job.run_at.to_rfc3339());
+    println!("run_at: {}", format_utc_timestamp_with_offset(job.run_at)?);
     println!("attempts: {}/{}", job.attempts, job.max_attempts);
     println!("priority: {}", job.priority);
     println!("key: {}", job.key.as_deref().unwrap_or("-"));
@@ -55,7 +57,7 @@ pub(crate) fn print_job_details(job: &ListedJob) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn print_queues_table(queues: &[QueueRow]) {
+pub(crate) fn print_queues_table(queues: &[QueueRow]) -> Result<()> {
     println!("id\tqueue\tjobs\tready\tlocked_by\tlocked_at");
     for queue in queues {
         println!(
@@ -67,10 +69,12 @@ pub(crate) fn print_queues_table(queues: &[QueueRow]) {
             queue.locked_by.as_deref().unwrap_or("-"),
             queue
                 .locked_at
-                .map(|locked_at| locked_at.to_rfc3339())
+                .map(format_utc_timestamp_with_offset)
+                .transpose()?
                 .unwrap_or_else(|| "-".to_string())
         );
     }
+    Ok(())
 }
 
 pub(crate) fn print_workers_table(workers: &[LockedWorkerRow]) {
@@ -90,7 +94,7 @@ fn state_for(job: &ListedJob) -> &'static str {
     if job.attempts >= job.max_attempts {
         return "failed";
     }
-    if job.run_at > Utc::now() {
+    if job.run_at > OffsetDateTime::now_utc() {
         return "scheduled";
     }
     "ready"

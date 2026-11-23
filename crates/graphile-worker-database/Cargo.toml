@@ -12,7 +12,7 @@ categories = ["asynchronous", "database"]
 readme = "README.md"
 
 [dependencies]
-chrono.workspace = true
+time = { workspace = true, features = ["macros", "parsing"] }
 graphile_worker_runtime = { workspace = true, optional = true }
 deadpool-postgres = { workspace = true, optional = true }
 futures.workspace = true
@@ -24,7 +24,7 @@ thiserror.workspace = true
 tokio = { workspace = true, optional = true, features = ["macros", "rt", "sync", "time"] }
 tokio-postgres = { workspace = true, optional = true, features = [
   "array-impls",
-  "with-chrono-0_4",
+  "with-time-0_3",
   "with-serde_json-1",
 ] }
 tokio-stream = { workspace = true, optional = true, features = ["sync"] }

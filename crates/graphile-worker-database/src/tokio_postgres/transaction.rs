@@ -54,7 +54,7 @@ impl DbExecutor for TokioPostgresTransaction {
             let client = guard
                 .as_mut()
                 .ok_or_else(|| DbError::new("transaction has already been committed"))?;
-            let params = boxed_params(params);
+            let params = boxed_params(params)?;
             let refs = param_refs(&params);
             client.execute(sql, &refs).await.map_err(Into::into)
         })
@@ -70,7 +70,7 @@ impl DbExecutor for TokioPostgresTransaction {
             let client = guard
                 .as_mut()
                 .ok_or_else(|| DbError::new("transaction has already been committed"))?;
-            let params = boxed_params(params);
+            let params = boxed_params(params)?;
             let refs = param_refs(&params);
             let rows = client.query(sql, &refs).await?;
             rows.into_iter().map(tokio_row_to_db_row).collect()

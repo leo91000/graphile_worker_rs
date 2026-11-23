@@ -39,7 +39,7 @@ async fn execute_with_client(
     sql: &str,
     params: DbParams,
 ) -> Result<u64, DbError> {
-    let params = boxed_params(params);
+    let params = boxed_params(params)?;
     let refs = param_refs(&params);
     client.execute(sql, &refs).await.map_err(Into::into)
 }
@@ -49,7 +49,7 @@ async fn fetch_all_with_client(
     sql: &str,
     params: DbParams,
 ) -> Result<Vec<DbRow>, DbError> {
-    let params = boxed_params(params);
+    let params = boxed_params(params)?;
     let refs = param_refs(&params);
     let rows = client.query(sql, &refs).await?;
     rows.into_iter().map(tokio_row_to_db_row).collect()
@@ -60,7 +60,7 @@ async fn execute_with_deadpool_client(
     sql: &str,
     params: DbParams,
 ) -> Result<u64, DbError> {
-    let params = boxed_params(params);
+    let params = boxed_params(params)?;
     let refs = param_refs(&params);
     (**client).execute(sql, &refs).await.map_err(Into::into)
 }
@@ -70,7 +70,7 @@ async fn fetch_all_with_deadpool_client(
     sql: &str,
     params: DbParams,
 ) -> Result<Vec<DbRow>, DbError> {
-    let params = boxed_params(params);
+    let params = boxed_params(params)?;
     let refs = param_refs(&params);
     let rows = (**client).query(sql, &refs).await?;
     rows.into_iter().map(tokio_row_to_db_row).collect()

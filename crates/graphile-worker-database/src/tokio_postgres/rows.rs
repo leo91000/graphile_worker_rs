@@ -2,10 +2,10 @@ use std::collections::HashMap;
 
 use ::tokio_postgres::types::Type;
 use ::tokio_postgres::Row;
-use chrono::{DateTime, Utc};
 use serde_json::Value;
+use time::OffsetDateTime;
 
-use crate::{DbCell, DbError, DbRow};
+use crate::{types::timestamp_in_utc, DbCell, DbError, DbRow};
 
 pub(super) fn tokio_row_to_db_row(row: Row) -> Result<DbRow, DbError> {
     let mut cells = HashMap::with_capacity(row.columns().len());
@@ -38,7 +38,9 @@ pub(super) fn tokio_row_to_db_row(row: Row) -> Result<DbRow, DbError> {
                 .map(DbCell::Text)
                 .unwrap_or(DbCell::Null),
             Type::TIMESTAMPTZ => row
-                .try_get::<usize, Option<DateTime<Utc>>>(index)?
+                .try_get::<usize, Option<OffsetDateTime>>(index)?
+                .map(timestamp_in_utc)
+                .transpose()?
                 .map(DbCell::TimestampTz)
                 .unwrap_or(DbCell::Null),
             ref other => {

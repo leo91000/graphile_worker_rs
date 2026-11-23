@@ -17,7 +17,7 @@ async fn context_ext_adds_typed_batch_job_from_task_handler() {
             ctx.add_batch_job(
                 vec![ChildBatchItem { id: 1 }, ChildBatchItem { id: 2 }],
                 JobSpec::builder()
-                    .run_at(chrono::Utc::now() + chrono::Duration::hours(1))
+                    .run_at(time::OffsetDateTime::now_utc() + time::Duration::hours(1))
                     .build(),
             )
             .await

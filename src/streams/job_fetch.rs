@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use chrono::Utc;
 use futures::{FutureExt, Stream, StreamExt};
 use graphile_worker_database::{Database, Schema};
 use graphile_worker_shutdown_signal::ShutdownSignal;
+use time::OffsetDateTime;
 use tracing::error;
 
 use crate::Job;
@@ -102,7 +102,7 @@ pub(crate) fn try_job_stream_with_filter<'a>(
             if finished {
                 return None;
             }
-            let now = use_local_time.then(Utc::now);
+            let now = use_local_time.then(OffsetDateTime::now_utc);
             let task_details_guard = task_details.read().await;
             let job = get_job_with_filter(
                 &database,

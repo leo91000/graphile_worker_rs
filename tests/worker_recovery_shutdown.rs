@@ -109,7 +109,7 @@ async fn shutdown_aborted_job_is_returned_without_backoff() {
                 .iter()
                 .any(|j| j.id == *job.id() && j.locked_by.is_some())
             {
-                shutdown_requested_at = Some(chrono::Utc::now());
+                shutdown_requested_at = Some(time::OffsetDateTime::now_utc());
                 worker.request_shutdown();
                 break;
             }
@@ -134,9 +134,9 @@ async fn shutdown_aborted_job_is_returned_without_backoff() {
         assert_eq!(recovered.attempts, 0, "attempts should be decremented back");
         assert!(recovered.locked_by.is_none(), "job should be unlocked");
         let expected_run_at = shutdown_requested_at.expect("shutdown should have been requested")
-            + chrono::Duration::from_std(interrupted_job_retry_delay)
-                .expect("interrupted job retry delay should convert to chrono duration")
-            - chrono::Duration::milliseconds(500);
+            + time::Duration::try_from(interrupted_job_retry_delay)
+                .expect("interrupted job retry delay should convert to a signed duration")
+            - time::Duration::milliseconds(500);
         assert!(
             recovered.run_at >= expected_run_at,
             "job should be rescheduled with recovery delay (expected >= {:?}, got {:?})",

@@ -5,7 +5,7 @@ use web_sys::RequestCredentials;
 
 use super::super::types::{AdminClientConfig, AuthMode, ErrorResponse};
 
-pub(super) async fn api_get<T>(
+pub(in crate::wasm) async fn api_get<T>(
     path: &str,
     config: &AdminClientConfig,
     token: &str,
@@ -20,7 +20,7 @@ where
     parse_response(response).await
 }
 
-pub(super) async fn api_post<B, T>(
+pub(in crate::wasm) async fn api_post<B, T>(
     path: &str,
     body: &B,
     config: &AdminClientConfig,

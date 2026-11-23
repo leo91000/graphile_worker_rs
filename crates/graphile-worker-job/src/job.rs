@@ -1,7 +1,9 @@
-use chrono::{DateTime, Utc};
 use derive_builder::Builder;
 use getset::Getters;
+#[cfg(feature = "driver-sqlx")]
+use graphile_worker_database::sqlx::SqlxTimestamp;
 use serde_json::Value;
+use time::OffsetDateTime;
 
 use crate::{DbJob, DbJobData};
 
@@ -24,8 +26,12 @@ pub struct Job {
     pub(crate) payload: serde_json::Value,
     #[builder(default)]
     pub(crate) priority: i16,
-    #[builder(default = "Utc::now()")]
-    pub(crate) run_at: DateTime<Utc>,
+    #[builder(default = "OffsetDateTime::now_utc()")]
+    #[cfg_attr(
+        feature = "driver-sqlx",
+        sqlx(try_from = "SqlxTimestamp<OffsetDateTime>")
+    )]
+    pub(crate) run_at: OffsetDateTime,
     #[builder(default)]
     /// Attempts started, including the current execution (1 on its first run).
     pub(crate) attempts: i16,
@@ -33,16 +39,28 @@ pub struct Job {
     pub(crate) max_attempts: i16,
     #[builder(default, setter(strip_option))]
     pub(crate) last_error: Option<String>,
-    #[builder(default = "Utc::now()")]
-    pub(crate) created_at: DateTime<Utc>,
-    #[builder(default = "Utc::now()")]
-    pub(crate) updated_at: DateTime<Utc>,
+    #[builder(default = "OffsetDateTime::now_utc()")]
+    #[cfg_attr(
+        feature = "driver-sqlx",
+        sqlx(try_from = "SqlxTimestamp<OffsetDateTime>")
+    )]
+    pub(crate) created_at: OffsetDateTime,
+    #[builder(default = "OffsetDateTime::now_utc()")]
+    #[cfg_attr(
+        feature = "driver-sqlx",
+        sqlx(try_from = "SqlxTimestamp<OffsetDateTime>")
+    )]
+    pub(crate) updated_at: OffsetDateTime,
     #[builder(default, setter(strip_option))]
     pub(crate) key: Option<String>,
     #[builder(default)]
     pub(crate) revision: i32,
     #[builder(default, setter(strip_option))]
-    pub(crate) locked_at: Option<DateTime<Utc>>,
+    #[cfg_attr(
+        feature = "driver-sqlx",
+        sqlx(try_from = "SqlxTimestamp<Option<OffsetDateTime>>")
+    )]
+    pub(crate) locked_at: Option<OffsetDateTime>,
     #[builder(default, setter(strip_option))]
     pub(crate) locked_by: Option<String>,
     #[builder(default, setter(strip_option))]

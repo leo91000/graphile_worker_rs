@@ -1,7 +1,7 @@
-use chrono::Utc;
 use futures::FutureExt;
 use graphile_worker_lifecycle_hooks::{LocalQueueGetJobsCompleteContext, LocalQueueMode};
 use graphile_worker_runtime as runtime;
+use time::OffsetDateTime;
 use tracing::{debug, error};
 
 use graphile_worker_queries::batch_get_jobs::batch_get_jobs_with_filter;
@@ -68,7 +68,7 @@ impl LocalQueue {
         self.reset_refetch_delay_counter();
 
         let task_details = self.0.task_details.read().await;
-        let now = self.0.use_local_time.then(Utc::now);
+        let now = self.0.use_local_time.then(OffsetDateTime::now_utc);
         let result = batch_get_jobs_with_filter(
             &self.0.database,
             &task_details,

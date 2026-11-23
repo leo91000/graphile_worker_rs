@@ -1,21 +1,21 @@
 use std::cmp::Ordering;
 
-use chrono::{prelude::*, Duration};
+use time::{macros::datetime, Duration, OffsetDateTime};
 
 use crate::clock::mock::MockClock;
-use crate::clock::Clock;
+use crate::clock::{Clock, SystemClock};
 use crate::utils::round_date_minute;
 
 #[path = "tests/shutdown.rs"]
 mod shutdown;
 
-fn test_time() -> DateTime<Local> {
-    Local.with_ymd_and_hms(2024, 1, 15, 10, 30, 0).unwrap()
+fn test_time() -> OffsetDateTime {
+    datetime!(2024-01-15 10:30:00 UTC)
 }
 
 #[test]
 fn test_round_date_minute_no_round_up() {
-    let time = Local.with_ymd_and_hms(2024, 1, 15, 10, 30, 45).unwrap();
+    let time = datetime!(2024-01-15 10:30:45 UTC);
     let rounded = round_date_minute(time, false);
     assert_eq!(rounded.minute(), 30);
     assert_eq!(rounded.second(), 0);
@@ -24,7 +24,7 @@ fn test_round_date_minute_no_round_up() {
 
 #[test]
 fn test_round_date_minute_with_round_up() {
-    let time = Local.with_ymd_and_hms(2024, 1, 15, 10, 30, 45).unwrap();
+    let time = datetime!(2024-01-15 10:30:45 UTC);
     let rounded = round_date_minute(time, true);
     assert_eq!(rounded.minute(), 31);
     assert_eq!(rounded.second(), 0);
@@ -33,70 +33,70 @@ fn test_round_date_minute_with_round_up() {
 
 #[test]
 fn test_clock_skew_too_early_detection() {
-    let scheduled = Local.with_ymd_and_hms(2024, 1, 15, 10, 31, 0).unwrap();
-    let current = Local.with_ymd_and_hms(2024, 1, 15, 10, 30, 0).unwrap();
+    let scheduled = datetime!(2024-01-15 10:31:00 UTC);
+    let current = datetime!(2024-01-15 10:30:00 UTC);
 
     let current_rounded = round_date_minute(current, false);
     let ts_delta = current_rounded - scheduled;
 
     assert!(
-        ts_delta.num_minutes() < 0,
+        ts_delta.whole_minutes() < 0,
         "When current time is before scheduled, delta should be negative"
     );
     assert!(
-        matches!(ts_delta.num_minutes().cmp(&0), Ordering::Less),
+        matches!(ts_delta.whole_minutes().cmp(&0), Ordering::Less),
         "Should match Ordering::Less for too early case"
     );
 }
 
 #[test]
 fn test_clock_skew_too_late_detection() {
-    let scheduled = Local.with_ymd_and_hms(2024, 1, 15, 10, 31, 0).unwrap();
-    let current = Local.with_ymd_and_hms(2024, 1, 15, 10, 45, 0).unwrap();
+    let scheduled = datetime!(2024-01-15 10:31:00 UTC);
+    let current = datetime!(2024-01-15 10:45:00 UTC);
 
     let current_rounded = round_date_minute(current, false);
     let ts_delta = current_rounded - scheduled;
 
     assert!(
-        ts_delta.num_minutes() > 0,
+        ts_delta.whole_minutes() > 0,
         "When current time is after scheduled, delta should be positive"
     );
     assert!(
-        matches!(ts_delta.num_minutes().cmp(&0), Ordering::Greater),
+        matches!(ts_delta.whole_minutes().cmp(&0), Ordering::Greater),
         "Should match Ordering::Greater for too late case"
     );
 }
 
 #[test]
 fn test_clock_skew_on_time_detection() {
-    let scheduled = Local.with_ymd_and_hms(2024, 1, 15, 10, 31, 0).unwrap();
-    let current = Local.with_ymd_and_hms(2024, 1, 15, 10, 31, 30).unwrap();
+    let scheduled = datetime!(2024-01-15 10:31:00 UTC);
+    let current = datetime!(2024-01-15 10:31:30 UTC);
 
     let current_rounded = round_date_minute(current, false);
     let ts_delta = current_rounded - scheduled;
 
     assert_eq!(
-        ts_delta.num_minutes(),
+        ts_delta.whole_minutes(),
         0,
         "When current time equals scheduled (same minute), delta should be zero"
     );
     assert!(
-        matches!(ts_delta.num_minutes().cmp(&0), Ordering::Equal),
+        matches!(ts_delta.whole_minutes().cmp(&0), Ordering::Equal),
         "Should match Ordering::Equal for on-time case"
     );
 }
 
 #[test]
 fn test_system_sleep_scenario() {
-    let scheduled = Local.with_ymd_and_hms(2024, 1, 15, 10, 1, 0).unwrap();
-    let after_sleep = Local.with_ymd_and_hms(2024, 1, 15, 11, 25, 0).unwrap();
+    let scheduled = datetime!(2024-01-15 10:01:00 UTC);
+    let after_sleep = datetime!(2024-01-15 11:25:00 UTC);
 
     let current_rounded = round_date_minute(after_sleep, false);
     let ts_delta = current_rounded - scheduled;
 
-    assert_eq!(ts_delta.num_minutes(), 84, "Should be 84 minutes behind");
+    assert_eq!(ts_delta.whole_minutes(), 84, "Should be 84 minutes behind");
     assert!(
-        matches!(ts_delta.num_minutes().cmp(&0), Ordering::Greater),
+        matches!(ts_delta.whole_minutes().cmp(&0), Ordering::Greater),
         "Should match Ordering::Greater for catch-up mode"
     );
 }
@@ -167,4 +167,14 @@ async fn test_mock_clock_sleep_until_wakes_on_time_advance() {
         *woke_up.lock().await,
         "Should have woken up after time advance"
     );
+}
+
+#[tokio::test]
+async fn system_clock_returns_for_a_past_deadline() {
+    tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        SystemClock.sleep_until(OffsetDateTime::now_utc() - Duration::seconds(1)),
+    )
+    .await
+    .unwrap();
 }

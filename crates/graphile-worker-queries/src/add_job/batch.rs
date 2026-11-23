@@ -1,8 +1,8 @@
-use chrono::{DateTime, Utc};
 use graphile_worker_database::{DbExecutorArg, DbValue, Schema};
 use graphile_worker_job::Job;
 use graphile_worker_job_spec::JobKeyMode;
 use indoc::formatdoc;
+use time::{OffsetDateTime, UtcOffset};
 use tracing::{info, Span};
 
 use crate::errors::GraphileWorkerError;
@@ -19,7 +19,8 @@ struct DbJobSpec {
     identifier: String,
     payload: serde_json::Value,
     queue_name: Option<String>,
-    run_at: Option<DateTime<Utc>>,
+    #[serde(serialize_with = "serialize_run_at")]
+    run_at: Option<OffsetDateTime>,
     max_attempts: Option<i16>,
     job_key: Option<String>,
     priority: Option<i16>,
@@ -31,11 +32,25 @@ struct BorrowedDbJobSpec<'a> {
     identifier: &'a str,
     payload: &'a serde_json::Value,
     queue_name: Option<&'a str>,
-    run_at: Option<DateTime<Utc>>,
+    #[serde(serialize_with = "serialize_run_at")]
+    run_at: Option<OffsetDateTime>,
     max_attempts: Option<i16>,
     job_key: Option<&'a str>,
     priority: Option<i16>,
     flags: Option<&'a [String]>,
+}
+
+fn serialize_run_at<S: serde::Serializer>(
+    run_at: &Option<OffsetDateTime>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    let Some(run_at) = run_at else {
+        return serializer.serialize_none();
+    };
+    let run_at = run_at
+        .checked_to_offset(UtcOffset::UTC)
+        .ok_or_else(|| serde::ser::Error::custom("timestamp is outside the supported UTC range"))?;
+    time::serde::rfc3339::option::serialize(&Some(run_at), serializer)
 }
 
 #[tracing::instrument(
@@ -73,7 +88,7 @@ pub async fn add_jobs<'a>(
     }
 
     let schema = schema.into();
-    let default_run_at = use_local_time.then(Utc::now);
+    let default_run_at = use_local_time.then(OffsetDateTime::now_utc);
     let sql = add_jobs_sql(&schema);
 
     let trace_info = telemetry::current_trace_info();
@@ -131,7 +146,7 @@ fn single_batch_identifier<'a>(jobs: &[JobToAdd<'a>]) -> Option<&'a str> {
 
 fn build_batch_specs_json<'a>(
     jobs: &[JobToAdd<'a>],
-    default_run_at: Option<DateTime<Utc>>,
+    default_run_at: Option<OffsetDateTime>,
     trace_info: Option<&TraceInfo>,
 ) -> serde_json::Result<serde_json::Value> {
     if trace_info.is_none() && jobs.len() >= BORROWED_BATCH_SERIALIZATION_THRESHOLD {
@@ -163,7 +178,7 @@ fn build_batch_specs_json<'a>(
 
 fn build_borrowed_batch_specs_json<'a>(
     jobs: &[JobToAdd<'a>],
-    default_run_at: Option<DateTime<Utc>>,
+    default_run_at: Option<OffsetDateTime>,
 ) -> serde_json::Result<serde_json::Value> {
     let db_specs: Vec<BorrowedDbJobSpec<'_>> = jobs
         .iter()
@@ -209,6 +224,20 @@ mod tests {
             trace_id: "4bf92f3577b34da6a3ce929d0e0e4736".to_string(),
             span_id: "00f067aa0ba902b7".to_string(),
         }
+    }
+
+    #[test]
+    fn batch_serialization_returns_an_error_for_a_timestamp_outside_the_utc_range() {
+        let run_at = time::macros::datetime!(+999999-12-31 23:59 -01:00);
+        let spec = JobSpec::builder().run_at(run_at).build();
+        let jobs = [JobToAdd {
+            identifier: "task",
+            payload: serde_json::Value::Null,
+            spec: &spec,
+        }];
+
+        let error = build_batch_specs_json(&jobs, None, None).unwrap_err();
+        assert!(error.to_string().contains("supported UTC range"));
     }
 
     #[test]

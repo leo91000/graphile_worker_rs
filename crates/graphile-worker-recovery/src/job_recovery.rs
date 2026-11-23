@@ -1,7 +1,7 @@
-use chrono::{DateTime, Utc};
 use graphile_worker_database::{DbExecutorArg, DbParams, DbValue, Schema};
 use graphile_worker_lifecycle_hooks::{JobRecoveryContext, JobRecoveryResult};
 use indoc::formatdoc;
+use time::OffsetDateTime;
 
 use graphile_worker_queries::errors::GraphileWorkerError;
 use graphile_worker_queries::fail_job::single::fail_job;
@@ -78,7 +78,7 @@ async fn set_recovered_job_schedule(
     mut executor: impl DbExecutorArg,
     schema: &Schema,
     job_id: i64,
-    run_at: DateTime<Utc>,
+    run_at: OffsetDateTime,
     attempts: Option<i16>,
 ) -> Result<(), GraphileWorkerError> {
     let jobs = schema.private_table("jobs");

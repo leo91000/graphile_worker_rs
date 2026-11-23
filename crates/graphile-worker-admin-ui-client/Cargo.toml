@@ -14,7 +14,7 @@ categories = ["web-programming", "database"]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-chrono.workspace = true
+time = { workspace = true, features = ["formatting", "macros", "parsing", "wasm-bindgen"] }
 futures.workspace = true
 graphile_worker_admin_api.workspace = true
 serde.workspace = true

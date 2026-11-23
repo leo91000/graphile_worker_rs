@@ -47,7 +47,7 @@ async fn test_permanent_failure_unlocks_job_and_queue() {
 
         let start = Instant::now();
         let (job, queue) = loop {
-            let job: Option<(i64, Option<String>, Option<chrono::DateTime<chrono::Utc>>)> =
+            let job: Option<(i64, Option<String>, Option<time::OffsetDateTime>)> =
                 sqlx::query_as(
                     "SELECT id, locked_by, locked_at FROM graphile_worker._private_jobs LIMIT 1",
                 )
@@ -55,7 +55,7 @@ async fn test_permanent_failure_unlocks_job_and_queue() {
                 .await
                 .expect("Failed to query job");
 
-            let queue: Option<(i32, Option<String>, Option<chrono::DateTime<chrono::Utc>>)> =
+            let queue: Option<(i32, Option<String>, Option<time::OffsetDateTime>)> =
                 sqlx::query_as(
                     "SELECT id, locked_by, locked_at FROM graphile_worker._private_job_queues WHERE queue_name = 'test_queue' LIMIT 1",
                 )

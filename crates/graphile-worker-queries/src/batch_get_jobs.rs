@@ -1,6 +1,6 @@
-use chrono::{DateTime, Utc};
 use graphile_worker_database::{DbExecutorArg, DbParams, DbValue, Schema};
 use indoc::formatdoc;
+use time::OffsetDateTime;
 
 use crate::errors::Result;
 use crate::flag_filter::JobFlagFilter;
@@ -21,7 +21,7 @@ pub async fn batch_get_jobs(
     worker_id: &str,
     flags_to_skip: &[String],
     batch_size: i32,
-    now: Option<DateTime<Utc>>,
+    now: Option<OffsetDateTime>,
 ) -> Result<Vec<Job>> {
     batch_get_jobs_with_filter(
         executor,
@@ -48,7 +48,7 @@ pub async fn batch_get_jobs_with_filter(
     worker_id: &str,
     filter: JobFlagFilter<'_>,
     batch_size: i32,
-    now: Option<DateTime<Utc>>,
+    now: Option<OffsetDateTime>,
 ) -> Result<Vec<Job>> {
     let schema = schema.into();
     let has_now = now.is_some();

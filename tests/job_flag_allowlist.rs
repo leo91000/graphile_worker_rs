@@ -1,4 +1,3 @@
-use chrono::{Duration, Utc};
 use futures::{FutureExt, StreamExt};
 use graphile_worker::sql::{
     batch_get_jobs::batch_get_jobs_with_filter, get_job::get_job_with_filter,
@@ -6,6 +5,7 @@ use graphile_worker::sql::{
 };
 use graphile_worker::{JobFlagFilter, JobSpec, Schema, WorkerUtils};
 use serde_json::json;
+use time::{Duration, OffsetDateTime};
 
 mod helpers;
 use helpers::with_test_db;
@@ -19,7 +19,7 @@ async fn allowlist_claims_match_keys_and_keep_rejected_jobs_untouched() {
         for schema in [Schema::default(), Schema::new("allowlist \"tenant")] {
             let utils = WorkerUtils::new(db.database.clone(), schema.clone());
             utils.migrate().await.unwrap();
-            let future = Utc::now() + Duration::hours(1);
+            let future = OffsetDateTime::now_utc() + Duration::hours(1);
             let shapes = [
                 None,
                 Some(json!({})),

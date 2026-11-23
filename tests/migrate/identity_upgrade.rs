@@ -51,7 +51,7 @@ async fn check_upgrade(db: helpers::TestDatabase, upstream: bool) {
     query("update graphile_worker._private_jobs set locked_by = 'old-worker', locked_at = now(), attempts = 1").execute(&db.test_pool).await.unwrap();
     query("update graphile_worker._private_job_queues set locked_by = 'old-worker', locked_at = now()").execute(&db.test_pool).await.unwrap();
     let before = db.get_jobs().await;
-    let ledger: Vec<(i32, chrono::DateTime<chrono::Utc>, bool)> =
+    let ledger: Vec<(i32, time::OffsetDateTime, bool)> =
         sqlx::query_as("select id, ts, breaking from graphile_worker.migrations order by id")
             .fetch_all(&db.test_pool)
             .await
@@ -64,7 +64,7 @@ async fn check_upgrade(db: helpers::TestDatabase, upstream: bool) {
     }
     migrate(&db.database, "graphile_worker").await.unwrap();
     assert_eq!(db.get_jobs().await, before);
-    let after: Vec<(i32, chrono::DateTime<chrono::Utc>, bool)> = sqlx::query_as(
+    let after: Vec<(i32, time::OffsetDateTime, bool)> = sqlx::query_as(
         "select id, ts, breaking from graphile_worker.migrations where id <= 20 order by id",
     )
     .fetch_all(&db.test_pool)

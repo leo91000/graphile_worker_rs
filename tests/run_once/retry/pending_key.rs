@@ -80,7 +80,7 @@ async fn schedules_a_new_job_if_the_existing_is_pending_retry() {
                 Job5 { succeed: true },
                 JobSpec {
                     job_key: Some("abc".into()),
-                    run_at: Some(Utc::now() - Duration::seconds(1)),
+                    run_at: Some(OffsetDateTime::now_utc() - Duration::seconds(1)),
                     ..Default::default()
                 },
             )

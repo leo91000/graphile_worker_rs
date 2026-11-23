@@ -1,5 +1,5 @@
-use chrono::{Timelike, Utc};
 use graphile_worker::worker_utils::types::RescheduleJobOptions;
+use time::{Duration, OffsetDateTime};
 
 use crate::helpers::{with_test_db, SelectionOfJobs};
 
@@ -33,7 +33,8 @@ async fn reschedules_jobs_leaves_others_unaffected() {
         ];
 
         // Define a new scheduled time for the jobs
-        let nowish = Utc::now().with_nanosecond(0).unwrap() + chrono::Duration::seconds(60);
+        let nowish =
+            OffsetDateTime::now_utc().replace_nanosecond(0).unwrap() + Duration::seconds(60);
 
         // Reschedule specified jobs
         let rescheduled_jobs = worker_utils

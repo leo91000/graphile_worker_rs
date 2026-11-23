@@ -1,6 +1,8 @@
-use chrono::{DateTime, Utc};
+#[cfg(feature = "sqlx")]
+use graphile_worker_database::sqlx::SqlxTimestamp;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use time::OffsetDateTime;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(feature = "sqlx", derive(sqlx::FromRow))]
@@ -17,7 +19,12 @@ pub struct JobStats {
 pub struct QueueRow {
     pub id: i32,
     pub queue_name: String,
-    pub locked_at: Option<DateTime<Utc>>,
+    #[serde(default, with = "crate::timestamp::option")]
+    #[cfg_attr(
+        feature = "sqlx",
+        sqlx(try_from = "SqlxTimestamp<Option<OffsetDateTime>>")
+    )]
+    pub locked_at: Option<OffsetDateTime>,
     pub locked_by: Option<String>,
     pub job_count: i64,
     pub ready_count: i64,
@@ -34,8 +41,10 @@ pub struct LockedWorkerRow {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ActiveWorkerRow {
     pub worker_id: String,
-    pub last_heartbeat_at: DateTime<Utc>,
-    pub started_at: DateTime<Utc>,
+    #[serde(with = "crate::timestamp")]
+    pub last_heartbeat_at: OffsetDateTime,
+    #[serde(with = "crate::timestamp")]
+    pub started_at: OffsetDateTime,
     pub metadata: Option<Value>,
     pub is_stale: bool,
 }

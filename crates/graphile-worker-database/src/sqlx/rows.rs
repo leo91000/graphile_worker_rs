@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
-use chrono::{DateTime, Utc};
 use serde_json::Value;
 use sqlx::postgres::PgRow;
 use sqlx::{Column, Row, TypeInfo};
+use time::OffsetDateTime;
 
+use super::SqlxTimestamp;
 use crate::{DbCell, DbError, DbRow};
 
 pub(super) fn sqlx_row_to_db_row(row: PgRow) -> Result<DbRow, DbError> {
@@ -39,7 +40,8 @@ pub(super) fn sqlx_row_to_db_row(row: PgRow) -> Result<DbRow, DbError> {
                 .map(DbCell::Text)
                 .unwrap_or(DbCell::Null),
             "TIMESTAMPTZ" => row
-                .try_get::<Option<DateTime<Utc>>, _>(index)?
+                .try_get::<SqlxTimestamp<Option<OffsetDateTime>>, _>(index)?
+                .into_inner()
                 .map(DbCell::TimestampTz)
                 .unwrap_or(DbCell::Null),
             other => {

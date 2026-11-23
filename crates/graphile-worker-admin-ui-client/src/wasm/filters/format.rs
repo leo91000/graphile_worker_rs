@@ -1,11 +1,11 @@
-use chrono::{DateTime, Utc};
 use serde_json::Value;
+use time::{macros::format_description, OffsetDateTime, UtcOffset};
 
-pub(super) fn stringify_value(value: &Value) -> String {
+pub(in crate::wasm) fn stringify_value(value: &Value) -> String {
     serde_json::to_string(value).unwrap_or_default()
 }
 
-pub(super) fn short(value: &str, length: usize) -> String {
+pub(in crate::wasm) fn short(value: &str, length: usize) -> String {
     if value.chars().count() <= length {
         return value.to_string();
     }
@@ -17,6 +17,11 @@ pub(super) fn short(value: &str, length: usize) -> String {
     output
 }
 
-pub(super) fn format_date(value: DateTime<Utc>) -> String {
-    value.format("%Y-%m-%d %H:%M:%S UTC").to_string()
+pub(in crate::wasm) fn format_date(value: OffsetDateTime) -> String {
+    value
+        .to_offset(UtcOffset::UTC)
+        .format(format_description!(
+            "[year]-[month]-[day] [hour]:[minute]:[second] UTC"
+        ))
+        .unwrap_or_else(|_| value.to_string())
 }

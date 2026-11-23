@@ -1,6 +1,6 @@
-use chrono::Utc;
 use graphile_worker::{worker_utils::types::CleanupTask, JobSpec};
 use indoc::formatdoc;
+use time::OffsetDateTime;
 
 use crate::helpers::sql::safe_query;
 use crate::helpers::with_test_db;
@@ -23,9 +23,9 @@ async fn cleanup_with_gc_job_queues() {
         ];
 
         let mut a = 0;
-        let mut date = Utc::now();
+        let mut date = OffsetDateTime::now_utc();
         for (worker_id, queue_name, task_identifier) in specs.iter() {
-            date -= chrono::Duration::minutes(1);
+            date -= time::Duration::minutes(1);
             a += 1;
             let job = worker_utils
                 .add_raw_job(

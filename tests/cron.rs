@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use chrono::{Duration, DurationRound, Local};
 use futures::FutureExt;
 use graphile_worker::parse_crontab;
 use graphile_worker::HookRegistry;
@@ -10,6 +9,7 @@ use graphile_worker_crontab_runner::{CronRunner, MockClock};
 use graphile_worker_shutdown_signal::ShutdownSignal;
 use serde::{Deserialize, Serialize};
 use sqlx::query;
+use time::{Duration, OffsetDateTime};
 use tokio::sync::Notify;
 use tokio::{task::spawn_local, time::Instant};
 
@@ -37,5 +37,6 @@ mod recovery;
 mod registration;
 #[path = "cron/runner.rs"]
 mod runner;
+#[cfg(unix)]
 #[path = "cron/timezone.rs"]
 mod timezone;

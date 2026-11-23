@@ -71,7 +71,7 @@ mod tests {
         let schema = format!(
             "admin_api_tasks_{}_{}",
             std::process::id(),
-            chrono::Utc::now().timestamp_nanos_opt().unwrap()
+            time::OffsetDateTime::now_utc().unix_timestamp_nanos()
         );
 
         sqlx::query(sqlx::AssertSqlSafe(format!("CREATE SCHEMA {schema}")))

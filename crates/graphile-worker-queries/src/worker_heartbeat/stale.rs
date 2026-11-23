@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use chrono::Utc;
 use graphile_worker_database::{DbExecutorArg, DbParams, DbValue, Schema};
 use indoc::formatdoc;
+use time::OffsetDateTime;
 
 use crate::duration::duration_as_millis_i64;
 use crate::errors::Result;
@@ -101,7 +101,7 @@ pub async fn get_worker_last_heartbeat(
     mut executor: impl DbExecutorArg,
     schema: impl Into<Schema>,
     worker_id: &str,
-) -> Result<Option<chrono::DateTime<Utc>>> {
+) -> Result<Option<OffsetDateTime>> {
     let schema = schema.into();
     let workers = PrivateTable::Workers.qualified(&schema);
     let sql = formatdoc!(

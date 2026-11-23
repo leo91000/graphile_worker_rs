@@ -1,5 +1,5 @@
-use chrono::prelude::*;
 use getset::Getters;
+use time::PrimitiveDateTime;
 
 use crate::{CrontabOptions, CrontabTimer};
 
@@ -27,8 +27,7 @@ impl Crontab {
     ///
     /// ```rust
     /// use graphile_worker_crontab_types::{CrontabValue, CrontabTimer, Crontab};
-    /// use chrono::prelude::*;
-    /// use std::str::FromStr;
+    /// use time::macros::datetime;
     ///
     /// let crontab = Crontab {
     ///    timer: CrontabTimer {
@@ -40,11 +39,11 @@ impl Crontab {
     ///    task_identifier: "test".to_string(),
     ///    ..Default::default()
     /// };
-    /// assert!(crontab.should_run_at(&"2012-12-17T08:30:12".parse().unwrap()));
-    /// assert!(crontab.should_run_at(&"2015-02-05T09:30:00".parse().unwrap()));
-    /// assert!(crontab.should_run_at(&"1998-10-13T10:30:59".parse().unwrap()));
+    /// assert!(crontab.should_run_at(&datetime!(2012-12-17 08:30:12)));
+    /// assert!(crontab.should_run_at(&datetime!(2015-02-05 09:30:00)));
+    /// assert!(crontab.should_run_at(&datetime!(1998-10-13 10:30:59)));
     /// ```
-    pub fn should_run_at(&self, at: &NaiveDateTime) -> bool {
+    pub fn should_run_at(&self, at: &PrimitiveDateTime) -> bool {
         self.timer().should_run_at(at)
     }
 

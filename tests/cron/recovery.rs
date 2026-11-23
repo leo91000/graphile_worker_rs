@@ -1,5 +1,5 @@
-use chrono::{Duration, Timelike};
 use graphile_worker_crontab_runner::Clock;
+use time::Duration;
 
 use super::*;
 
@@ -22,7 +22,7 @@ async fn cron_retries_startup_with_capped_backoff_and_resets_after_a_healthy_tic
             let deadline = next_sleep(&mut sleeps).await;
             assert_eq!(deadline - clock.now(), delay);
             clock.clock.set_time(deadline);
-            delay = (delay + delay / 2).min(Duration::seconds(60));
+            delay = (delay + delay / 2i32).min(Duration::seconds(60));
         }
         assert_eq!(delay, Duration::seconds(60));
         let deadline = next_sleep(&mut sleeps).await;
@@ -177,7 +177,7 @@ async fn programmatic_matcher_and_backfill_observer_use_the_same_calendar_as_liv
         assert_eq!(first_live_tick.minute(), 6);
         for minute in [2, 4] {
             let event = observations.try_recv().unwrap();
-            assert_eq!(event.scheduled_at.with_timezone(&Local).minute(), minute);
+            assert_eq!(event.scheduled_at.minute(), minute);
             assert_eq!(event.entries.len(), 1);
             let entry = &event.entries[0];
             assert_eq!(entry.crontab.identifier(), "even");
@@ -192,7 +192,7 @@ async fn programmatic_matcher_and_backfill_observer_use_the_same_calendar_as_liv
         next_sleep(&mut sleeps).await;
 
         let mut outcomes: Vec<_> = db.get_jobs().await.into_iter().map(|job| (
-            job.run_at.with_timezone(&Local).minute(),
+            job.run_at.minute(),
             job.payload["_cron"]["backfilled"].as_bool().unwrap(),
         )).collect();
         outcomes.sort_unstable();
@@ -239,10 +239,10 @@ async fn a_panicking_matcher_does_not_block_healthy_entries_without_fill() {
             .collect();
         jobs.sort_unstable();
         assert_eq!(jobs, [
-            (first_tick.with_timezone(&chrono::Utc), "first".into()),
-            (first_tick.with_timezone(&chrono::Utc), "last".into()),
-            (second_tick.with_timezone(&chrono::Utc), "first".into()),
-            (second_tick.with_timezone(&chrono::Utc), "last".into()),
+            (first_tick, "first".into()),
+            (first_tick, "last".into()),
+            (second_tick, "first".into()),
+            (second_tick, "last".into()),
         ]);
         stop_runner(handle, notify).await;
     }).await;

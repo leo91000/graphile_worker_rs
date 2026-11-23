@@ -45,7 +45,7 @@ async fn return_job_for_recovery_unlocks_queued_job_with_delay() {
             .await
             .expect("failed to lock queued recovery queue");
 
-        let before_return = chrono::Utc::now();
+        let before_return = time::OffsetDateTime::now_utc();
         return_job_for_recovery(
             &test_db.database,
             &job,
@@ -67,7 +67,7 @@ async fn return_job_for_recovery_unlocks_queued_job_with_delay() {
         assert_eq!(recovered.attempts, 0);
         assert_eq!(recovered.last_error.as_deref(), Some("queued recovered"));
         assert!(
-            recovered.run_at >= before_return + chrono::Duration::seconds(4),
+            recovered.run_at >= before_return + time::Duration::seconds(4),
             "recovery delay should move queued job run_at"
         );
 

@@ -1,7 +1,8 @@
-use chrono::prelude::*;
+use std::fmt::Write;
+
 use graphile_worker_crontab_types::{Crontab, JobKeyMode};
 use serde::Serialize;
-use serde_json::json;
+use time::{macros::format_description, OffsetDateTime, UtcOffset};
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -9,7 +10,8 @@ struct CrontabJobInner {
     task: String,
     payload: Option<serde_json::Value>,
     queue_name: Option<String>,
-    run_at: DateTime<Local>,
+    #[serde(with = "time::serde::rfc3339")]
+    run_at: OffsetDateTime,
     max_attempts: Option<u16>,
     priority: Option<i16>,
     job_key: Option<String>,
@@ -17,12 +19,12 @@ struct CrontabJobInner {
 }
 
 impl CrontabJobInner {
-    fn from_crontab_and_run_at<Tz: TimeZone>(crontab: &Crontab, run_at: &DateTime<Tz>) -> Self {
+    fn from_crontab_and_run_at(crontab: &Crontab, run_at: OffsetDateTime) -> Self {
         Self {
             task: crontab.task_identifier.to_owned(),
             payload: crontab.payload.to_owned(),
             queue_name: crontab.options.queue.to_owned(),
-            run_at: run_at.with_timezone(&Local),
+            run_at: run_at.to_offset(UtcOffset::UTC),
             max_attempts: crontab.options.max.to_owned(),
             priority: crontab.options.priority.to_owned(),
             job_key: crontab.options.job_key.to_owned(),
@@ -38,27 +40,68 @@ pub(crate) struct CrontabJob {
     job: CrontabJobInner,
 }
 
+#[derive(Serialize)]
+struct CronMetadata {
+    ts: String,
+    backfilled: bool,
+}
+
 impl CrontabJob {
-    pub(crate) fn for_cron<Tz: TimeZone>(
+    pub(crate) fn for_cron(
         crontab: &Crontab,
-        ts: &DateTime<Tz>,
+        ts: OffsetDateTime,
         backfilled: bool,
-    ) -> Self {
+    ) -> serde_json::Result<Self> {
         let mut job = CrontabJobInner::from_crontab_and_run_at(crontab, ts);
 
         if let Some(payload) = job.payload.as_mut().and_then(|p| p.as_object_mut()) {
             payload.insert(
                 "_cron".into(),
-                json!({
-                    "ts": format!("{ts:?}"),
-                    "backfilled": backfilled
-                }),
+                serde_json::to_value(CronMetadata {
+                    ts: format_local_tick(ts)?,
+                    backfilled,
+                })?,
             );
         }
 
-        Self {
+        Ok(Self {
             identifier: crontab.identifier().to_owned(),
             job,
-        }
+        })
+    }
+}
+
+fn format_local_tick(ts: OffsetDateTime) -> serde_json::Result<String> {
+    let format = format_description!(
+        "[year]-[month]-[day]T[hour]:[minute]:[second][offset_hour sign:mandatory]:[offset_minute]"
+    );
+    let mut timestamp = ts.format(format).map_err(serde::ser::Error::custom)?;
+    let offset_seconds = ts.offset().seconds_past_minute().unsigned_abs();
+    if offset_seconds != 0 {
+        write!(timestamp, ":{offset_seconds:02}").expect("writing to a String cannot fail");
+    }
+    Ok(timestamp)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use time::macros::datetime;
+
+    #[test]
+    fn serializes_cron_tick_with_subminute_offset() {
+        let crontab = Crontab {
+            payload: Some(serde_json::json!({})),
+            ..Crontab::default()
+        };
+        let local_tick = datetime!(2026-01-01 07:00:00 +05:30:20);
+        let job = CrontabJob::for_cron(&crontab, local_tick, false).unwrap();
+        let job = serde_json::to_value(job).unwrap();
+
+        assert_eq!(job["job"]["runAt"], "2026-01-01T01:29:40Z");
+        assert_eq!(
+            job["job"]["payload"]["_cron"]["ts"],
+            "2026-01-01T07:00:00+05:30:20"
+        );
     }
 }

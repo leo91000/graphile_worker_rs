@@ -1,5 +1,5 @@
-use chrono::{DateTime, Utc};
 use serde_json::Value;
+use time::OffsetDateTime;
 
 #[derive(Clone, Debug)]
 pub enum DbCell {
@@ -10,5 +10,5 @@ pub enum DbCell {
     I64(i64),
     Json(Value),
     Text(String),
-    TimestampTz(DateTime<Utc>),
+    TimestampTz(OffsetDateTime),
 }

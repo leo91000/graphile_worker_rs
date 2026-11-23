@@ -136,7 +136,7 @@ impl CleanupTask {
 #[derive(Default, Debug)]
 pub struct RescheduleJobOptions {
     /// When the job should be executed. If not specified, jobs will be scheduled to run immediately.
-    pub run_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub run_at: Option<time::OffsetDateTime>,
 
     /// The job's priority. Lower numbers indicate higher priority and run sooner.
     /// Default priority is 0.

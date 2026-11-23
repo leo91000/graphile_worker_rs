@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
-use chrono::Utc;
 use graphile_worker::worker_utils::types::RescheduleJobOptions;
 use graphile_worker::WorkerUtils;
+use time::OffsetDateTime;
 
 use crate::args::{Cli, FailArgs, JobIdsArgs, RemoveArgs, RescheduleArgs};
 use crate::output::{print_db_job_result, print_json};
@@ -28,7 +28,7 @@ pub(crate) async fn reschedule(
     utils: &WorkerUtils,
 ) -> Result<()> {
     let run_at = if args.now {
-        Some(Utc::now())
+        Some(OffsetDateTime::now_utc())
     } else {
         args.run_at
     };

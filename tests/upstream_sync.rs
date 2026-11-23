@@ -12,7 +12,7 @@ mod helpers;
 async fn batch_fetch_serializes_named_queues_without_dropping_unnamed_jobs() {
     with_test_db(|db| async move {
         db.worker_utils().migrate().await.unwrap();
-        let due = chrono::Utc::now() - chrono::Duration::minutes(1);
+        let due = time::OffsetDateTime::now_utc() - time::Duration::minutes(1);
         for (queue, priority) in [
             (Some("serial"), 2),
             (Some("serial"), 1),
@@ -119,7 +119,7 @@ async fn cached_fetch_queries_keep_schema_flags_time_and_batch_values_separate()
     use graphile_worker::sql::{get_job::get_job, return_jobs::batch::return_jobs};
     use graphile_worker::{Schema, WorkerUtils};
     with_test_db(|db| async move {
-        let future = chrono::Utc::now() + chrono::Duration::days(365);
+        let future = time::OffsetDateTime::now_utc() + time::Duration::days(365);
         for name in ["graphile_worker", "tenant\"quoted"] {
             let schema = Schema::new(name);
             let utils = WorkerUtils::new(db.database.clone(), schema.clone());
@@ -143,7 +143,7 @@ async fn cached_fetch_queries_keep_schema_flags_time_and_batch_values_separate()
                 .unwrap();
             for _ in 0..2 {
                 for flags in [vec![], vec!["blocked".to_owned()]] {
-                    for now in [None, Some(future + chrono::Duration::seconds(1))] {
+                    for now in [None, Some(future + time::Duration::seconds(1))] {
                         for size in [1, 10] {
                             let jobs = batch_get_jobs(
                                 &db.database,

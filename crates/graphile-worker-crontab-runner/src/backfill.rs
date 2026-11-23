@@ -1,16 +1,17 @@
-use chrono::prelude::*;
 use graphile_worker_crontab_types::Crontab;
 use graphile_worker_database::{DbExecutorArg, Schema};
 use graphile_worker_lifecycle_hooks::{CronBackfillContext, CronBackfillEntry, HookRegistry};
+use time::{Duration, OffsetDateTime, UtcOffset};
 use tracing::debug;
 
 use crate::{
+    clock::Clock,
     runner::CronEntries,
     sql::{
         get_known_crontabs, insert_unknown_crontabs, schedule_cron_jobs, CrontabJob, KnownCrontab,
         ScheduleCronJobError,
     },
-    utils::{round_date_minute, yield_now, ONE_MINUTE},
+    utils::{calendar_time, next_cron_minute, yield_now},
 };
 
 pub(crate) struct BackfillItemAndDate<'a, 'b> {
@@ -53,17 +54,15 @@ pub(crate) fn get_backfill_and_unknown_items<'a, 'b>(
     }
 }
 
-pub(crate) async fn register_and_backfill_items<Tz: TimeZone>(
+pub(crate) async fn register_and_backfill_items(
     mut executor: impl DbExecutorArg,
     schema: &Schema,
     entries: CronEntries<'_>,
-    start_time: &DateTime<Tz>,
+    start_time: OffsetDateTime,
+    clock: &impl Clock,
     use_local_time: bool,
     hooks: &HookRegistry,
-) -> Result<(), ScheduleCronJobError>
-where
-    Tz::Offset: Send + Sync,
-{
+) -> Result<(), ScheduleCronJobError> {
     let known_crontabs = get_known_crontabs(&mut executor, schema).await?;
 
     let BackfillAndUnknownItems {
@@ -82,19 +81,17 @@ where
         .max();
 
     if let Some(largest_backfill) = largest_backfill {
-        let mut ts = round_date_minute(
-            start_time.to_owned() - chrono::Duration::seconds(largest_backfill as i64),
-            true,
+        let mut ts = next_cron_minute(
+            clock,
+            start_time - Duration::seconds(largest_backfill as i64),
+            use_local_time,
         );
 
-        while &ts < start_time {
+        while ts < start_time {
             yield_now().await;
-            let time_ago = (start_time.to_owned() - ts.to_owned()).num_seconds();
-            let calendar_time = if use_local_time {
-                ts.naive_local()
-            } else {
-                ts.naive_utc()
-            };
+            let time_ago = (start_time - ts).whole_seconds();
+            let local_ts = clock.local_time(ts);
+            let calendar_time = calendar_time(local_ts, use_local_time);
 
             let mut candidates = Vec::new();
             for candidate in &backfill_items_and_date {
@@ -118,29 +115,31 @@ where
                 debug!(nb_jobs = candidates.len(), at = ?ts, "cron:backfill");
                 hooks
                     .emit(CronBackfillContext {
-                        scheduled_at: ts.with_timezone(&Utc),
+                        scheduled_at: ts.to_offset(UtcOffset::UTC),
                         entries: candidates
                             .iter()
                             .map(|candidate| CronBackfillEntry {
                                 crontab: candidate.item.clone(),
-                                known_since: candidate.known.known_since().with_timezone(&Utc),
+                                known_since: candidate
+                                    .known
+                                    .known_since()
+                                    .to_offset(UtcOffset::UTC),
                                 last_execution: candidate
                                     .known
                                     .last_execution()
-                                    .map(|time| time.with_timezone(&Utc)),
+                                    .map(|time| time.to_offset(UtcOffset::UTC)),
                             })
                             .collect(),
                     })
                     .await;
                 let to_backfill: Vec<_> = candidates
                     .into_iter()
-                    .map(|candidate| CrontabJob::for_cron(candidate.item, &ts, true))
-                    .collect();
-                schedule_cron_jobs(&mut executor, &to_backfill, &ts, schema, use_local_time)
-                    .await?;
+                    .map(|candidate| CrontabJob::for_cron(candidate.item, local_ts, true))
+                    .collect::<Result<_, _>>()?;
+                schedule_cron_jobs(&mut executor, &to_backfill, ts, schema, use_local_time).await?;
             }
 
-            ts += *ONE_MINUTE;
+            ts = next_cron_minute(clock, ts, use_local_time);
         }
     }
 

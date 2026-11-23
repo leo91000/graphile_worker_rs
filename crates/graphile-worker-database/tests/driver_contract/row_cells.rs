@@ -23,13 +23,7 @@ fn db_row_decodes_supported_cells_and_errors() {
         json!({ "ok": true })
     );
     assert_eq!(row.try_get::<String>("text").unwrap(), "value");
-    assert_eq!(row.try_get::<DateTime<Utc>>("timestamp").unwrap(), ts);
-    assert_eq!(
-        row.try_get::<DateTime<Local>>("timestamp")
-            .unwrap()
-            .with_timezone(&Utc),
-        ts
-    );
+    assert_eq!(row.try_get::<OffsetDateTime>("timestamp").unwrap(), ts);
     assert_eq!(row.try_get::<Option<bool>>("null").unwrap(), None);
     assert_eq!(
         row.try_get::<Option<String>>("text").unwrap(),
@@ -43,6 +37,11 @@ fn db_row_decodes_supported_cells_and_errors() {
     assert!(wrong_type
         .to_string()
         .contains("could not be decoded as i32"));
+
+    let wrong_timestamp_type = row.try_get::<OffsetDateTime>("text").unwrap_err();
+    assert!(wrong_timestamp_type
+        .to_string()
+        .contains("could not be decoded as OffsetDateTime"));
 
     let coded = DbError::with_code("duplicate key", "23505");
     assert_eq!(coded.code(), Some("23505"));

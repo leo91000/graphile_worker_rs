@@ -391,7 +391,7 @@ async fn cached_claims_keep_independent_filter_values_shapes_and_time_parameters
         for schema in [Schema::default(), Schema::new("filtered \"tenant")] {
             let utils = WorkerUtils::new(db.database.clone(), schema.clone());
             utils.migrate().await.expect("migrate schema");
-            let future = chrono::Utc::now() + chrono::Duration::hours(1);
+            let future = time::OffsetDateTime::now_utc() + time::Duration::hours(1);
             let flags = [
                 None,
                 Some(vec![]),
@@ -447,7 +447,7 @@ async fn cached_claims_keep_independent_filter_values_shapes_and_time_parameters
                 for (accepted, forbidden, expected) in &policies {
                     let accepted: Vec<_> = accepted.iter().map(|s| (*s).to_owned()).collect();
                     let forbidden: Vec<_> = forbidden.iter().map(|s| (*s).to_owned()).collect();
-                    for now in [None, Some(future + chrono::Duration::seconds(1))] {
+                    for now in [None, Some(future + time::Duration::seconds(1))] {
                         for size in [1, 100] {
                             let jobs = batch_get_jobs_with_filter(
                                 &db.database,

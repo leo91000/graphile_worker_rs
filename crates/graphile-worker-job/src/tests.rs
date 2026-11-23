@@ -1,4 +1,4 @@
-use chrono::Utc;
+use time::OffsetDateTime;
 
 use crate::{DbJob, DbJobData, Job};
 
@@ -9,15 +9,15 @@ fn test_from_db_job() {
         job_queue_id: Some(1),
         payload: serde_json::json!({}),
         priority: 1,
-        run_at: Utc::now(),
+        run_at: OffsetDateTime::now_utc(),
         attempts: 1,
         max_attempts: 1,
         last_error: Some("error".to_string()),
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
+        created_at: OffsetDateTime::now_utc(),
+        updated_at: OffsetDateTime::now_utc(),
         key: Some("key".to_string()),
         revision: 1,
-        locked_at: Some(Utc::now()),
+        locked_at: Some(OffsetDateTime::now_utc()),
         locked_by: Some("locked_by".to_string()),
         flags: Some(serde_json::json!({})),
         task_id: 1,
@@ -45,15 +45,15 @@ fn test_from() {
         job_queue_id: Some(1),
         payload: serde_json::json!({}),
         priority: 1,
-        run_at: Utc::now(),
+        run_at: OffsetDateTime::now_utc(),
         attempts: 1,
         max_attempts: 1,
         last_error: Some("error".to_string()),
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
+        created_at: OffsetDateTime::now_utc(),
+        updated_at: OffsetDateTime::now_utc(),
         key: Some("key".to_string()),
         revision: 1,
-        locked_at: Some(Utc::now()),
+        locked_at: Some(OffsetDateTime::now_utc()),
         locked_by: Some("locked_by".to_string()),
         flags: Some(serde_json::json!({})),
         task_id: 1,
@@ -77,7 +77,7 @@ fn test_from() {
 
 #[test]
 fn db_job_new_and_into_data_preserve_all_fields() {
-    let now = Utc::now();
+    let now = OffsetDateTime::now_utc();
     let job = DbJob::new(
         7,
         Some(2),

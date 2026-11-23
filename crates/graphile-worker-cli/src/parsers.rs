@@ -1,6 +1,7 @@
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use graphile_worker_admin_api::parse_rfc3339_utc_timestamp;
+use time::OffsetDateTime;
 
 pub(crate) fn parse_duration(value: &str) -> std::result::Result<Duration, String> {
     let value = value.trim();
@@ -31,33 +32,55 @@ pub(crate) fn parse_duration(value: &str) -> std::result::Result<Duration, Strin
     Ok(Duration::from_secs(seconds))
 }
 
-pub(crate) fn parse_utc_datetime(value: &str) -> std::result::Result<DateTime<Utc>, String> {
+pub(crate) fn parse_utc_datetime(value: &str) -> std::result::Result<OffsetDateTime, String> {
     if value.eq_ignore_ascii_case("now") {
-        return Ok(Utc::now());
+        return Ok(OffsetDateTime::now_utc());
     }
 
-    DateTime::parse_from_rfc3339(value)
-        .map(|datetime| datetime.with_timezone(&Utc))
-        .map_err(|error| error.to_string())
+    parse_rfc3339_utc_timestamp(value)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use graphile_worker_admin_api::format_utc_timestamp;
+    use time::UtcOffset;
 
     #[test]
     fn parses_rfc3339_datetime_as_utc() {
         let parsed =
             parse_utc_datetime("2026-01-02T03:04:05+02:00").expect("datetime should parse");
 
-        assert_eq!(parsed.to_rfc3339(), "2026-01-02T01:04:05+00:00");
+        assert_eq!(parsed.offset(), UtcOffset::UTC);
+        assert_eq!(
+            format_utc_timestamp(parsed).unwrap(),
+            "2026-01-02T01:04:05Z"
+        );
+    }
+
+    #[test]
+    fn accepts_unicode_minus_in_rfc3339_offsets() {
+        let parsed = parse_utc_datetime("2026-01-02T03:04:05−00:15").unwrap();
+        assert_eq!(
+            format_utc_timestamp(parsed).unwrap(),
+            "2026-01-02T03:19:05Z"
+        );
+    }
+
+    #[test]
+    fn converts_rfc3339_leap_second_to_postgres_instant() {
+        let parsed = parse_utc_datetime("2016-12-31T23:59:60.125Z").unwrap();
+        assert_eq!(
+            format_utc_timestamp(parsed).unwrap(),
+            "2017-01-01T00:00:00.125Z"
+        );
     }
 
     #[test]
     fn parses_now_datetime() {
-        let before = Utc::now();
+        let before = OffsetDateTime::now_utc();
         let parsed = parse_utc_datetime("now").expect("now should parse");
-        let after = Utc::now();
+        let after = OffsetDateTime::now_utc();
 
         assert!(parsed >= before);
         assert!(parsed <= after);

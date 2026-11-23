@@ -1,9 +1,9 @@
-use chrono::{DateTime, Local, Utc};
 use graphile_worker::{DbJob, DbJobData};
 use graphile_worker_crontab_runner::KnownCrontab;
 use sqlx::postgres::{PgArguments, PgRow};
 use sqlx::query::{Query, QueryAs, QueryScalar};
 use sqlx::{FromRow, Postgres, Row};
+use time::OffsetDateTime;
 
 pub fn safe_query(sql: impl Into<String>) -> Query<'static, Postgres, PgArguments> {
     sqlx::query(sqlx::AssertSqlSafe(sql.into()))
@@ -47,12 +47,8 @@ pub(super) fn db_job_from_sqlx_row(row: PgRow) -> DbJob {
 }
 
 pub(super) fn known_crontab_from_sqlx_row(row: PgRow) -> KnownCrontab {
-    let known_since: DateTime<Utc> = row.get("known_since");
-    let last_execution: Option<DateTime<Utc>> = row.get("last_execution");
+    let known_since: OffsetDateTime = row.get("known_since");
+    let last_execution: Option<OffsetDateTime> = row.get("last_execution");
 
-    KnownCrontab::new(
-        row.get("identifier"),
-        known_since.with_timezone(&Local),
-        last_execution.map(|value| value.with_timezone(&Local)),
-    )
+    KnownCrontab::new(row.get("identifier"), known_since, last_execution)
 }

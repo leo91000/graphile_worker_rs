@@ -1,6 +1,6 @@
-use chrono::Utc;
 use graphile_worker::JobSpec;
 use indoc::formatdoc;
+use time::OffsetDateTime;
 
 use crate::helpers::sql::safe_query;
 use crate::helpers::with_test_db;
@@ -31,10 +31,10 @@ async fn unlocks_jobs_for_given_workers_leaves_others_unaffected() {
         ];
 
         let mut jobs = Vec::new();
-        let mut date = Utc::now();
+        let mut date = OffsetDateTime::now_utc();
 
         for (worker_id, queue_name) in specs.iter() {
-            date -= chrono::Duration::minutes(1);
+            date -= time::Duration::minutes(1);
             let job = worker_utils
                 .add_raw_job(
                     "job3",

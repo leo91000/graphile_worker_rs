@@ -40,7 +40,7 @@ async fn it_should_run_jobs() {
             .await
             .expect("Failed to create worker");
 
-        let start = Utc::now();
+        let start = OffsetDateTime::now_utc();
         {
             let utils = worker.create_utils();
 
@@ -61,13 +61,16 @@ async fn it_should_run_jobs() {
         assert_eq!(jobs.len(), 1);
         let job = &jobs[0];
 
-        let start_diff_ms = (job.run_at.timestamp_millis() - start.timestamp_millis()).abs();
+        let start_diff_ms = (job.run_at - start).whole_milliseconds().abs();
         assert!(
             job.run_at >= start || start_diff_ms <= 50,
             "job.run_at should be >= start or within 50ms tolerance, diff: {}ms",
             start_diff_ms
         );
-        assert!(job.run_at <= Utc::now(), "job.run_at should be <= now");
+        assert!(
+            job.run_at <= OffsetDateTime::now_utc(),
+            "job.run_at should be <= now"
+        );
         let job_queues = test_db.get_job_queues().await;
         assert_eq!(job_queues.len(), 1);
         let job_queue = &job_queues[0];

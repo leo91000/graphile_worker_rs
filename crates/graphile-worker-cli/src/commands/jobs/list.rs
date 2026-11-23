@@ -16,7 +16,7 @@ pub(crate) async fn list(cli: &Cli, args: &ListArgs, pool: &PgPool, schema: &Sch
     if cli.json {
         print_json(&jobs)?;
     } else {
-        print_jobs_table(&jobs);
+        print_jobs_table(&jobs)?;
     }
 
     Ok(())

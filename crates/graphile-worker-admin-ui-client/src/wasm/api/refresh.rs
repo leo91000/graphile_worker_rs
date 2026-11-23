@@ -6,18 +6,18 @@ use super::super::types::{AdminClientConfig, ListJobsResponse, ListedJob, Overvi
 use super::http::api_get;
 
 #[derive(Clone, Copy)]
-pub(super) struct RefreshSignals {
-    pub(super) token: RwSignal<String>,
-    pub(super) limit: RwSignal<i64>,
-    pub(super) overview: RwSignal<OverviewResponse>,
-    pub(super) jobs: RwSignal<Vec<ListedJob>>,
-    pub(super) selected_jobs: RwSignal<Vec<i64>>,
-    pub(super) toast: RwSignal<Option<String>>,
-    pub(super) refreshing: RwSignal<bool>,
-    pub(super) refresh_pending: RwSignal<bool>,
+pub(in crate::wasm) struct RefreshSignals {
+    pub(in crate::wasm) token: RwSignal<String>,
+    pub(in crate::wasm) limit: RwSignal<i64>,
+    pub(in crate::wasm) overview: RwSignal<OverviewResponse>,
+    pub(in crate::wasm) jobs: RwSignal<Vec<ListedJob>>,
+    pub(in crate::wasm) selected_jobs: RwSignal<Vec<i64>>,
+    pub(in crate::wasm) toast: RwSignal<Option<String>>,
+    pub(in crate::wasm) refreshing: RwSignal<bool>,
+    pub(in crate::wasm) refresh_pending: RwSignal<bool>,
 }
 
-pub(super) fn refresh_data(config: AdminClientConfig, signals: RefreshSignals) {
+pub(in crate::wasm) fn refresh_data(config: AdminClientConfig, signals: RefreshSignals) {
     if signals.refreshing.get_untracked() {
         signals.refresh_pending.set(true);
         return;

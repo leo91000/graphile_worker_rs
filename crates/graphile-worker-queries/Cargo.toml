@@ -48,7 +48,7 @@ graphile_worker_database.workspace = true
 graphile_worker_job.workspace = true
 graphile_worker_job_spec.workspace = true
 graphile_worker_task_details.workspace = true
-chrono.workspace = true
+time = { workspace = true, features = ["serde-well-known"] }
 indoc.workspace = true
 serde.workspace = true
 serde_json.workspace = true

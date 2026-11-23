@@ -26,7 +26,7 @@ async fn it_should_schedule_errors_for_retry() {
             .await
             .expect("Failed to create worker");
 
-        let start = Utc::now();
+        let start = OffsetDateTime::now_utc();
         {
             let utils = worker.create_utils();
 
@@ -49,8 +49,8 @@ async fn it_should_schedule_errors_for_retry() {
             let job = &jobs[0];
             assert_eq!(job.task_identifier, "job3");
             assert_eq!(job.payload, json!({ "a": 1 }));
-            let now = Utc::now();
-            let start_diff_ms = (job.run_at.timestamp_millis() - start.timestamp_millis()).abs();
+            let now = OffsetDateTime::now_utc();
+            let start_diff_ms = (job.run_at - start).whole_milliseconds().abs();
             assert!(
                 job.run_at >= start || start_diff_ms <= 50,
                 "job.run_at should be >= start or within 50ms tolerance, diff: {}ms",
@@ -82,10 +82,10 @@ async fn it_should_schedule_errors_for_retry() {
                 Some("TaskError(\"\\\"fail\\\"\")".to_string())
             );
             // It's the first attempt, so delay is exp(1) ~= 2.719 seconds
-            let retry_delay = chrono::Duration::milliseconds(2719);
-            let clock_tolerance = chrono::Duration::milliseconds(50);
+            let retry_delay = time::Duration::milliseconds(2719);
+            let clock_tolerance = time::Duration::milliseconds(50);
             assert!(job.run_at >= start + retry_delay - clock_tolerance);
-            assert!(job.run_at <= Utc::now() + retry_delay + clock_tolerance);
+            assert!(job.run_at <= OffsetDateTime::now_utc() + retry_delay + clock_tolerance);
 
             let job_queues = test_db.get_job_queues().await;
             assert_eq!(job_queues.len(), 1);
@@ -151,7 +151,7 @@ async fn it_should_retry_jobs() {
 
         // Tell the job to run now
         test_db.make_jobs_run_now("job3").await;
-        let start = Utc::now();
+        let start = OffsetDateTime::now_utc();
         worker.run_once().await.expect("Failed to run worker");
         assert_eq!(JOB3_CALL_COUNT.get().await, 2);
 
@@ -168,10 +168,10 @@ async fn it_should_retry_jobs() {
                 Some("TaskError(\"\\\"fail 2\\\"\")".to_string())
             );
             // It's the second attempt, so delay is exp(2) ~= 7.389 seconds
-            let retry_delay = chrono::Duration::milliseconds(7389);
-            let clock_tolerance = chrono::Duration::milliseconds(50);
+            let retry_delay = time::Duration::milliseconds(7389);
+            let clock_tolerance = time::Duration::milliseconds(50);
             assert!(job.run_at >= start + retry_delay - clock_tolerance);
-            assert!(job.run_at <= Utc::now() + retry_delay + clock_tolerance);
+            assert!(job.run_at <= OffsetDateTime::now_utc() + retry_delay + clock_tolerance);
 
             let job_queues = test_db.get_job_queues().await;
             assert_eq!(job_queues.len(), 1);

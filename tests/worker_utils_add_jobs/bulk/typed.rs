@@ -140,7 +140,8 @@ async fn add_jobs_preserves_individual_specs() {
 
         let spec1 = JobSpecBuilder::new().priority(1).build();
         let spec2 = JobSpecBuilder::new().priority(10).build();
-        let spec3 = JobSpecBuilder::new().priority(5).build();
+        let run_at = time::macros::datetime!(2026-01-01 07:00:00 +05:30:20);
+        let spec3 = JobSpecBuilder::new().priority(5).run_at(run_at).build();
 
         let jobs_to_add = vec![
             (BatchJob { value: 1 }, &spec1),
@@ -173,6 +174,7 @@ async fn add_jobs_preserves_individual_specs() {
         assert_eq!(job1.priority, 1);
         assert_eq!(job2.priority, 10);
         assert_eq!(job3.priority, 5);
+        assert_eq!(job3.run_at, run_at);
     })
     .await;
 }

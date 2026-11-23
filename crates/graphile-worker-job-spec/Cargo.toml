@@ -12,6 +12,6 @@ categories = []
 readme = "README.md"
 
 [dependencies]
-chrono.workspace = true
+time.workspace = true
 derive_builder.workspace = true
 getset.workspace = true

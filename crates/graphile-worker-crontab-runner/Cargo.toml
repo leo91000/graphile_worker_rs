@@ -38,16 +38,22 @@ graphile_worker_lifecycle_hooks.workspace = true
 graphile_worker_shutdown_signal.workspace = true
 graphile_worker_runtime.workspace = true
 graphile_worker_database.workspace = true
-chrono = { workspace = true }
+time = { workspace = true, features = ["local-offset", "macros", "serde-well-known"] }
 sqlx = { workspace = true, optional = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 getset = { workspace = true }
 tracing = { workspace = true }
-once_cell = { workspace = true }
 futures = { workspace = true }
 indoc = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+iana-time-zone = "0.1.65"
+tz-rs = "0.7.3"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_System_Time"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "sync"] }

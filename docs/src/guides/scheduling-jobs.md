@@ -138,12 +138,12 @@ identifier and payload type stay tied to the `TaskHandler` implementation.
 `JobSpec` controls how the job is inserted:
 
 ```rust,ignore
-use chrono::{Duration, Utc};
+use time::{Duration, OffsetDateTime};
 use graphile_worker::{JobKeyMode, JobSpecBuilder};
 
 let spec = JobSpecBuilder::new()
     .queue_name("mailers")
-    .run_at(Utc::now() + Duration::minutes(5))
+    .run_at(OffsetDateTime::now_utc() + Duration::minutes(5))
     .max_attempts(10)
     .job_key("send_email:user@example.com")
     .job_key_mode(JobKeyMode::Replace)
@@ -158,7 +158,7 @@ All `JobSpec` fields are optional. `JobSpec::default()` or
 | Field | Effect |
 | --- | --- |
 | `queue_name` | Assigns the job to a named queue. |
-| `run_at` | Delays execution until the given UTC timestamp. |
+| `run_at` | Delays execution until the given `time::OffsetDateTime` instant. |
 | `max_attempts` | Sets the maximum number of attempts before the job is permanently failed. |
 | `job_key` | Deduplicates scheduled jobs with the same key. |
 | `job_key_mode` | Controls how an existing keyed job is handled. |
@@ -167,7 +167,31 @@ All `JobSpec` fields are optional. `JobSpec::default()` or
 
 When `run_at` is not supplied, the database function schedules the job using
 its default time behavior. If the worker is configured to use local application
-time, `WorkerUtils` supplies `Utc::now()` for jobs without an explicit `run_at`.
+time, `WorkerUtils` supplies `OffsetDateTime::now_utc()` for jobs without an explicit `run_at`.
+
+### Migrating from Chrono
+
+Job timestamps now use `time::OffsetDateTime`. If your application still uses
+Chrono, convert its timestamps at the worker API boundary. Pass both seconds and
+fractional nanoseconds to preserve precision.
+
+```rust,ignore
+let run_at = time::OffsetDateTime::from_unix_timestamp_nanos(
+    i128::from(chrono_run_at.timestamp()) * 1_000_000_000
+        + i128::from(chrono_run_at.timestamp_subsec_nanos()),
+)?;
+let spec = JobSpecBuilder::new().run_at(run_at).build();
+```
+
+Cron matchers receive `&time::PrimitiveDateTime`, and weekly schedules use
+`time::Weekday` values such as `Weekday::Monday`. Custom cron clocks use
+`OffsetDateTime` for `now` and `sleep_until`. They follow the host timezone by
+default and can override `Clock::local_time` to use a different timezone or
+keep a fixed offset.
+
+If your own job payload has timestamp fields, use `#[serde(with = "time::serde::rfc3339")]` with the
+`time` feature `serde-well-known` to keep reading RFC 3339 strings from
+jobs already in the queue.
 
 ## Job Keys
 

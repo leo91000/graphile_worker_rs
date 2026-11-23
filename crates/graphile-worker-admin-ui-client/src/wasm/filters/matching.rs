@@ -1,7 +1,7 @@
 use super::super::types::ListedJob;
 use super::format::stringify_value;
 
-pub(super) fn filter_values(raw: &str) -> Vec<String> {
+pub(in crate::wasm) fn filter_values(raw: &str) -> Vec<String> {
     raw.split([',', '\n', '\r'])
         .map(str::trim)
         .filter(|item| !item.is_empty())
@@ -9,7 +9,7 @@ pub(super) fn filter_values(raw: &str) -> Vec<String> {
         .collect()
 }
 
-pub(super) fn normalize_filter_paste(raw: &str) -> String {
+pub(in crate::wasm) fn normalize_filter_paste(raw: &str) -> String {
     raw.split([',', '\n', '\r', '\t'])
         .map(str::trim)
         .filter(|item| !item.is_empty())
@@ -17,7 +17,7 @@ pub(super) fn normalize_filter_paste(raw: &str) -> String {
         .join(", ")
 }
 
-pub(super) fn matches_column(job: &ListedJob, column: &str, filters: &[String]) -> bool {
+pub(in crate::wasm) fn matches_column(job: &ListedJob, column: &str, filters: &[String]) -> bool {
     if filters.is_empty() {
         return true;
     }
@@ -32,7 +32,7 @@ pub(super) fn matches_column(job: &ListedJob, column: &str, filters: &[String]) 
     filters.iter().any(|filter| value.contains(filter))
 }
 
-pub(super) fn job_search_text(job: &ListedJob) -> String {
+pub(in crate::wasm) fn job_search_text(job: &ListedJob) -> String {
     [
         job.id.to_string(),
         job.task_identifier.clone(),

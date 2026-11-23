@@ -1,21 +1,21 @@
-use chrono::Utc;
+use time::OffsetDateTime;
 
 use super::super::types::{JobState, ListedJob};
 
-pub(super) fn job_state(job: &ListedJob) -> JobState {
+pub(in crate::wasm) fn job_state(job: &ListedJob) -> JobState {
     if job.locked_at.is_some() {
         return JobState::Locked;
     }
     if job.attempts >= job.max_attempts {
         return JobState::Failed;
     }
-    if job.run_at > Utc::now() {
+    if job.run_at > OffsetDateTime::now_utc() {
         return JobState::Scheduled;
     }
     JobState::Ready
 }
 
-pub(super) fn state_label(state: JobState) -> &'static str {
+pub(in crate::wasm) fn state_label(state: JobState) -> &'static str {
     match state {
         JobState::All => "all",
         JobState::Ready => "ready",
@@ -25,7 +25,7 @@ pub(super) fn state_label(state: JobState) -> &'static str {
     }
 }
 
-pub(super) fn state_color(state: JobState) -> &'static str {
+pub(in crate::wasm) fn state_color(state: JobState) -> &'static str {
     match state {
         JobState::Ready => "text-emerald-600 dark:text-emerald-300",
         JobState::Scheduled => "text-amber-600 dark:text-amber-300",

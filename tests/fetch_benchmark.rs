@@ -90,7 +90,7 @@ async fn benchmark_cached_fetch_with_mixed_queues() {
                     } else {
                         None
                     },
-                    run_at: Some(chrono::Utc::now() - chrono::Duration::minutes(1)),
+                    run_at: Some(time::OffsetDateTime::now_utc() - time::Duration::minutes(1)),
                     ..Default::default()
                 },
             )
