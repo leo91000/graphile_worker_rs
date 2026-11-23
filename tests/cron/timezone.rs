@@ -329,3 +329,61 @@ async fn local_backfill_preserves_minutes_across_subminute_offset_changes() {
     })
     .await;
 }
+
+#[tokio::test]
+async fn local_cron_accepts_an_exact_utc_wake_with_a_subminute_offset() {
+    if !in_timezone(
+        "local_cron_accepts_an_exact_utc_wake_with_a_subminute_offset",
+        "XXX-5:30:20",
+    ) {
+        return;
+    }
+
+    with_test_db(|test_db| async move {
+        test_db.worker_utils().migrate().await.unwrap();
+
+        let start = datetime!(2026-01-01 01:29:30 UTC);
+        let tick = datetime!(2026-01-01 01:29:40 UTC);
+        let clock = Arc::new(MockClock::new(start));
+        let (sleeps, mut receiver) = unbounded_channel();
+        let observed_clock = ObservedClock {
+            clock: clock.clone(),
+            sleeps,
+        };
+        let (shutdown_signal, shutdown_notify) = create_shutdown_signal();
+        let database = test_db.database.clone();
+        let runner_handle = spawn_local(async move {
+            let crontabs = parse_crontab("0 7 * * * subminute {}").unwrap();
+            CronRunner::new(
+                &database,
+                "graphile_worker",
+                &crontabs,
+                &HookRegistry::default(),
+            )
+            .use_local_time(true)
+            .with_clock(observed_clock)
+            .run(shutdown_signal)
+            .await
+        });
+
+        assert_eq!(next_sleep(&mut receiver).await, tick);
+        clock.set_time(tick);
+        assert_eq!(next_sleep(&mut receiver).await, tick + Duration::minutes(1));
+
+        shutdown_notify.notify_one();
+        tokio::time::timeout(std::time::Duration::from_secs(5), runner_handle)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+
+        let jobs = test_db.get_jobs().await;
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].run_at, tick);
+        assert_eq!(
+            jobs[0].payload["_cron"]["ts"],
+            "2026-01-01T07:00:00+05:30:20"
+        );
+    })
+    .await;
+}

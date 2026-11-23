@@ -66,6 +66,7 @@ fn parse_timestamp(value: &str) -> Result<OffsetDateTime, String> {
     }
 
     let value = normalize_legacy_whitespace(value)?;
+    let value = normalize_legacy_year(&value);
     let without_zone = value.strip_suffix(['Z', 'z']).or_else(|| {
         let suffix_start = value.len().checked_sub(3)?;
         let (date_time, zone) = value.split_at_checked(suffix_start)?;
@@ -78,6 +79,22 @@ fn parse_timestamp(value: &str) -> Result<OffsetDateTime, String> {
     to_utc(parse_with_leap_second(&value, |value| {
         OffsetDateTime::parse(value, LEGACY_DATE_TIME)
     })?)
+}
+
+fn normalize_legacy_year(value: &str) -> Cow<'_, str> {
+    let Some((year, date)) = value
+        .strip_prefix(['+', '-'])
+        .and_then(|unsigned| unsigned.split_once('-'))
+    else {
+        return Cow::Borrowed(value);
+    };
+    if year.len() <= 6 || !year.starts_with('0') {
+        return Cow::Borrowed(value);
+    }
+
+    let year = year.trim_start_matches('0');
+    let year = if year.is_empty() { "0" } else { year };
+    Cow::Owned(format!("{}{year}-{date}", &value[..1]))
 }
 
 fn normalize_legacy_whitespace(value: &str) -> Result<Cow<'_, str>, String> {

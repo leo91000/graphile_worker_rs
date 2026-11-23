@@ -33,9 +33,35 @@ impl Clock for SystemClock {
     }
 
     fn local_time(&self, datetime: OffsetDateTime) -> OffsetDateTime {
+        #[cfg(all(target_os = "linux", target_env = "gnu"))]
+        refresh_timezone();
+
         let offset = UtcOffset::local_offset_at(datetime).unwrap_or(UtcOffset::UTC);
         datetime.to_offset(offset)
     }
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn refresh_timezone() {
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+
+    unsafe extern "C" {
+        fn tzset();
+    }
+
+    static LAST_REFRESH: Mutex<Option<Instant>> = Mutex::new(None);
+    let mut last = LAST_REFRESH
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if last.is_some_and(|last| last.elapsed() < Duration::from_secs(1)) {
+        return;
+    }
+
+    // glibc's localtime_r can retain its cache after /etc/localtime changes.
+    // SAFETY: tzset takes no arguments, is thread-safe on glibc, and we do not read its globals.
+    unsafe { tzset() };
+    *last = Some(Instant::now());
 }
 
 pub mod mock {
