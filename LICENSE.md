@@ -4,7 +4,7 @@ Copyright (c) 2019 Benjie Gillam
 
 Copyright (c) 2026 Léo Coletta
 
-The Windows timezone fallback includes code adapted from Chrono.
+The Windows timezone resolver includes code adapted from Chrono.
 
 Copyright (c) 2012-2014 The Rust Project Developers
 

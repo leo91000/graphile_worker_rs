@@ -37,5 +37,6 @@ mod recovery;
 mod registration;
 #[path = "cron/runner.rs"]
 mod runner;
+#[cfg(unix)]
 #[path = "cron/timezone.rs"]
 mod timezone;

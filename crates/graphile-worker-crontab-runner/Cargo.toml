@@ -49,6 +49,7 @@ futures = { workspace = true }
 indoc = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
+iana-time-zone = "0.1.65"
 tz-rs = "0.7.3"
 
 [target.'cfg(windows)'.dependencies]

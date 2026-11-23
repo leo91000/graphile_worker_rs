@@ -78,13 +78,16 @@ fn host_offset_at(datetime: OffsetDateTime) -> Option<UtcOffset> {
     if cached.as_ref().is_none_or(|zone| {
         zone.setting != setting || zone.loaded.elapsed() >= Duration::from_secs(1)
     }) {
-        let timezone = setting
-            .as_deref()
-            .and_then(|setting| match setting {
-                "" => Some(tz::TimeZone::utc()),
-                setting => SETTINGS.parse_posix_tz(setting).ok(),
-            })
-            .or_else(|| SETTINGS.parse_local().ok());
+        let timezone = match setting.as_deref() {
+            Some("") => Some(tz::TimeZone::utc()),
+            Some(setting) => SETTINGS.parse_posix_tz(setting).ok(),
+            None => SETTINGS.parse_local().ok(),
+        }
+        .or_else(|| {
+            SETTINGS
+                .parse_posix_tz(&iana_time_zone::get_timezone().ok()?)
+                .ok()
+        });
         *cached = Some(CachedTimezone {
             setting,
             loaded: Instant::now(),

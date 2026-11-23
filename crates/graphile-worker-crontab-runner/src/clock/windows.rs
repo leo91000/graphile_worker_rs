@@ -1,4 +1,4 @@
-// The Windows timezone fallback is adapted from Chrono 0.4.45.
+// The Windows timezone resolver is adapted from Chrono 0.4.45.
 // Copyright (c) 2012-2014 The Rust Project Developers.
 // Copyright (c) 2014-2026 Kang Seonghoon and contributors.
 // SPDX-License-Identifier: MIT
@@ -17,15 +17,8 @@ const LAST_WINDOWS_YEAR: i32 = 30827;
 
 pub(super) fn offset_at(datetime: OffsetDateTime) -> Option<UtcOffset> {
     let utc = datetime.checked_to_offset(UtcOffset::UTC)?;
-    if (FIRST_WINDOWS_YEAR..=LAST_WINDOWS_YEAR).contains(&utc.year()) {
-        if let Ok(offset) = UtcOffset::local_offset_at(utc) {
-            return Some(offset);
-        }
-    }
-
-    // The native conversion uses FILETIME. Use the nearest available year of
-    // timezone rules for dates outside that range, including local dates
-    // just across its boundaries.
+    // Request rules for the instant's year, and extrapolate from the nearest
+    // supported rule set for dates outside the Windows range.
     let reference_year = utc.year().clamp(FIRST_WINDOWS_YEAR, LAST_WINDOWS_YEAR) as u16;
     let mut rules = MaybeUninit::<TIME_ZONE_INFORMATION>::uninit();
     // SAFETY: A null timezone selects the current zone and rules points to
