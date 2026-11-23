@@ -1,3 +1,8 @@
+// The Windows timezone fallback is adapted from Chrono 0.4.45.
+// Copyright (c) 2012-2014 The Rust Project Developers.
+// Copyright (c) 2014-2026 Kang Seonghoon and contributors.
+// SPDX-License-Identifier: MIT
+
 use std::mem::MaybeUninit;
 use std::ptr;
 

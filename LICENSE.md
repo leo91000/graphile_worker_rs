@@ -4,6 +4,12 @@ Copyright (c) 2019 Benjie Gillam
 
 Copyright (c) 2026 Léo Coletta
 
+The Windows timezone fallback includes code adapted from Chrono.
+
+Copyright (c) 2012-2014 The Rust Project Developers
+
+Copyright (c) 2014-2026 Kang Seonghoon and contributors
+
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the “Software”), to deal in
 the Software without restriction, including without limitation the rights to

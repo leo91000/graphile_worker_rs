@@ -61,6 +61,16 @@ fn host_offset_at(datetime: OffsetDateTime) -> Option<UtcOffset> {
         timezone: Option<tz::TimeZone>,
     }
 
+    const SETTINGS: tz::TimeZoneSettings<'static> = tz::TimeZoneSettings::new(
+        &[
+            "/usr/share/zoneinfo",
+            "/share/zoneinfo",
+            "/etc/zoneinfo",
+            "/usr/share/lib/zoneinfo",
+        ],
+        tz::TimeZoneSettings::DEFAULT_READ_FILE_FN,
+    );
+
     // Reload Unix timezone rules because libc can retain stale timezone state.
     static HOST_ZONE: Mutex<Option<CachedTimezone>> = Mutex::new(None);
     let setting = std::env::var("TZ").ok();
@@ -72,9 +82,9 @@ fn host_offset_at(datetime: OffsetDateTime) -> Option<UtcOffset> {
             .as_deref()
             .and_then(|setting| match setting {
                 "" => Some(tz::TimeZone::utc()),
-                setting => tz::TimeZone::from_posix_tz(setting).ok(),
+                setting => SETTINGS.parse_posix_tz(setting).ok(),
             })
-            .or_else(|| tz::TimeZone::local().ok());
+            .or_else(|| SETTINGS.parse_local().ok());
         *cached = Some(CachedTimezone {
             setting,
             loaded: Instant::now(),
