@@ -22,3 +22,19 @@ pub enum DbValue {
     TimestampTz(OffsetDateTime),
     TimestampTzOpt(Option<OffsetDateTime>),
 }
+
+#[cfg(any(feature = "driver-sqlx", feature = "driver-tokio-postgres"))]
+pub(crate) fn timestamp_in_utc(value: OffsetDateTime) -> Result<OffsetDateTime, crate::DbError> {
+    const POSTGRES_EPOCH: OffsetDateTime = time::macros::datetime!(2000-01-01 00:00 UTC);
+
+    let value = value
+        .checked_to_offset(time::UtcOffset::UTC)
+        .ok_or_else(|| crate::DbError::new("timestamp is outside the supported UTC range"))?;
+    let microseconds = (value - POSTGRES_EPOCH).whole_microseconds();
+    if matches!(i64::try_from(microseconds), Ok(i64::MIN | i64::MAX)) {
+        return Err(crate::DbError::new(
+            "PostgreSQL timestamp infinity is unsupported",
+        ));
+    }
+    Ok(value)
+}

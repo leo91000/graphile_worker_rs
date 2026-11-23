@@ -87,6 +87,43 @@ pub(crate) async fn exercise_executor(executor: &impl DbExecutor) {
         None
     );
 
+    let out_of_range = datetime!(+999999-12-31 23:59 -01:00);
+    for parameter in [
+        DbValue::TimestampTz(out_of_range),
+        DbValue::TimestampTzOpt(Some(out_of_range)),
+    ] {
+        let result = executor
+            .fetch_all("select $1::timestamptz", vec![parameter].into())
+            .await;
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("supported UTC range"));
+    }
+
+    for (query, microseconds) in [
+        ("select 'infinity'::timestamptz", i64::MAX),
+        ("select '-infinity'::timestamptz", i64::MIN),
+    ] {
+        let result = executor.fetch_all(query, DbParams::new()).await;
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("infinity is unsupported"));
+
+        let sentinel = datetime!(2000-01-01 00:00 UTC) + time::Duration::microseconds(microseconds);
+        let result = executor
+            .fetch_all(
+                "select $1::timestamptz",
+                vec![DbValue::TimestampTz(sentinel)].into(),
+            )
+            .await;
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("infinity is unsupported"));
+    }
+
     let fetched = executor
         .fetch_optional("select 123::int4 as value", DbParams::new())
         .await

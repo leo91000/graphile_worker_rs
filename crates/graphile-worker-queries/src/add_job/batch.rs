@@ -44,10 +44,13 @@ fn serialize_run_at<S: serde::Serializer>(
     run_at: &Option<OffsetDateTime>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
-    time::serde::rfc3339::option::serialize(
-        &run_at.map(|datetime| datetime.to_offset(UtcOffset::UTC)),
-        serializer,
-    )
+    let Some(run_at) = run_at else {
+        return serializer.serialize_none();
+    };
+    let run_at = run_at
+        .checked_to_offset(UtcOffset::UTC)
+        .ok_or_else(|| serde::ser::Error::custom("timestamp is outside the supported UTC range"))?;
+    time::serde::rfc3339::option::serialize(&Some(run_at), serializer)
 }
 
 #[tracing::instrument(
@@ -221,6 +224,20 @@ mod tests {
             trace_id: "4bf92f3577b34da6a3ce929d0e0e4736".to_string(),
             span_id: "00f067aa0ba902b7".to_string(),
         }
+    }
+
+    #[test]
+    fn batch_serialization_returns_an_error_for_a_timestamp_outside_the_utc_range() {
+        let run_at = time::macros::datetime!(+999999-12-31 23:59 -01:00);
+        let spec = JobSpec::builder().run_at(run_at).build();
+        let jobs = [JobToAdd {
+            identifier: "task",
+            payload: serde_json::Value::Null,
+            spec: &spec,
+        }];
+
+        let error = build_batch_specs_json(&jobs, None, None).unwrap_err();
+        assert!(error.to_string().contains("supported UTC range"));
     }
 
     #[test]

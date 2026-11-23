@@ -226,7 +226,7 @@ Rust preserves non-object payloads so typed cron tasks can deserialize them.
 ```json
 {
   "_cron": {
-    "ts": "2026-06-16T08:00:00Z",
+    "ts": "2026-06-16T08:00:00+00:00",
     "backfilled": false
   }
 }

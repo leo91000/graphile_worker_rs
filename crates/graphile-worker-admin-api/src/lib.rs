@@ -12,7 +12,8 @@ pub mod overview;
 pub mod responses;
 mod timestamp;
 
-pub use timestamp::{format_utc_timestamp, parse_rfc3339_utc_timestamp};
+pub use graphile_worker_job::{format_utc_timestamp, format_utc_timestamp_with_offset};
+pub use timestamp::parse_rfc3339_utc_timestamp;
 
 #[cfg(feature = "sqlx")]
 pub mod queries;

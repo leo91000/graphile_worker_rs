@@ -38,7 +38,7 @@ graphile_worker_lifecycle_hooks.workspace = true
 graphile_worker_shutdown_signal.workspace = true
 graphile_worker_runtime.workspace = true
 graphile_worker_database.workspace = true
-time = { workspace = true, features = ["local-offset", "serde-well-known"] }
+time = { workspace = true, features = ["local-offset", "macros", "serde-well-known"] }
 sqlx = { workspace = true, optional = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
@@ -49,5 +49,4 @@ futures = { workspace = true }
 indoc = { workspace = true }
 
 [dev-dependencies]
-time = { workspace = true, features = ["macros"] }
 tokio = { workspace = true, features = ["rt", "macros", "sync"] }

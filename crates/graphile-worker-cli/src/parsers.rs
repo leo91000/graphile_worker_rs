@@ -59,6 +59,15 @@ mod tests {
     }
 
     #[test]
+    fn accepts_unicode_minus_in_rfc3339_offsets() {
+        let parsed = parse_utc_datetime("2026-01-02T03:04:05−00:15").unwrap();
+        assert_eq!(
+            format_utc_timestamp(parsed).unwrap(),
+            "2026-01-02T03:19:05Z"
+        );
+    }
+
+    #[test]
     fn converts_rfc3339_leap_second_to_postgres_instant() {
         let parsed = parse_utc_datetime("2016-12-31T23:59:60.125Z").unwrap();
         assert_eq!(

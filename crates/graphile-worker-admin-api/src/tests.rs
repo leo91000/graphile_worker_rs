@@ -70,13 +70,45 @@ fn rejects_timestamps_outside_the_utc_range() {
 }
 
 #[test]
-fn accepts_legacy_offsets_without_colons() {
-    let request: AddJobRequest =
-        serde_json::from_str(r#"{"identifier":"send_email","run_at":"2026-01-02T03:04:05+0200"}"#)
-            .unwrap();
+fn preserves_legacy_admin_timestamp_inputs() {
+    for (timestamp, expected) in [
+        ("2026-01-02T03:04:05+0200", "2026-01-02T01:04:05Z"),
+        ("2026-01-02T03:04:05 +02:00", "2026-01-02T01:04:05Z"),
+        ("2026-01-02T03:04:05+00 30", "2026-01-02T02:34:05Z"),
+        ("2026-01-02T03:04:05−00:15", "2026-01-02T03:19:05Z"),
+        ("2026-01-02T03:04:05 UTC", "2026-01-02T03:04:05Z"),
+        ("2026-1-2T3:4:5Z", "2026-01-02T03:04:05Z"),
+        ("2016-12-31T23:59:60.125+0000", "2017-01-01T00:00:00.125Z"),
+    ] {
+        let request: AddJobRequest = serde_json::from_value(serde_json::json!({
+            "identifier": "send_email",
+            "run_at": timestamp,
+        }))
+        .unwrap();
+        assert_eq!(serde_json::to_value(request).unwrap()["run_at"], expected);
+    }
+}
 
-    assert_eq!(
-        serde_json::to_value(request).unwrap()["run_at"],
-        "2026-01-02T01:04:05Z"
-    );
+#[test]
+fn both_timestamp_parsers_reject_underscore_separator() {
+    let timestamp = "2026-01-02_03:04:05Z";
+    assert!(crate::parse_rfc3339_utc_timestamp(timestamp).is_err());
+    assert!(serde_json::from_value::<AddJobRequest>(serde_json::json!({
+        "identifier": "send_email",
+        "run_at": timestamp,
+    }))
+    .is_err());
+}
+
+#[test]
+fn preserves_timestamp_fractional_precision_and_utc_suffixes() {
+    for fraction in ["", ".100", ".100100", ".100100100"] {
+        let timestamp = format!("2026-01-02T03:04:05{fraction}Z");
+        let parsed = crate::parse_rfc3339_utc_timestamp(&timestamp).unwrap();
+        assert_eq!(crate::format_utc_timestamp(parsed).unwrap(), timestamp);
+        assert_eq!(
+            crate::format_utc_timestamp_with_offset(parsed).unwrap(),
+            format!("2026-01-02T03:04:05{fraction}+00:00")
+        );
+    }
 }

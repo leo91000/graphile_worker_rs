@@ -3,7 +3,9 @@ use sqlx::{
     postgres::{PgTypeInfo, PgValueFormat, PgValueRef},
     Decode, Postgres, Type,
 };
-use time::{macros::format_description, OffsetDateTime, UtcOffset};
+use time::{macros::format_description, OffsetDateTime};
+
+use crate::types::timestamp_in_utc;
 
 /// Decode PostgreSQL timestamps for SQLx row derives using either protocol.
 #[doc(hidden)]
@@ -22,17 +24,17 @@ impl<T: Type<Postgres>> Type<Postgres> for SqlxTimestamp<T> {
 impl<'r> Decode<'r, Postgres> for SqlxTimestamp<OffsetDateTime> {
     fn decode(value: PgValueRef<'r>) -> Result<Self, BoxDynError> {
         if value.format() == PgValueFormat::Binary {
-            return OffsetDateTime::decode(value).map(Self);
+            return Ok(Self(timestamp_in_utc(OffsetDateTime::decode(value)?)?));
         }
 
         // PostgreSQL's ISO text format allows a missing fraction and a whole-hour offset.
         let format = format_description!(
             "[year]-[month]-[day] [hour]:[minute]:[second][optional [.[subsecond]]][offset_hour sign:mandatory][optional [:[offset_minute][optional [:[offset_second]]]]]"
         );
-        OffsetDateTime::parse(value.as_str()?, format)?
-            .checked_to_offset(UtcOffset::UTC)
-            .map(Self)
-            .ok_or_else(|| "PostgreSQL timestamp is outside the supported UTC range".into())
+        Ok(Self(timestamp_in_utc(OffsetDateTime::parse(
+            value.as_str()?,
+            format,
+        )?)?))
     }
 }
 

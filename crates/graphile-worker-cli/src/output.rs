@@ -1,6 +1,6 @@
 use anyhow::Result;
 use graphile_worker::{DbJob, Job};
-use graphile_worker_admin_api::format_utc_timestamp;
+use graphile_worker_admin_api::format_utc_timestamp_with_offset;
 use graphile_worker_admin_api::jobs::{DbJobOutput, ListedJob};
 use graphile_worker_admin_api::overview::{LockedWorkerRow, QueueRow};
 use serde::Serialize;
@@ -31,7 +31,7 @@ pub(crate) fn print_jobs_table(jobs: &[ListedJob]) -> Result<()> {
             job.task_identifier,
             job.queue_name.as_deref().unwrap_or("-"),
             state_for(job),
-            format_datetime(job.run_at)?,
+            format_utc_timestamp_with_offset(job.run_at)?,
             job.attempts,
             job.max_attempts,
             job.priority,
@@ -47,7 +47,7 @@ pub(crate) fn print_job_details(job: &ListedJob) -> Result<()> {
     println!("task: {}", job.task_identifier);
     println!("queue: {}", job.queue_name.as_deref().unwrap_or("-"));
     println!("state: {}", state_for(job));
-    println!("run_at: {}", format_datetime(job.run_at)?);
+    println!("run_at: {}", format_utc_timestamp_with_offset(job.run_at)?);
     println!("attempts: {}/{}", job.attempts, job.max_attempts);
     println!("priority: {}", job.priority);
     println!("key: {}", job.key.as_deref().unwrap_or("-"));
@@ -69,21 +69,12 @@ pub(crate) fn print_queues_table(queues: &[QueueRow]) -> Result<()> {
             queue.locked_by.as_deref().unwrap_or("-"),
             queue
                 .locked_at
-                .map(format_datetime)
+                .map(format_utc_timestamp_with_offset)
                 .transpose()?
                 .unwrap_or_else(|| "-".to_string())
         );
     }
     Ok(())
-}
-
-fn format_datetime(value: OffsetDateTime) -> Result<String> {
-    let mut formatted = format_utc_timestamp(value)?;
-    if formatted.ends_with('Z') {
-        formatted.pop();
-        formatted.push_str("+00:00");
-    }
-    Ok(formatted)
 }
 
 pub(crate) fn print_workers_table(workers: &[LockedWorkerRow]) {

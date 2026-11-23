@@ -1,33 +1,16 @@
+use std::borrow::Cow;
+
+pub(crate) use graphile_worker_job::serialize_utc_timestamp as serialize;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use time::{
-    error::Format,
     format_description::{well_known::Rfc3339, BorrowedFormatItem},
     macros::format_description,
-    Duration, OffsetDateTime, PrimitiveDateTime, UtcOffset,
+    Duration, OffsetDateTime, UtcOffset,
 };
 
-const DATE_TIME: &[BorrowedFormatItem<'_>] =
-    format_description!("[year]-[month]-[day]T[hour]:[minute]:[second][optional [.[subsecond]]]");
-const DATE_TIME_WITH_OFFSET: &[BorrowedFormatItem<'_>] = format_description!(
-    "[year]-[month]-[day][first [T][t][ ]][hour]:[minute]:[second][optional [.[subsecond]]][offset_hour sign:mandatory][optional [:]][offset_minute]"
+const LEGACY_DATE_TIME: &[BorrowedFormatItem<'_>] = format_description!(
+    "[year padding:none]-[month padding:none]-[day padding:none][first [T][t][ ]][hour padding:none]:[minute padding:none]:[second padding:none][optional [.[subsecond]]][offset_hour sign:mandatory]:[offset_minute]"
 );
-
-/// Format a UTC timestamp in the admin wire format, including signed years outside RFC 3339.
-pub fn format_utc_timestamp(value: OffsetDateTime) -> Result<String, Format> {
-    let value = value
-        .checked_to_offset(UtcOffset::UTC)
-        .ok_or(Format::InvalidComponent("year"))?;
-    if (0..=9999).contains(&value.year()) {
-        return value.format(&Rfc3339);
-    }
-
-    let mut formatted = value.format(DATE_TIME)?;
-    if let Some(without_fraction) = formatted.strip_suffix(".0") {
-        formatted.truncate(without_fraction.len());
-    }
-    formatted.push('Z');
-    Ok(formatted)
-}
 
 /// Parse an RFC 3339 timestamp and normalize it to UTC.
 pub fn parse_rfc3339_utc_timestamp(value: &str) -> Result<OffsetDateTime, String> {
@@ -35,15 +18,33 @@ pub fn parse_rfc3339_utc_timestamp(value: &str) -> Result<OffsetDateTime, String
 }
 
 fn parse_rfc3339(value: &str) -> Result<OffsetDateTime, String> {
-    let parsed = OffsetDateTime::parse(value, &Rfc3339).map_err(|error| error.to_string())?;
-    if value.as_bytes().get(17..19) != Some(b"60") {
-        return Ok(parsed);
+    if !matches!(value.as_bytes().get(10), Some(b'T' | b't' | b' ')) {
+        return Err("expected an RFC 3339 date and time".into());
     }
+    // Chrono accepted the Unicode minus sign in offsets.
+    let value = match value.find('−') {
+        Some(index) if index >= 19 => Cow::Owned(value.replace('−', "-")),
+        _ => Cow::Borrowed(value),
+    };
+    parse_with_leap_second(&value, |value| OffsetDateTime::parse(value, &Rfc3339))
+}
+
+fn parse_with_leap_second(
+    value: &str,
+    parse: impl FnOnce(&str) -> Result<OffsetDateTime, time::error::Parse>,
+) -> Result<OffsetDateTime, String> {
+    let leap_second = value.match_indices(':').nth(1).and_then(|(colon, _)| {
+        let start = colon + 1;
+        (value.get(start..start + 2) == Some("60")).then_some(start..start + 2)
+    });
+    let Some(leap_second) = leap_second else {
+        return parse(value).map_err(|error| error.to_string());
+    };
 
     // PostgreSQL stored Chrono leap seconds as the following second plus the original fraction.
     let mut preceding_second = value.to_owned();
-    preceding_second.replace_range(17..19, "59");
-    OffsetDateTime::parse(&preceding_second, &Rfc3339)
+    preceding_second.replace_range(leap_second, "59");
+    parse(&preceding_second)
         .map_err(|error| error.to_string())?
         .checked_add(Duration::seconds(1))
         .ok_or_else(|| "leap second is outside the supported timestamp range".into())
@@ -61,23 +62,39 @@ fn parse_timestamp(value: &str) -> Result<OffsetDateTime, String> {
         return to_utc(timestamp);
     }
 
-    if let Some(date_time) = value.strip_suffix(['Z', 'z']) {
-        return PrimitiveDateTime::parse(date_time, DATE_TIME)
-            .map(PrimitiveDateTime::assume_utc)
-            .map_err(|error| error.to_string());
-    }
-
-    let timestamp =
-        OffsetDateTime::parse(value, DATE_TIME_WITH_OFFSET).map_err(|error| error.to_string())?;
-    to_utc(timestamp)
+    let without_zone = value.strip_suffix(['Z', 'z']).or_else(|| {
+        let suffix_start = value.len().checked_sub(3)?;
+        let (date_time, zone) = value.split_at_checked(suffix_start)?;
+        zone.eq_ignore_ascii_case("UTC").then_some(date_time)
+    });
+    let value = match without_zone {
+        Some(date_time) => Cow::Owned(format!("{}+00:00", date_time.trim_end())),
+        None => normalize_legacy_offset(value)?,
+    };
+    to_utc(parse_with_leap_second(&value, |value| {
+        OffsetDateTime::parse(value, LEGACY_DATE_TIME)
+    })?)
 }
 
-pub(crate) fn serialize<S: Serializer>(
-    value: &OffsetDateTime,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    let value = format_utc_timestamp(*value).map_err(serde::ser::Error::custom)?;
-    serializer.serialize_str(&value)
+fn normalize_legacy_offset(value: &str) -> Result<Cow<'_, str>, String> {
+    let offset = value.match_indices(':').nth(1).and_then(|(colon, _)| {
+        let seconds = colon + 1;
+        value[seconds..]
+            .match_indices(['+', '-', '−'])
+            .next()
+            .map(|(index, sign)| (seconds + index, sign))
+    });
+    let Some((offset_start, sign)) = offset else {
+        return Ok(Cow::Borrowed(value));
+    };
+
+    let (hours, minutes) = value[offset_start + sign.len()..]
+        .split_at_checked(2)
+        .ok_or_else(|| "expected timestamp offset hours and minutes".to_owned())?;
+    let minutes = minutes.trim_start_matches(|ch: char| ch == ':' || ch.is_whitespace());
+    let sign = if sign == "−" { "-" } else { sign };
+    let date_time = value[..offset_start].trim_end();
+    Ok(Cow::Owned(format!("{date_time}{sign}{hours}:{minutes}")))
 }
 
 pub(crate) fn deserialize<'de, D: Deserializer<'de>>(

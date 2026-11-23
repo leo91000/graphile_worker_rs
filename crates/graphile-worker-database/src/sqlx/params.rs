@@ -1,13 +1,13 @@
 use sqlx::postgres::PgArguments;
 use sqlx::{AssertSqlSafe, Postgres};
 
-use crate::{DbParams, DbValue};
+use crate::{types::timestamp_in_utc, DbError, DbParams, DbValue};
 
 fn bind_value<'q>(
     query: sqlx::query::Query<'q, Postgres, PgArguments>,
     value: &DbValue,
-) -> sqlx::query::Query<'q, Postgres, PgArguments> {
-    match value {
+) -> Result<sqlx::query::Query<'q, Postgres, PgArguments>, DbError> {
+    Ok(match value {
         DbValue::Bool(value) => query.bind(*value),
         DbValue::BoolOpt(value) => query.bind(*value),
         DbValue::I16(value) => query.bind(*value),
@@ -24,18 +24,18 @@ fn bind_value<'q>(
         DbValue::TextArrayOpt(value) => query.bind(value.clone()),
         DbValue::I32Array(value) => query.bind(value.clone()),
         DbValue::I64Array(value) => query.bind(value.clone()),
-        DbValue::TimestampTz(value) => query.bind(*value),
-        DbValue::TimestampTzOpt(value) => query.bind(*value),
-    }
+        DbValue::TimestampTz(value) => query.bind(timestamp_in_utc(*value)?),
+        DbValue::TimestampTzOpt(value) => query.bind(value.map(timestamp_in_utc).transpose()?),
+    })
 }
 
 pub(super) fn bind_params<'q>(
     sql: &'q str,
     params: &DbParams,
-) -> sqlx::query::Query<'q, Postgres, PgArguments> {
+) -> Result<sqlx::query::Query<'q, Postgres, PgArguments>, DbError> {
     let mut query = sqlx::query(AssertSqlSafe(sql));
     for value in params.values() {
-        query = bind_value(query, value);
+        query = bind_value(query, value)?;
     }
-    query
+    Ok(query)
 }

@@ -15,7 +15,7 @@ async fn execute_with_executor<'e, E>(
 where
     E: Executor<'e, Database = Postgres>,
 {
-    bind_params(sql, &params)
+    bind_params(sql, &params)?
         .persistent(prepared_statements)
         .execute(executor)
         .await
@@ -33,7 +33,7 @@ async fn fetch_all_with_executor<'e, E>(
 where
     E: Executor<'e, Database = Postgres>,
 {
-    let rows = bind_params(sql, &params)
+    let rows = bind_params(sql, &params)?
         .persistent(prepared_statements)
         .fetch_all(executor)
         .await?;
