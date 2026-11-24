@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_ctx-v0.6.6...graphile_worker_ctx-v0.7.0) - 2026-11-23
+
+### Other
+
+- [**breaking**] `WorkerContext` exposes the new `Job` and database types from the `time` migration ([#587](https://github.com/leo91000/graphile_worker_rs/pull/587))
+
 ## [0.6.6](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_ctx-v0.6.5...graphile_worker_ctx-v0.6.6) - 2026-11-10
 
 ### Other

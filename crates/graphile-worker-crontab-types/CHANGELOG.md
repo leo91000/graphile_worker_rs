@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_types-v0.5.20...graphile_worker_crontab_types-v0.6.0) - 2026-11-23
+
+### Added
+
+- port historical migration and cron behavior ([#585](https://github.com/leo91000/graphile_worker_rs/pull/585))
+
+### Other
+
+- [**breaking**] Replace Chrono with time ([#587](https://github.com/leo91000/graphile_worker_rs/pull/587))
+
 ## [0.5.20](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_crontab_types-v0.5.19...graphile_worker_crontab_types-v0.5.20) - 2026-11-10
 
 ### Other

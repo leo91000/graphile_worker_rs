@@ -51,7 +51,7 @@ With the default Tokio and SQLx features, add these dependencies:
 
 ```toml
 [dependencies]
-graphile_worker = "0.14"
+graphile_worker = "0.15"
 serde_json = "1"
 sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

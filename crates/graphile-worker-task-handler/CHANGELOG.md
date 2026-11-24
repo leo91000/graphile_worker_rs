@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.6.0](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_handler-v0.5.24...graphile_worker_task_handler-v0.6.0) - 2026-11-23
+
+### Other
+
+- [**breaking**] Task handlers receive `WorkerContext` 0.7, which uses `time` for job timestamps ([#587](https://github.com/leo91000/graphile_worker_rs/pull/587))
+
 ## [0.5.24](https://github.com/leo91000/graphile_worker_rs/compare/graphile_worker_task_handler-v0.5.23...graphile_worker_task_handler-v0.5.24) - 2026-11-10
 
 ### Other
