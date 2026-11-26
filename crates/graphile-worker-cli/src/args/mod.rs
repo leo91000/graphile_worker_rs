@@ -17,7 +17,7 @@ pub(crate) use maintenance::{CleanupArgs, CleanupTaskArg, ForceUnlockArgs, Sweep
     version
 )]
 pub(crate) struct Cli {
-    /// PostgreSQL connection URL. Falls back to DATABASE_URL.
+    /// PostgreSQL connection URL. Falls back to DATABASE_URL, then PGDATABASE and other PostgreSQL variables.
     #[arg(long, env = "DATABASE_URL", global = true)]
     pub(crate) database_url: Option<String>,
 

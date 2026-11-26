@@ -1,16 +1,15 @@
-use graphile_worker_database::{Database, DbExecutor, DbParams, DbValue, Schema};
+use graphile_worker_database::{DbError, DbParams, DbValue, Schema};
 use indoc::formatdoc;
 use tracing::info;
 
-use crate::error::MigrateError;
-use crate::pg_version::fetch_and_check_postgres_version;
+use crate::connection::MigrationConnection;
 
 /// Installs the Graphile Worker schema into the database.
 pub(super) async fn install_schema(
-    database: &Database,
+    connection: &MigrationConnection<'_>,
     schema: &Schema,
-) -> Result<(), MigrateError> {
-    let version = fetch_and_check_postgres_version(database).await?;
+    version: u32,
+) -> Result<(), DbError> {
     info!(pg_version = version, "Installing Graphile Worker schema");
 
     let create_schema_query = formatdoc!(
@@ -30,38 +29,44 @@ pub(super) async fn install_schema(
         "#
     );
 
-    let tx = database.begin().await?;
-    tx.execute(&create_schema_query, DbParams::new()).await?;
-    tx.execute(&create_migration_table_query, DbParams::new())
-        .await?;
-    tx.commit().await?;
-
-    Ok(())
+    let tx = connection.begin().await?;
+    let executor = tx.executor();
+    let result = async {
+        executor
+            .execute(&create_schema_query, DbParams::new())
+            .await?;
+        executor
+            .execute(&create_migration_table_query, DbParams::new())
+            .await?;
+        Ok(())
+    }
+    .await;
+    tx.finish(result).await?
 }
 
 /// Annotates the migration table from releases that recorded revision IDs only.
 pub(super) async fn add_breaking_migration_metadata(
-    database: &Database,
+    connection: &MigrationConnection<'_>,
     schema: &Schema,
-) -> Result<(), MigrateError> {
+) -> Result<(), DbError> {
     let migrations = schema.identifier("migrations");
     let breaking_ids = crate::sql::GRAPHILE_WORKER_MIGRATIONS
         .iter()
         .filter(|migration| migration.is_breaking())
         .map(|migration| migration.migration_number() as i32)
         .collect();
-    let tx = database.begin().await?;
-    tx.execute(
-        &format!("alter table {migrations} add column if not exists breaking boolean not null default false"),
-        DbParams::new(),
-    ).await?;
-    tx.execute(
-        &format!(
-            "update {migrations} set breaking = true where id = any($1::int[]) and not breaking"
-        ),
-        vec![DbValue::I32Array(breaking_ids)].into(),
-    )
-    .await?;
-    tx.commit().await?;
-    Ok(())
+    let tx = connection.begin().await?;
+    let executor = tx.executor();
+    let result = async {
+        executor.execute(
+            &format!("alter table {migrations} add column if not exists breaking boolean not null default false"),
+            DbParams::new(),
+        ).await?;
+        executor.execute(
+            &format!("update {migrations} set breaking = true where id = any($1::int[]) and not breaking"),
+            vec![DbValue::I32Array(breaking_ids)].into(),
+        ).await?;
+        Ok(())
+    }.await;
+    tx.finish(result).await?
 }

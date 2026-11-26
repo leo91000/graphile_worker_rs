@@ -47,6 +47,33 @@ The CLI can also run migrations explicitly:
 graphile-worker --database-url "$DATABASE_URL" migrate
 ```
 
+### Prisma Postgres
+
+For workers and migrations, use the direct endpoint `db.prisma.io`. Prisma
+Postgres requires TLS. With the default SQLx driver, use
+`sslmode=verify-full` to verify the server certificate and hostname.
+
+```bash
+export DATABASE_URL='postgres://USER:PASSWORD@db.prisma.io:5432/postgres?sslmode=verify-full'
+graphile-worker migrate
+```
+
+For the tokio-postgres driver, use `sslmode=require` with either TLS
+feature. The selected TLS connector verifies the server certificate and
+hostname. The tokio-postgres URL parser does not accept `verify-full`.
+
+The transaction-mode endpoint `pooled.db.prisma.io` can be used by
+producers that insert jobs. An insert still wakes workers listening on the
+direct endpoint. A worker that listens through the transaction pool can
+successfully issue `LISTEN` without receiving notifications. It then
+discovers jobs on its polling schedule. If you deploy a polling-only worker,
+set `use_notification_delivery(false)` explicitly and use the direct
+endpoint for migration operations that need a PostgreSQL session.
+
+See [Prisma Postgres connection pooling](https://www.prisma.io/docs/postgres/database/connection-pooling)
+and [Runtime, TLS, and Drivers](../configuration/runtime-drivers.md) for
+connection and statement options.
+
 ## Pool and Concurrency
 
 `concurrency` controls how many jobs a worker process can run at the same time.

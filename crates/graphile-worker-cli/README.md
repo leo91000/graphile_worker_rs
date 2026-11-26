@@ -3,7 +3,7 @@
 Command-line job management utility for `graphile_worker`.
 
 The installed binary is `graphile-worker`. It connects to PostgreSQL using
-`--database-url` or `DATABASE_URL`, and uses the `graphile_worker` schema by
+`--database-url`, `DATABASE_URL`, or `PGDATABASE` with SQLx PostgreSQL environment settings, and uses the `graphile_worker` schema by
 default.
 
 ```bash

@@ -7,8 +7,9 @@ mod transaction;
 use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
 use graphile_worker_postgres_tls as tls;
 
+use self::executor::TokioPostgresSession;
 use self::transaction::TokioPostgresTransaction;
-use crate::{Database, DatabaseDriver, DbError, DbTransaction, NotificationStream};
+use crate::{Database, DatabaseDriver, DbError, DbExecutor, DbTransaction, NotificationStream};
 
 #[derive(Clone)]
 pub struct TokioPostgresDatabase {
@@ -109,6 +110,13 @@ impl DatabaseDriver for TokioPostgresDatabase {
             let client = self.pool.get().await?;
             let transaction = TokioPostgresTransaction::begin(client).await?;
             Ok(DbTransaction::new(Box::new(transaction)))
+        })
+    }
+
+    fn acquire_session(&self) -> crate::BoxFuture<'_, Result<Box<dyn DbExecutor>, DbError>> {
+        Box::pin(async move {
+            let client = self.pool.get().await?;
+            Ok(Box::new(TokioPostgresSession::new(client)) as Box<dyn DbExecutor>)
         })
     }
 

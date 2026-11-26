@@ -154,3 +154,48 @@ tables when recovery is enabled); use appropriate default privileges for the
 role that creates those objects. A restricted worker cannot install a missing
 schema or apply a pending migration. Provision and validate the grants on an
 isolated database before rolling out this arrangement.
+
+## Migration callbacks
+
+Install a `MigrationHooks` registry with `WorkerOptions::migration_hooks`
+to run callbacks during worker initialization, or pass it to
+`WorkerUtils::migrate_with_hooks` for a standalone migration. The
+`graphile_worker_migrations::migrate_with_hooks` function also accepts a
+`Database` and schema directly.
+
+```rust,ignore
+use graphile_worker::{DbParams, MigrationHooks, MigrationPhase, WorkerOptions};
+
+let hooks = MigrationHooks::new().on_event(|event| {
+    Box::pin(async move {
+        if matches!(event.phase, MigrationPhase::BeforeMigrate) {
+            event.executor
+                .execute("set lock_timeout = '10s'", DbParams::new())
+                .await?;
+        }
+        Ok(())
+    })
+});
+
+let worker = WorkerOptions::default()
+    .database_url(&database_url)
+    .migration_hooks(hooks)
+    .init()
+    .await?;
+```
+
+Bootstrap callbacks surround creation or repair of the migration ledger.
+Migrate callbacks run on every compatible migration invocation, including
+when no revisions are pending. A failed revision triggers `RevisionFailed`
+after PostgreSQL acknowledges rollback. Each callback receives the schema,
+server version, single-session SQL executor and a typed scratchpad scoped
+to the invocation. The migrator controls transaction boundaries. Statements
+issued by callbacks run in autocommit unless they are part of a single
+database statement with its own transactional effects.
+
+Use a direct connection or a pool that preserves a PostgreSQL session for
+the entire call. The built-in drivers discard this connection at the end
+of the call or on cancellation so settings, locks and temporary tables cannot
+leak into application work. Custom drivers need to implement
+`DatabaseDriver::acquire_session` to support callbacks. Callback errors stop
+migration, after any earlier committed revisions.

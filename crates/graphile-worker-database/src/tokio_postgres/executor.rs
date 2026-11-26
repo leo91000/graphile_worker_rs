@@ -3,6 +3,7 @@ use deadpool_postgres::Pool;
 
 use super::params::{boxed_params, param_refs};
 use super::rows::tokio_row_to_db_row;
+use super::transaction::PendingClient;
 use super::TokioPostgresDatabase;
 use crate::{DbError, DbExecutor, DbExecutorArg, DbParams, DbRow};
 
@@ -74,6 +75,32 @@ async fn fetch_all_with_deadpool_client(
     let refs = param_refs(&params);
     let rows = (**client).query(sql, &refs).await?;
     rows.into_iter().map(tokio_row_to_db_row).collect()
+}
+
+pub(super) struct TokioPostgresSession(PendingClient);
+
+impl TokioPostgresSession {
+    pub(super) fn new(client: deadpool_postgres::Client) -> Self {
+        Self(PendingClient(Some(client)))
+    }
+}
+
+impl DbExecutor for TokioPostgresSession {
+    fn execute<'a>(
+        &'a self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<u64, DbError>> {
+        Box::pin(execute_with_deadpool_client(self.0.get(), sql, params))
+    }
+
+    fn fetch_all<'a>(
+        &'a self,
+        sql: &'a str,
+        params: DbParams,
+    ) -> crate::BoxFuture<'a, Result<Vec<DbRow>, DbError>> {
+        Box::pin(fetch_all_with_deadpool_client(self.0.get(), sql, params))
+    }
 }
 
 impl DbExecutor for TokioPostgresDatabase {

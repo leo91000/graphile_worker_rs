@@ -13,6 +13,8 @@ mod helpers;
 
 #[path = "migrate/future_revision.rs"]
 mod future_revision;
+#[path = "migrate/hooks.rs"]
+mod hooks;
 #[path = "migrate/identity_upgrade.rs"]
 mod identity_upgrade;
 #[path = "migrate/install_schema.rs"]

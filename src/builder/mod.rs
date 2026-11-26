@@ -117,6 +117,8 @@ pub struct WorkerOptions {
     /// Lifecycle hooks for observing and intercepting worker events
     hooks: HookRegistry,
 
+    migration_hooks: graphile_worker_migrations::MigrationHooks,
+
     /// Configuration for the local queue (batch-fetching jobs).
     /// When set, enables LocalQueue for improved throughput.
     local_queue_config: Option<LocalQueueConfig>,

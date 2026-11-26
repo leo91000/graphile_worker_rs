@@ -9,6 +9,18 @@ pub trait DatabaseDriver: DbExecutor + fmt::Debug + Any {
 
     fn begin<'a>(&'a self) -> BoxFuture<'a, Result<DbTransaction, DbError>>;
 
+    /// Acquires one PostgreSQL session for operations that must share a backend.
+    ///
+    /// The driver must discard the session when the executor is dropped, including
+    /// during cancellation, since callers can leave session state or open transactions.
+    fn acquire_session(&self) -> BoxFuture<'_, Result<Box<dyn DbExecutor>, DbError>> {
+        Box::pin(async {
+            Err(DbError::new(
+                "this database driver does not support pinned sessions",
+            ))
+        })
+    }
+
     fn listen<'a>(
         &'a self,
         channel: &'a str,
@@ -66,6 +78,11 @@ impl Database {
 
     pub async fn begin(&self) -> Result<DbTransaction, DbError> {
         self.inner.begin().await
+    }
+
+    /// Acquires a pinned session. Pooled statement retries do not apply to it.
+    pub async fn acquire_session(&self) -> Result<Box<dyn DbExecutor>, DbError> {
+        self.inner.acquire_session().await
     }
 
     pub async fn listen(&self, channel: &str) -> Result<Option<NotificationStream>, DbError> {
