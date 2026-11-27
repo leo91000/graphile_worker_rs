@@ -66,9 +66,13 @@ The transaction-mode endpoint `pooled.db.prisma.io` can be used by
 producers that insert jobs. An insert still wakes workers listening on the
 direct endpoint. A worker that listens through the transaction pool can
 successfully issue `LISTEN` without receiving notifications. It then
-discovers jobs on its polling schedule. If you deploy a polling-only worker,
-set `use_notification_delivery(false)` explicitly and use the direct
-endpoint for migration operations that need a PostgreSQL session.
+discovers jobs on its polling schedule. Set
+`use_notification_delivery(false)` to configure polling-only operation.
+
+`WorkerOptions::init()` runs migrations and migration callbacks using the
+worker's own database connection. Configure that worker with the direct
+endpoint when using migration callbacks that depend on session state, even
+if the worker polls for jobs and you also run migrations separately.
 
 See [Prisma Postgres connection pooling](https://www.prisma.io/docs/postgres/database/connection-pooling)
 and [Runtime, TLS, and Drivers](../configuration/runtime-drivers.md) for

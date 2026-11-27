@@ -452,3 +452,35 @@ tests. Interim revisions superseded upstream still appear in the ledger.
 | [`d3e2347`](https://github.com/graphile/worker/commit/d3e2347a5c8d1e204a0882ff3a1787ec06af61d4) | fix: handle errors when releasing worker (#242) | Already supported with Rust ownership. A live listener owns its client only after connect succeeds; shutdown/cancellation drops pending futures and driver leases. No optional JS release callback is invoked for failed acquisition. |
 | [`b23647b`](https://github.com/graphile/worker/commit/b23647bbfe93b18889e763d2e1a8578670717f7a) | chore: replace deprecated String.prototype.substr() (#255) | Inapplicable. JavaScript substring API cleanup in parser, loader and migration filenames. Rust parses schedules and embeds applied SQL in its registry. |
 | [`c84f334`](https://github.com/graphile/worker/commit/c84f334b1cf5afa9a986cdb9f9597532359ee0d4) | feat(deps): remove dependency on gen_random_uuid()/pgcrypto (#260) | Already supported. No pgcrypto dependency, queue_name has no random default and unnamed jobs have no queue allocation. Rust revision 1 takes the optional argument and later private-schema migrations preserve the behavior; migration and unnamed-job fixtures pass. |
+
+## Review follow-up on PR #588
+
+The initial head `63c83d3ef94d4ec417cad4d00212ede98f08ae90`
+passed Check, Test (PostgreSQL 14–18 and both TLS protocols), Coverage
+(the four driver configurations), and Docs. Codecov patch coverage was
+95.0% against the 97.5% target. CodeRabbit's review requested changes.
+
+The CLI regression now copies URL password overrides and TLS certificate
+settings to the child using SQLx's option ordering. The cancellation
+regression holds a dedicated observer connection before requesting the
+migration lock, so it cannot pass by taking the lock again on the same
+backend. The deployment guide now explains that worker startup uses the
+worker's own connection for migrations and callbacks, including for
+polling-only workers.
+
+Additional regressions check both CLI connection configuration errors,
+unsupported pinned sessions on custom drivers, and loss of the migration
+backend during a revision. The backend-loss fixture verifies that the
+failure callback is withheld when rollback cannot be acknowledged, the
+pending revision leaves no ledger row, and migration can restart on a
+new session.
+
+The follow-up passed `just lint`, `just test-docker` (573 passed, seven
+existing ignores), and mdBook. All four migration callback regressions
+passed with SQLx on PostgreSQL 12.22, and with both tokio-postgres/rustls
+and SQLx/async-std on PostgreSQL 18.7. A TLS-only PostgreSQL 16 fixture
+confirmed the CLI fallback preserves the effective URL password and
+private CA with `sslmode=verify-full`; the fixture supplied the wrong
+password in userinfo to verify that the query value takes precedence.
+The initial head also passed local checks for OpenTelemetry 0.30–0.32
+and the TLS Docker suites for both protocols.

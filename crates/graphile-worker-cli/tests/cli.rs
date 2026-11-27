@@ -71,6 +71,27 @@ fn admin_help_documents_embedded_ui_options() {
     assert!(stdout.contains("GRAPHILE_WORKER_ADMIN_PASSWORD"));
 }
 
+#[test]
+fn migrate_requires_database_configuration() {
+    let output = Command::new(env!("CARGO_BIN_EXE_graphile-worker"))
+        .env_remove("DATABASE_URL")
+        .env_remove("PGDATABASE")
+        .arg("migrate")
+        .output()
+        .expect("run CLI without a database");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("missing database configuration"));
+    assert!(stderr.contains("PGDATABASE"));
+}
+
+#[test]
+fn migrate_reports_invalid_database_url() {
+    let output = command_output(&["--database-url", "postgres://[", "migrate"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("invalid PostgreSQL connection URL"));
+}
+
 /// Exercises CLI job administration and cleans its isolated database across PostgreSQL versions.
 #[tokio::test]
 async fn cli_manages_job_lifecycle_with_database_url_flag() {
@@ -119,14 +140,25 @@ async fn cli_manages_job_lifecycle_with_database_url_flag() {
     } else {
         env_command.env("PGHOST", options.get_host());
     }
-    // SQLx deliberately has no public password accessor. Use the isolated
-    // workspace fixture's test URL to extract the same (decoded) credential.
     let url = url::Url::parse(&database_url).expect("fixture URL should parse");
     if let Some(password) = url.password() {
         let password = percent_encoding::percent_decode_str(password)
             .decode_utf8()
             .expect("fixture password should be UTF-8");
         env_command.env("PGPASSWORD", password.as_ref());
+    }
+    // SQLx applies query options after userinfo and uses the last occurrence.
+    // Transfer them in the same order, including any private TLS material.
+    for (key, value) in url.query_pairs() {
+        let variable = match key.as_ref() {
+            "password" => "PGPASSWORD",
+            "hostaddr" => "PGHOSTADDR",
+            "sslrootcert" | "ssl-root-cert" | "ssl-ca" => "PGSSLROOTCERT",
+            "sslcert" | "ssl-cert" => "PGSSLCERT",
+            "sslkey" | "ssl-key" => "PGSSLKEY",
+            _ => continue,
+        };
+        env_command.env(variable, value.as_ref());
     }
     assert_success(
         env_command

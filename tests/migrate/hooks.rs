@@ -194,6 +194,9 @@ async fn failure_hook_runs_after_rollback_and_retry_resumes_from_committed_revis
 #[tokio::test]
 async fn cancelling_migration_hooks_releases_the_session_and_its_locks() {
     with_test_db(|test_db| async move {
+        // Hold the observer backend throughout the test so the lock check
+        // cannot acquire a lock reentrantly on the migration's own session.
+        let mut observer = test_db.test_pool.acquire().await.unwrap();
         let (send, receive) = oneshot::channel();
         let send = std::sync::Mutex::new(Some(send));
         let database = test_db.database.clone();
@@ -223,15 +226,70 @@ async fn cancelling_migration_hooks_releases_the_session_and_its_locks() {
         // the pool did not return the original session with the lock still held.
         timeout(
             DEADLINE,
-            query("select pg_advisory_xact_lock(87)").execute(&test_db.test_pool),
+            query("select pg_advisory_xact_lock(87)").execute(&mut *observer),
         )
         .await
         .expect("cancelled migration left an advisory lock held")
         .expect("fixture should be able to acquire the lock");
+        drop(observer);
         timeout(DEADLINE, migrate(&test_db.database, "graphile_worker"))
             .await
             .expect("migration retry timed out")
             .expect("migration retry should succeed");
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn losing_the_migration_session_skips_failure_callbacks_and_releases_the_revision() {
+    with_test_db(|test_db| async move {
+        let hooks = MigrationHooks::new().on_event(|event| {
+            Box::pin(async move {
+                match event.phase {
+                    MigrationPhase::AfterBootstrap => {
+                        let function = event.schema.identifier("terminate_migration");
+                        let ledger = event.schema.identifier("migrations");
+                        event.executor.execute(
+                            &format!("create function {function}() returns trigger language plpgsql as $$
+                                begin perform pg_terminate_backend(pg_backend_pid()); return new; end;
+                            $$"),
+                            DbParams::new(),
+                        ).await?;
+                        event.executor.execute(
+                            &format!("create trigger terminate_migration before insert on {ledger}
+                                for each row execute function {function}()"),
+                            DbParams::new(),
+                        ).await?;
+                    }
+                    MigrationPhase::RevisionFailed { .. } | MigrationPhase::AfterMigrate => {
+                        panic!("the disconnected migration session cannot run this phase");
+                    }
+                    _ => (),
+                }
+                Ok(())
+            })
+        });
+
+        let error = timeout(
+            DEADLINE,
+            migrate_with_hooks(&test_db.database, "graphile_worker", &hooks),
+        )
+        .await
+        .expect("connection loss must stop migration")
+        .expect_err("losing the backend prevents rollback acknowledgement");
+        assert!(matches!(error, MigrateError::SqlError(ref error)
+            if error.to_string().contains("rollback failed")));
+        assert!(test_db.get_migrations().await.is_empty());
+
+        query("drop trigger terminate_migration on graphile_worker.migrations")
+            .execute(&test_db.test_pool)
+            .await
+            .unwrap();
+        timeout(DEADLINE, migrate(&test_db.database, "graphile_worker"))
+            .await
+            .expect("migration retry timed out")
+            .expect("migrating on a new session should succeed");
+        assert_eq!(test_db.get_migrations().await.len(), GRAPHILE_WORKER_MIGRATIONS.len());
     })
     .await;
 }

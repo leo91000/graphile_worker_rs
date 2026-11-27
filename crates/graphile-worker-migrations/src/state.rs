@@ -274,6 +274,21 @@ mod tests {
     }
 
     #[test]
+    fn callbacks_require_session_support_before_any_database_work() {
+        run_async(async {
+            let database = database([], Ok(1));
+            let hooks = crate::MigrationHooks::new().on_event(|_| {
+                panic!("a driver without session support must not run callbacks");
+            });
+            let error = crate::migrate_with_hooks(&database, Schema::default(), &hooks)
+                .await
+                .expect_err("a custom driver must opt in to session support");
+            assert!(matches!(error, MigrateError::SqlError(ref error)
+                if error.to_string().contains("does not support pinned sessions")));
+        });
+    }
+
+    #[test]
     fn mock_driver_exercises_database_contract_paths() {
         run_async(async {
             let database = database([Ok(Vec::new())], Ok(7));
