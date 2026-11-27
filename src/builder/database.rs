@@ -38,6 +38,12 @@ pub(super) async fn connect_default_database(
 }
 
 impl WorkerOptions {
+    /// Sets callbacks for schema bootstrap and migration during initialization.
+    pub fn migration_hooks(mut self, hooks: graphile_worker_migrations::MigrationHooks) -> Self {
+        self.migration_hooks = hooks;
+        self
+    }
+
     /// Enables bounded SQL retries for this worker and its utility/context handles.
     ///
     /// Disabled by default. Retries selected aborted statements and pre-execution

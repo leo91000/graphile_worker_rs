@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use graphile_worker_migrations::migrate;
+use graphile_worker_migrations::migrate_with_hooks;
 use graphile_worker_queries::flag_filter::JobFlagFilter;
 use rand::Rng;
 
@@ -74,7 +74,7 @@ impl WorkerOptions {
 
         let schema = self.schema.unwrap_or_default();
 
-        migrate(&database, &schema).await?;
+        migrate_with_hooks(&database, &schema, &self.migration_hooks).await?;
 
         let task_details: SharedTaskDetails =
             get_tasks_details(&database, &schema, self.jobs.keys().cloned().collect())

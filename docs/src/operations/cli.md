@@ -23,7 +23,7 @@ graphile-worker \
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `--database-url` | `DATABASE_URL` | PostgreSQL connection URL. The CLI exits if neither is set. |
+| `--database-url` | `DATABASE_URL` | PostgreSQL connection URL. Falls back to SQLx PostgreSQL environment settings when no URL is supplied and `PGDATABASE` is set. |
 | `--schema` | `GRAPHILE_WORKER_SCHEMA`, then `graphile_worker` | Graphile Worker schema name. |
 | `--max-connections` | `5` | Maximum PostgreSQL connections used by the CLI pool. |
 | `--json` | disabled | Print machine-readable JSON where the command supports it. |

@@ -1,8 +1,11 @@
 use futures::StreamExt;
 use sqlx::PgPool;
 
+use super::session::SqlxSession;
 use super::transaction::SqlxTransaction;
-use crate::{Database, DatabaseDriver, DbError, DbTransaction, Notification, NotificationStream};
+use crate::{
+    Database, DatabaseDriver, DbError, DbExecutor, DbTransaction, Notification, NotificationStream,
+};
 
 #[derive(Clone, Debug)]
 pub struct SqlxDatabase {
@@ -83,6 +86,16 @@ impl DatabaseDriver for SqlxDatabase {
                 tx,
                 self.prepared_statements,
             ))))
+        })
+    }
+
+    fn acquire_session(&self) -> crate::BoxFuture<'_, Result<Box<dyn DbExecutor>, DbError>> {
+        Box::pin(async move {
+            let connection = self.pool.acquire().await.map_err(acquisition_error)?;
+            Ok(
+                Box::new(SqlxSession::new(connection, self.prepared_statements))
+                    as Box<dyn DbExecutor>,
+            )
         })
     }
 

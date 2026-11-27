@@ -30,6 +30,7 @@ driver-tokio-postgres = ["graphile_worker_database/driver-tokio-postgres"]
 
 [dependencies]
 graphile_worker_database.workspace = true
+graphile_worker_extensions.workspace = true
 graphile_worker_migrations_core.workspace = true
 graphile_worker_migrations_macros.workspace = true
 graphile_worker_runtime.workspace = true

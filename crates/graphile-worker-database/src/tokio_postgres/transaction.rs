@@ -7,10 +7,10 @@ use crate::{DbError, DbExecutor, DbParams, DbRow, TransactionDriver};
 
 /// Detaches a connection from the pool unless its owner confirms it is safe
 /// to reuse or transfers it to a transaction.
-struct PendingClient(Option<Client>);
+pub(super) struct PendingClient(pub(super) Option<Client>);
 
 impl PendingClient {
-    fn get(&self) -> &Client {
+    pub(super) fn get(&self) -> &Client {
         self.0.as_ref().expect("pending client must be present")
     }
 

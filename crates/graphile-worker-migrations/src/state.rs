@@ -1,13 +1,15 @@
 use std::time::Duration;
 
-use graphile_worker_database::{Database, DbError, DbExecutor, DbParams, Schema};
+use graphile_worker_database::{DbError, DbExecutor, DbParams, Schema};
 use graphile_worker_runtime::sleep;
 use indoc::formatdoc;
 use tracing::info;
 
 use crate::clash::is_clash_error;
 use crate::error::MigrateError;
+use crate::hooks::{MigrationPhase, MigrationRun};
 use crate::install::{add_breaking_migration_metadata, install_schema};
+use crate::pg_version::fetch_and_check_postgres_version;
 
 const INSTALL_RETRY_DELAYS: &[Duration] = &[
     Duration::from_millis(50),
@@ -42,7 +44,7 @@ impl LastMigration {
 /// Returns the last migration that was run against the database.
 /// It also installs the Graphile Worker schema if it doesn't exist.
 pub(super) async fn get_last_migration(
-    executor: &Database,
+    run: &mut MigrationRun<'_>,
     schema: &Schema,
 ) -> Result<LastMigration, MigrateError> {
     let mut retry_delays = INSTALL_RETRY_DELAYS
@@ -54,14 +56,19 @@ pub(super) async fn get_last_migration(
     let mut repaired_legacy_table = false;
     loop {
         let retry_delay = retry_delays.next().flatten();
-        let last_migration_query_result = read_last_migration(executor, schema).await;
+        let last_migration_query_result =
+            read_last_migration(run.connection.executor(), schema).await;
         let error = match last_migration_query_result {
             Ok(last_migration) => return Ok(last_migration),
             Err(error) => error,
         };
 
         if error.code() == Some("42703") && !repaired_legacy_table {
-            add_breaking_migration_metadata(executor, schema).await?;
+            run.postgres_version =
+                fetch_and_check_postgres_version(run.connection.executor()).await?;
+            run.emit(schema, MigrationPhase::BeforeBootstrap).await?;
+            add_breaking_migration_metadata(&run.connection, schema).await?;
+            run.emit(schema, MigrationPhase::AfterBootstrap).await?;
             repaired_legacy_table = true;
             continue;
         }
@@ -70,9 +77,17 @@ pub(super) async fn get_last_migration(
         }
 
         info!(error = ?error, schema = %schema, "Graphile Worker schema not found, installing...");
-        match install_schema(executor, schema).await {
-            Ok(()) => return Ok(Default::default()),
-            Err(MigrateError::SqlError(error)) if is_clash_error(&error) => {
+        run.postgres_version = fetch_and_check_postgres_version(run.connection.executor()).await?;
+        run.emit(schema, MigrationPhase::BeforeBootstrap).await?;
+        match install_schema(&run.connection, schema, run.postgres_version).await {
+            Ok(()) => {
+                run.emit(schema, MigrationPhase::AfterBootstrap).await?;
+                return Ok(LastMigration {
+                    server_version_num: run.postgres_version.to_string(),
+                    ..Default::default()
+                });
+            }
+            Err(error) if is_clash_error(&error) => {
                 let Some(delay) = retry_delay else {
                     return Err(MigrateError::SqlError(error));
                 };
@@ -84,13 +99,13 @@ pub(super) async fn get_last_migration(
                 );
                 sleep(delay).await;
             }
-            Err(error) => return Err(error),
+            Err(error) => return Err(error.into()),
         }
     }
 }
 
 pub(super) async fn read_last_migration(
-    executor: &impl DbExecutor,
+    executor: &dyn DbExecutor,
     schema: &Schema,
 ) -> Result<LastMigration, DbError> {
     let migrations = schema.identifier("migrations");
@@ -105,7 +120,7 @@ pub(super) async fn read_last_migration(
 }
 
 async fn fetch_last_migration(
-    executor: &impl DbExecutor,
+    executor: &dyn DbExecutor,
     migrations_status_query: &str,
 ) -> Result<LastMigration, DbError> {
     executor
@@ -128,8 +143,8 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use graphile_worker_database::{
-        row_mapping, BoxFuture, DatabaseDriver, DbCell, DbRow, DbTransaction, NotificationStream,
-        TransactionDriver,
+        row_mapping, BoxFuture, Database, DatabaseDriver, DbCell, DbRow, DbTransaction,
+        NotificationStream, TransactionDriver,
     };
 
     use super::*;
@@ -236,6 +251,16 @@ mod tests {
         Database::new(MockDriver::new(fetch_results, transaction_execute_result))
     }
 
+    async fn read_state(database: &Database) -> Result<LastMigration, MigrateError> {
+        let mut run = MigrationRun {
+            connection: crate::connection::MigrationConnection::Pooled(database),
+            hooks: &crate::MigrationHooks::default(),
+            postgres_version: 0,
+            scratchpad: Default::default(),
+        };
+        get_last_migration(&mut run, &Schema::default()).await
+    }
+
     fn server_version_row(version: &str) -> DbRow {
         row_mapping::cells([("server_version_num", DbCell::Text(version.to_string()))])
     }
@@ -246,6 +271,21 @@ mod tests {
             .build()
             .expect("test runtime should build")
             .block_on(future)
+    }
+
+    #[test]
+    fn callbacks_require_session_support_before_any_database_work() {
+        run_async(async {
+            let database = database([], Ok(1));
+            let hooks = crate::MigrationHooks::new().on_event(|_| {
+                panic!("a driver without session support must not run callbacks");
+            });
+            let error = crate::migrate_with_hooks(&database, Schema::default(), &hooks)
+                .await
+                .expect_err("a custom driver must opt in to session support");
+            assert!(matches!(error, MigrateError::SqlError(ref error)
+                if error.to_string().contains("does not support pinned sessions")));
+        });
     }
 
     #[test]
@@ -313,7 +353,7 @@ mod tests {
                 Ok(1),
             );
 
-            let error = get_last_migration(&database, &Schema::default())
+            let error = read_state(&database)
                 .await
                 .expect_err("non-missing schema errors should be returned");
 
@@ -335,7 +375,7 @@ mod tests {
                 Ok(1),
             );
 
-            let error = get_last_migration(&database, &Schema::default())
+            let error = read_state(&database)
                 .await
                 .expect_err("install errors should be returned");
 
@@ -356,7 +396,7 @@ mod tests {
                 Err(DbError::with_code("concurrent install", "23505")),
             );
 
-            let error = get_last_migration(&database, &Schema::default())
+            let error = read_state(&database)
                 .await
                 .expect_err("install clash retries should be bounded");
 

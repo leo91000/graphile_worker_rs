@@ -71,6 +71,27 @@ fn admin_help_documents_embedded_ui_options() {
     assert!(stdout.contains("GRAPHILE_WORKER_ADMIN_PASSWORD"));
 }
 
+#[test]
+fn migrate_requires_database_configuration() {
+    let output = Command::new(env!("CARGO_BIN_EXE_graphile-worker"))
+        .env_remove("DATABASE_URL")
+        .env_remove("PGDATABASE")
+        .arg("migrate")
+        .output()
+        .expect("run CLI without a database");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("missing database configuration"));
+    assert!(stderr.contains("PGDATABASE"));
+}
+
+#[test]
+fn migrate_reports_invalid_database_url() {
+    let output = command_output(&["--database-url", "postgres://[", "migrate"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("invalid PostgreSQL connection URL"));
+}
+
 /// Exercises CLI job administration and cleans its isolated database across PostgreSQL versions.
 #[tokio::test]
 async fn cli_manages_job_lifecycle_with_database_url_flag() {
@@ -95,11 +116,70 @@ async fn cli_manages_job_lifecycle_with_database_url_flag() {
         .await
         .expect("failed to connect to test database");
 
-    assert_success(command_output(&[
-        "--database-url",
-        &database_url,
-        "migrate",
-    ]));
+    let mut env_command = Command::new(env!("CARGO_BIN_EXE_graphile-worker"));
+    let options = test_pool.connect_options();
+    env_command
+        .env_remove("DATABASE_URL")
+        .env_remove("PGHOSTADDR")
+        .env("PGDATABASE", &database_name)
+        .env("PGUSER", options.get_username())
+        .env("PGPORT", options.get_port().to_string())
+        .env(
+            "PGSSLMODE",
+            match options.get_ssl_mode() {
+                sqlx::postgres::PgSslMode::Disable => "disable",
+                sqlx::postgres::PgSslMode::Allow => "allow",
+                sqlx::postgres::PgSslMode::Prefer => "prefer",
+                sqlx::postgres::PgSslMode::Require => "require",
+                sqlx::postgres::PgSslMode::VerifyCa => "verify-ca",
+                sqlx::postgres::PgSslMode::VerifyFull => "verify-full",
+            },
+        );
+    if let Some(socket) = options.get_socket() {
+        env_command.env("PGHOST", socket);
+    } else {
+        env_command.env("PGHOST", options.get_host());
+    }
+    let url = url::Url::parse(&database_url).expect("fixture URL should parse");
+    if let Some(password) = url.password() {
+        let password = percent_encoding::percent_decode_str(password)
+            .decode_utf8()
+            .expect("fixture password should be UTF-8");
+        env_command.env("PGPASSWORD", password.as_ref());
+    }
+    // SQLx applies query options after userinfo and uses the last occurrence.
+    // Transfer them in the same order, including any private TLS material.
+    for (key, value) in url.query_pairs() {
+        let variable = match key.as_ref() {
+            "password" => "PGPASSWORD",
+            "hostaddr" => "PGHOSTADDR",
+            "sslrootcert" | "ssl-root-cert" | "ssl-ca" => "PGSSLROOTCERT",
+            "sslcert" | "ssl-cert" => "PGSSLCERT",
+            "sslkey" | "ssl-key" => "PGSSLKEY",
+            _ => continue,
+        };
+        env_command.env(variable, value.as_ref());
+    }
+    assert_success(
+        env_command
+            .args(["migrate"])
+            .output()
+            .expect("run CLI with PGDATABASE"),
+    );
+    let migrations_before_url_override: i64 =
+        sqlx::query_scalar("select count(*) from graphile_worker.migrations")
+            .fetch_one(&test_pool)
+            .await
+            .expect("PGDATABASE fallback must migrate the isolated database");
+    assert!(migrations_before_url_override > 0);
+
+    assert_success(
+        Command::new(env!("CARGO_BIN_EXE_graphile-worker"))
+            .env("PGDATABASE", "missing_cli_fixture")
+            .args(["--database-url", &database_url, "migrate"])
+            .output()
+            .expect("run CLI with URL overriding PGDATABASE"),
+    );
     let migrated = assert_success(command_output(&[
         "--database-url",
         &database_url,

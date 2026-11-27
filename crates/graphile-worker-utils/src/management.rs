@@ -112,4 +112,12 @@ impl WorkerUtils {
     pub async fn migrate(&self) -> Result<(), MigrateError> {
         maintenance::migrate(self).await
     }
+
+    /// Runs database migrations with callbacks sharing the migration session.
+    pub async fn migrate_with_hooks(
+        &self,
+        hooks: &graphile_worker_migrations::MigrationHooks,
+    ) -> Result<(), MigrateError> {
+        graphile_worker_migrations::migrate_with_hooks(&self.database, &self.schema, hooks).await
+    }
 }

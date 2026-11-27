@@ -32,4 +32,6 @@ sqlx = { workspace = true, features = ["runtime-tokio", "tls-rustls"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [dev-dependencies]
+percent-encoding = "2.3.2"
+url.workspace = true
 uuid = { workspace = true, features = ["v7"] }
